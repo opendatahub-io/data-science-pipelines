@@ -32,6 +32,15 @@ const (
 	KubeflowUserIDPrefix                    string = "KUBEFLOW_USERID_PREFIX"
 	UpdatePipelineVersionByDefault          string = "AUTO_UPDATE_PIPELINE_DEFAULT_VERSION"
 	TokenReviewAudience                     string = "TOKEN_REVIEW_AUDIENCE"
+
+	// Discover ml-pipeline in the same namespace by env var.
+	// https://kubernetes.io/docs/concepts/services-networking/service/#environment-variables
+	// If there is a ml-pipeline Kubernetes service in the same namespace,
+	// ML_PIPELINE_SERVICE_HOST and ML_PIPELINE_SERVICE_PORT env vars should
+	// exist by default, so we use it as default. If using a service name that is not ml-pipeline
+	// these env vars should be manually provided.
+	mlPipelineServiceAddress  string = "ML_PIPELINE_SERVICE_HOST"
+	mlPipelineServiceGRPCPort string = "ML_PIPELINE_SERVICE_PORT_GRPC"
 )
 
 func IsPipelineVersionUpdatedByDefault() bool {
@@ -126,4 +135,12 @@ func GetKubeflowUserIDPrefix() string {
 
 func GetTokenReviewAudience() string {
 	return GetStringConfigWithDefault(TokenReviewAudience, DefaultTokenReviewAudience)
+}
+
+func GetMLPipelineServiceAddress() string {
+	return GetStringConfigWithDefault(mlPipelineServiceAddress, DefaultMLPipelineAddress)
+}
+
+func GetMlPipelineServiceGRPCPort() string {
+	return GetStringConfigWithDefault(mlPipelineServiceGRPCPort, DefaultMLPipelineGRPCPort)
 }

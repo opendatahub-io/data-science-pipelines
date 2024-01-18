@@ -16,6 +16,7 @@ package argocompiler
 
 import (
 	"fmt"
+	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"strings"
 
 	wfapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
@@ -116,11 +117,13 @@ func Compile(jobArg *pipelinespec.PipelineJob, kubernetesSpecArg *pipelinespec.S
 		wf:        wf,
 		templates: make(map[string]*wfapi.Template),
 		// TODO(chensun): release process and update the images.
-		launcherImage: GetLauncherImage(),
-		driverImage:   GetDriverImage(),
-		job:           job,
-		spec:          spec,
-		executors:     deploy.GetExecutors(),
+		launcherImage:            GetLauncherImage(),
+		driverImage:              GetDriverImage(),
+		job:                      job,
+		spec:                     spec,
+		executors:                deploy.GetExecutors(),
+		mlPipelineServerAddress:  common.GetMLPipelineServiceAddress(),
+		mlPipelineServerGrpcPort: common.GetMlPipelineServiceGRPCPort(),
 	}
 	if opts != nil {
 		if opts.DriverImage != "" {
@@ -151,10 +154,12 @@ type workflowCompiler struct {
 	spec      *pipelinespec.PipelineSpec
 	executors map[string]*pipelinespec.PipelineDeploymentConfig_ExecutorSpec
 	// state
-	wf            *wfapi.Workflow
-	templates     map[string]*wfapi.Template
-	driverImage   string
-	launcherImage string
+	wf                       *wfapi.Workflow
+	templates                map[string]*wfapi.Template
+	driverImage              string
+	launcherImage            string
+	mlPipelineServerAddress  string
+	mlPipelineServerGrpcPort string
 }
 
 func (c *workflowCompiler) Resolver(name string, component *pipelinespec.ComponentSpec, resolver *pipelinespec.PipelineDeploymentConfig_ResolverSpec) error {

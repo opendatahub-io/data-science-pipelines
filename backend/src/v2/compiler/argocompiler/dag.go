@@ -440,6 +440,8 @@ func (c *workflowCompiler) addDAGDriverTemplate() string {
 				"--execution_id_path", outputPath(paramExecutionID),
 				"--iteration_count_path", outputPath(paramIterationCount),
 				"--condition_path", outputPath(paramCondition),
+				"--ml_pipeline_server_address", c.mlPipelineServerAddress,
+				"--ml_pipeline_server_grpc_port", c.mlPipelineServerGrpcPort,
 			},
 			Resources: driverResources,
 		},

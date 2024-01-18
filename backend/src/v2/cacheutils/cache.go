@@ -6,8 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
-
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -21,9 +19,6 @@ import (
 const (
 	// MaxGRPCMessageSize contains max grpc message size supported by the client
 	MaxClientGRPCMessageSize = 100 * 1024 * 1024
-	// The endpoint uses Kubernetes service DNS name with namespace:
-	//https://kubernetes.io/docs/concepts/services-networking/service/#dns
-	defaultKfpApiEndpoint = "ml-pipeline.kubeflow:8887"
 )
 
 func GenerateFingerPrint(cacheKey *cachekey.CacheKey) (string, error) {
@@ -111,8 +106,7 @@ type Client struct {
 }
 
 // NewClient creates a Client.
-func NewClient() (*Client, error) {
-	cacheEndPoint := cacheDefaultEndpoint()
+func NewClient(cacheEndPoint string) (*Client, error) {
 	glog.Infof("Connecting to cache endpoint %s", cacheEndPoint)
 	conn, err := grpc.Dial(cacheEndPoint, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(MaxClientGRPCMessageSize)), grpc.WithInsecure())
 	if err != nil {
@@ -122,22 +116,6 @@ func NewClient() (*Client, error) {
 	return &Client{
 		svc: api.NewTaskServiceClient(conn),
 	}, nil
-}
-
-func cacheDefaultEndpoint() string {
-	// Discover ml-pipeline in the same namespace by env var.
-	// https://kubernetes.io/docs/concepts/services-networking/service/#environment-variables
-	cacheHost := os.Getenv("ML_PIPELINE_SERVICE_HOST")
-	cachePort := os.Getenv("ML_PIPELINE_SERVICE_PORT_GRPC")
-	if cacheHost != "" && cachePort != "" {
-		// If there is a ml-pipeline Kubernetes service in the same namespace,
-		// ML_PIPELINE_SERVICE_HOST and ML_PIPELINE_SERVICE_PORT env vars should
-		// exist by default, so we use it as default.
-		return cacheHost + ":" + cachePort
-	}
-	// If the env vars do not exist, use default ml-pipeline grpc endpoint `ml-pipeline.kubeflow:8887`.
-	glog.Infof("Cannot detect ml-pipeline in the same namespace, default to %s as KFP endpoint.", defaultKfpApiEndpoint)
-	return defaultKfpApiEndpoint
 }
 
 func (c *Client) GetExecutionCache(fingerPrint, pipelineName, namespace string) (string, error) {
