@@ -13,4 +13,6 @@
        Use `chore` to indicate that this PR makes some changes that users don't need to know.
     * `test: fix CI failure. Part of #1234`
         Use `part of` to indicate that a PR is working on an issue, but shouldn't close the issue when merged.
+    * `UPSTREAM: <carry>: fixes RHOAIENG-1695`
+       Use `UPSTREAM: <carry>` to indicate this is a carry patch against our upstream.
 -->
