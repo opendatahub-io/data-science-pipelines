@@ -80,6 +80,8 @@ func (c *workflowCompiler) addImporterTemplate() string {
 		fmt.Sprintf("$(%s)", component.EnvMetadataHost),
 		"--mlmd_server_port",
 		fmt.Sprintf("$(%s)", component.EnvMetadataPort),
+		"--ml_pipeline_server_address", c.mlPipelineServerAddress,
+		"--ml_pipeline_server_grpc_port", c.mlPipelineServerGrpcPort,
 	}
 	importerTemplate := &wfapi.Template{
 		Name: name,

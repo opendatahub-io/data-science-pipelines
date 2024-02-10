@@ -65,6 +65,10 @@ spec:
       - '{{outputs.parameters.condition.path}}'
       - --kubernetes_config
       - '{{inputs.parameters.kubernetes-config}}'
+      - --ml_pipeline_server_address
+      - ml-pipeline.kubeflow
+      - --ml_pipeline_server_grpc_port
+      - 8887
       command:
       - driver
       image: gcr.io/ml-pipeline/kfp-driver
@@ -275,6 +279,10 @@ spec:
       - '{{outputs.parameters.iteration-count.path}}'
       - --condition_path
       - '{{outputs.parameters.condition.path}}'
+      - --ml_pipeline_server_address
+      - ml-pipeline.kubeflow
+      - --ml_pipeline_server_grpc_port
+      - 8887
       command:
       - driver
       image: gcr.io/ml-pipeline/kfp-driver

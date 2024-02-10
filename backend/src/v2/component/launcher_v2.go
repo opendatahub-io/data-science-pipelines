@@ -50,6 +50,8 @@ type LauncherV2Options struct {
 	PodUID,
 	MLMDServerAddress,
 	MLMDServerPort,
+	MLPipelineServerAddress,
+	MLPipelineServerGrpcPort,
 	PipelineName,
 	RunID string
 }
@@ -112,7 +114,9 @@ func NewLauncherV2(ctx context.Context, executionID int64, executorInputJSON, co
 	if err != nil {
 		return nil, err
 	}
-	cacheClient, err := cacheutils.NewClient()
+
+	mlPipelineEndpoint := opts.MLPipelineServerAddress + ":" + opts.MLPipelineServerGrpcPort
+	cacheClient, err := cacheutils.NewClient(mlPipelineEndpoint)
 	if err != nil {
 		return nil, err
 	}

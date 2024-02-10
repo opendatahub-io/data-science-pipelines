@@ -55,6 +55,8 @@ const DefaultTokenReviewAudience string = "pipelines.kubeflow.org"
 
 const (
 	DefaultPipelineRunnerServiceAccount = "pipeline-runner"
+	DefaultMLPipelineAddress            = "ml-pipeline.kubeflow"
+	DefaultMLPipelineGRPCPort           = "8887"
 	HasDefaultBucketEnvVar              = "HAS_DEFAULT_BUCKET"
 	DefaultBucketNameEnvVar             = "BUCKET_NAME"
 	ProjectIDEnvVar                     = "PROJECT_ID"

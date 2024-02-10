@@ -46,7 +46,7 @@ var (
 	runID             = flag.String("run_id", "", "pipeline run uid")
 	componentSpecJson = flag.String("component", "{}", "component spec")
 	taskSpecJson      = flag.String("task", "", "task spec")
-	runtimeConfigJson = flag.String("runtime_config", "", "jobruntime config")
+	runtimeConfigJson = flag.String("runtime_config", "", "job runtime config")
 	iterationIndex    = flag.Int("iteration_index", -1, "iteration index, -1 means not an interation")
 
 	// container inputs
@@ -55,11 +55,13 @@ var (
 	k8sExecConfigJson = flag.String("kubernetes_config", "{}", "kubernetes executor config")
 
 	// config
-	mlmdServerAddress = flag.String("mlmd_server_address", "", "MLMD server address")
-	mlmdServerPort    = flag.String("mlmd_server_port", "", "MLMD server port")
+	mlmdServerAddress        = flag.String("mlmd_server_address", "", "MLMD server address")
+	mlmdServerPort           = flag.String("mlmd_server_port", "", "MLMD server port")
+	mlPipelineServerAddress  = flag.String("ml_pipeline_server_address", "ml-pipeline.kubeflow.svc.cluster.local", "ML Pipeline server address")
+	mlPipelineServerGrpcPort = flag.String("ml_pipeline_server_grpc_port", "8887", "ML Pipeline server grpc port")
 
 	// output paths
-	executionIDPath    = flag.String("execution_id_path", "", "Exeucution ID output path")
+	executionIDPath    = flag.String("execution_id_path", "", "Execution ID output path")
 	iterationCountPath = flag.String("iteration_count_path", "", "Iteration Count output path")
 	podSpecPatchPath   = flag.String("pod_spec_patch_path", "", "Pod Spec Patch output path")
 	// the value stored in the paths will be either 'true' or 'false'
@@ -144,18 +146,22 @@ func drive() (err error) {
 	if err != nil {
 		return err
 	}
-	cacheClient, err := cacheutils.NewClient()
+	mlPipelineGRPCEndpoint := *mlPipelineServerAddress + ":" + *mlPipelineServerGrpcPort
+	cacheClient, err := cacheutils.NewClient(mlPipelineGRPCEndpoint)
 	if err != nil {
 		return err
 	}
+
 	options := driver.Options{
-		PipelineName:   *pipelineName,
-		RunID:          *runID,
-		Namespace:      namespace,
-		Component:      componentSpec,
-		Task:           taskSpec,
-		DAGExecutionID: *dagExecutionID,
-		IterationIndex: *iterationIndex,
+		PipelineName:             *pipelineName,
+		RunID:                    *runID,
+		Namespace:                namespace,
+		Component:                componentSpec,
+		Task:                     taskSpec,
+		DAGExecutionID:           *dagExecutionID,
+		IterationIndex:           *iterationIndex,
+		MLPipelineServerAddress:  *mlPipelineServerAddress,
+		MLPipelineServerGrpcPort: *mlPipelineServerGrpcPort,
 	}
 	var execution *driver.Execution
 	var driverErr error

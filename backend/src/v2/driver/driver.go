@@ -58,6 +58,10 @@ type Options struct {
 	RunID string
 	// required, Component spec
 	Component *pipelinespec.ComponentSpec
+	// required, ML Pipeline server GRPC endpoint
+	MLPipelineServerAddress  string
+	MLPipelineServerGrpcPort string
+
 	// optional, iteration index. -1 means not an iteration.
 	IterationIndex int
 
@@ -334,7 +338,8 @@ func Container(ctx context.Context, opts Options, mlmd *metadata.Client, cacheCl
 		return execution, nil
 	}
 
-	podSpec, err := initPodSpecPatch(opts.Container, opts.Component, executorInput, execution.ID, opts.PipelineName, opts.RunID)
+	podSpec, err := initPodSpecPatch(opts.Container, opts.Component, executorInput, execution.ID, opts.PipelineName,
+		opts.RunID, opts.MLPipelineServerAddress, opts.MLPipelineServerGrpcPort)
 	if err != nil {
 		return execution, err
 	}
@@ -367,6 +372,8 @@ func initPodSpecPatch(
 	executionID int64,
 	pipelineName string,
 	runID string,
+	mlPipelineServerAddress string,
+	mlPipelineServerGrpcPort string,
 ) (*k8score.PodSpec, error) {
 	executorInputJSON, err := protojson.Marshal(executorInput)
 	if err != nil {
@@ -405,6 +412,8 @@ func initPodSpecPatch(
 		fmt.Sprintf("$(%s)", component.EnvMetadataHost),
 		"--mlmd_server_port",
 		fmt.Sprintf("$(%s)", component.EnvMetadataPort),
+		"--ml_pipeline_server_address", mlPipelineServerAddress,
+		"--ml_pipeline_server_grpc_port", mlPipelineServerGrpcPort,
 		"--", // separater before user command and args
 	}
 	res := k8score.ResourceRequirements{
