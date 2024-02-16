@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Pipeline with volume creation, mount and deletion in v2 engine pipeline."""
-from kfp import dsl
+from kfp import compiler, dsl
 from kfp import kubernetes
 
 
@@ -40,7 +40,7 @@ def pipeline_with_volume():
         pvc_name_suffix='-my-pvc',
         access_modes=['ReadWriteOnce'],
         size='5Mi',
-        storage_class_name='standard',
+        storage_class_name='standard-csi',
     )
 
     task1 = producer()
@@ -62,7 +62,6 @@ def pipeline_with_volume():
 
 if __name__ == '__main__':
     # execute only if run as a script
-    from kfp import compiler
     compiler.Compiler().compile(
         pipeline_func=pipeline_with_volume,
-        package_path='pipeline_with_volume.json')
+        package_path='pipeline_with_volume.yaml')
