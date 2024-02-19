@@ -1,0 +1,119 @@
+# PIPELINE DEFINITION
+# Name: execution-order-pipeline
+# Description: A pipeline to demonstrate execution order management.
+# Inputs:
+#    text1: str [Default: 'message 1']
+#    text2: str [Default: 'message 2']
+components:
+  comp-echo1-op:
+    executorLabel: exec-echo1-op
+    inputDefinitions:
+      parameters:
+        text1:
+          parameterType: STRING
+  comp-echo2-op:
+    executorLabel: exec-echo2-op
+    inputDefinitions:
+      parameters:
+        text2:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-echo1-op:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - echo1_op
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.6.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef echo1_op(text1: str):\n  print(text1)\n\n"
+        image: quay.io/opendatahub/ds-pipelines-ci-executor-image:v1.0
+    exec-echo2-op:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - echo2_op
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.6.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef echo2_op(text2: str):\n  print(text2)\n\n"
+        image: quay.io/opendatahub/ds-pipelines-ci-executor-image:v1.0
+pipelineInfo:
+  description: A pipeline to demonstrate execution order management.
+  name: execution-order-pipeline
+root:
+  dag:
+    tasks:
+      echo1-op:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-echo1-op
+        inputs:
+          parameters:
+            text1:
+              componentInputParameter: text1
+        taskInfo:
+          name: echo1-op
+      echo2-op:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-echo2-op
+        dependentTasks:
+        - echo1-op
+        inputs:
+          parameters:
+            text2:
+              componentInputParameter: text2
+        taskInfo:
+          name: echo2-op
+  inputDefinitions:
+    parameters:
+      text1:
+        defaultValue: message 1
+        isOptional: true
+        parameterType: STRING
+      text2:
+        defaultValue: message 2
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.6.0
