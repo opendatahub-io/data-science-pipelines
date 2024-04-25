@@ -8,13 +8,6 @@ RUN apk add --update \
  RUN ARCH=$(uname -m); \
     if [ "$ARCH" = "x86_64" ]; then \
         ARCH="amd64"; \
-    elif [ "$ARCH" = "ppc64le" ]; then \
-        ARCH="ppc64le"; \
-    elif [ "$ARCH" = "s390x" ]; then \
-        ARCH="s390x"; \
-    else \
-        echo "Unsupported architecture: $ARCH"; exit 1; \
-    fi \
     && curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/${ARCH}/kubectl \
     && chmod +x ./kubectl \
     && mv ./kubectl /usr/local/bin/kubectl

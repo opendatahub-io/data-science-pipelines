@@ -23,16 +23,7 @@ ENV GOBIN=/go/bin
 
 # Install protoc.
 RUN apt-get update -y && apt-get install -y jq sed unzip
-RUN RUN ARCH=$(uname -m); \
-    if [ "$ARCH" = "x86_64" ]; then \
-        ARCH="x86_64"; \
-    elif [ "$ARCH" = "s390x" ]; then \
-        ARCH="s390x"; \
-    elif [ "$ARCH" = "ppc64le" ]; then \
-        ARCH="ppc64le"; \
-    else \
-        echo "Unsupported architecture: $ARCH"; exit 1; \
-    fi \
+RUN ARCH=$(uname -m); \
     && curl -L -o protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-${ARCH}.zip
 RUN unzip -o protoc.zip -d /usr/ bin/protoc
 RUN unzip -o protoc.zip -d /usr/ 'include/*'
@@ -47,22 +38,15 @@ RUN mkdir grpc && git clone --depth 1 --branch $GRPC_VERSION https://github.com/
 
 # Install protoc-gen-rpc-gateway && protoc-gen-swagger.
 RUN cd grpc-ecosystem/grpc-gateway && GO111MODULE=on go mod vendor
-RUN go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway@latest
-RUN go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger@latest
+RUN go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
+RUN go install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger
 
 # Download go-swagger binary.
 RUN ARCH=$(uname -m); \
     if [ "$ARCH" = "x86_64" ]; then \
         ARCH="amd64"; \
-    elif [ "$ARCH" = "ppc64le" ]; then \
-        ARCH="ppc64le"; \
-    elif [ "$ARCH" = "s390x" ]; then \
-        ARCH="s390x"; \
-    else \
-        echo "Unsupported architecture: $ARCH"; exit 1; \
-    fi \
-    && curl -LO "https://github.com/go-swagger/go-swagger/releases/download/${GO_SWAGGER_VERSION}/swagger_linux_${ARCH}"
-RUN chmod +x swagger_linux_${ARCH} && mv swagger_linux_${ARCH} /usr/bin/swagger
+    && curl -LO "https://github.com/go-swagger/go-swagger/releases/download/${GO_SWAGGER_VERSION}/swagger_linux_${ARCH}" \
+    && chmod +x swagger_linux_${ARCH} && mv swagger_linux_${ARCH} /usr/bin/swagger
 # Need protobuf source code for -I in protoc command.
 RUN mkdir golang && cd golang && git clone --depth 1 --branch $GOLANG_PROTOBUF_VERSION https://github.com/golang/protobuf.git
 # Install protoc-gen-go.

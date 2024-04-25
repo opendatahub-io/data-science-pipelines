@@ -37,13 +37,6 @@ COPY ${SOURCE_CODE}/ ./
 RUN ARCH=$(uname -m); \
       if [ "$ARCH" = "x86_64" ]; then \
             ARCH="amd64"; \
-      elif [ "$ARCH" = "s390x" ]; then \
-            ARCH="s390x"; \
-      elif [ "$ARCH" = "ppc64le" ]; then \ 
-            ARCH="ppc64le"; \
-      else \
-            echo "Unsupported architecture: $ARCH"; exit 1; \
-      fi \
     && GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build -tags netgo -ldflags '-extldflags "-static"' -o /bin/launcher-v2 ./backend/src/v2/cmd/launcher-v2/*.go
 
 #@follow_tag(registry.access.redhat.com/ubi8/ubi-minimal:8.9)
