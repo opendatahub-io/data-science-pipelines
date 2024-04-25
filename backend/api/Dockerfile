@@ -24,6 +24,10 @@ ENV GOBIN=/go/bin
 # Install protoc.
 RUN apt-get update -y && apt-get install -y jq sed unzip
 RUN ARCH=$(uname -m); \
+    if [ $ARCH = "s390x" ] ; then \
+        ARCH="s390_64" \
+    elif [ "$ARCH" = "ppc64le" ] ; then \ 
+        ARCH="ppcle_64" ; fi \
     && curl -L -o protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-${ARCH}.zip
 RUN unzip -o protoc.zip -d /usr/ bin/protoc
 RUN unzip -o protoc.zip -d /usr/ 'include/*'
