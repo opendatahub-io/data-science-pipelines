@@ -3,25 +3,25 @@ module github.com/kubeflow/pipelines
 require (
 	github.com/Masterminds/squirrel v0.0.0-20190107164353-fa735ea14f09
 	github.com/VividCortex/mysqlerr v0.0.0-20170204212430-6c6b55f8796f
-	github.com/argoproj/argo-workflows/v3 v3.3.10
-	github.com/aws/aws-sdk-go v1.42.50
+	github.com/argoproj/argo-workflows/v3 v3.4.16
+	github.com/aws/aws-sdk-go v1.44.105
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/eapache/go-resiliency v1.2.0
+	github.com/eapache/go-resiliency v1.3.0
 	github.com/emicklei/go-restful v2.16.0+incompatible // indirect
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5 // indirect
-	github.com/fsnotify/fsnotify v1.5.1
+	github.com/fsnotify/fsnotify v1.6.0
 	github.com/go-openapi/errors v0.20.2
 	github.com/go-openapi/runtime v0.21.1
 	github.com/go-openapi/strfmt v0.21.1
-	github.com/go-openapi/swag v0.19.15
+	github.com/go-openapi/swag v0.22.3
 	github.com/go-openapi/validate v0.20.3
-	github.com/go-sql-driver/mysql v1.6.0
+	github.com/go-sql-driver/mysql v1.7.1
 	github.com/golang/glog v1.1.0
 	github.com/golang/protobuf v1.5.3
 	github.com/google/addlicense v0.0.0-20200906110928-a0294312aa76
 	github.com/google/cel-go v0.9.0
 	github.com/google/go-cmp v0.6.0
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.3.1
 	github.com/gorilla/mux v1.8.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
@@ -37,24 +37,25 @@ require (
 	github.com/minio/minio-go/v6 v6.0.57
 	github.com/peterhellberg/duration v0.0.0-20191119133758-ec6baeebcd10
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.12.1
+	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0
 	github.com/robfig/cron v1.2.0
-	github.com/sirupsen/logrus v1.9.0
-	github.com/spf13/viper v1.10.1
+	github.com/sirupsen/logrus v1.9.3
+	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.4
 	gocloud.dev v0.22.0
 	golang.org/x/net v0.19.0
-	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
-	google.golang.org/grpc v1.54.0
+	google.golang.org/genproto/googleapis/api v0.0.0-20230913181813-007df8e322eb
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20230920204549-e6e6cdab5c13
+	google.golang.org/grpc v1.58.3
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0
-	google.golang.org/protobuf v1.30.0
+	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.24.17
 	k8s.io/apimachinery v0.24.17
 	k8s.io/client-go v0.24.3
-	k8s.io/code-generator v0.23.3
-	sigs.k8s.io/controller-runtime v0.11.1
+	k8s.io/code-generator v0.24.3
+	sigs.k8s.io/controller-runtime v0.11.2
 	sigs.k8s.io/yaml v1.3.0
 )
 

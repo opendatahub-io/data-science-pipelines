@@ -20,6 +20,11 @@ FROM registry.access.redhat.com/ubi8/go-toolset:1.20 as builder
 
 ## Build args to be used at this step
 ARG SOURCE_CODE
+ENV ARGO_VERSION v3.4.16
+RUN curl -sLO https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-linux-amd64.gz && \
+    gunzip argo-linux-amd64.gz && \
+    chmod +x argo-linux-amd64 && \
+    mv ./argo-linux-amd64 /usr/local/bin/argo
 
 USER root
 
