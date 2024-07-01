@@ -69,7 +69,7 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.1.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.2 // indirect
-	github.com/antlr/antlr4/runtime/Go/antlr/v4 v4.0.0-20230305170008-8188dc5388df // indirect
+	github.com/antlr/antlr4/runtime/Go/antlr v0.0.0-20210826220005-b48c857c3a0e // indirect
 	github.com/antonmedv/expr v1.9.0 // indirect
 	github.com/argoproj/pkg v0.11.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
@@ -184,6 +184,7 @@ require (
 replace (
 	github.com/cloudevents/sdk-go/v2 v2.10.0 => github.com/cloudevents/sdk-go/v2 v2.15.1
 	github.com/cloudflare/circl v1.3.3 => github.com/cloudflare/circl v1.3.7
+	github.com/google/cel-go v0.17.8 => github.com/google/cel-go v0.9.0 // Due to a breaking change
 	github.com/jackc/pgx/v5 v5.4.2 => github.com/jackc/pgx/v5 v5.5.4
 	github.com/labstack/echo v3.2.1+incompatible => github.com/labstack/echo/v4 v4.2.0
 	github.com/nats-io/nats-server/v2 v2.7.2 => github.com/nats-io/nats-server/v2 v2.10.2
