@@ -68,7 +68,7 @@
             "name": "namespace",
             "description": "Required. Namespace of the Artifact's context.",
             "in": "query",
-            "required": false,
+            "required": true,
             "type": "string"
           }
         ],
