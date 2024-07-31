@@ -61,7 +61,7 @@ func NewScheduledWorkflowClientOrFatal(initConnectionTimeout time.Duration, clie
 	if err == nil {
 		return swfClientInstance
 	}
-	glog.Infof("(Expected when in cluster) Failed to create scheduled workflow client by out of cluster kubeconfig. Error: %v", err)
+	glog.Infof("Non-critical error: Failed to create scheduled workflow client by out of cluster kubeconfig. This can be safely ignored if running in-cluster.Error: %v", err)
 
 	glog.Infof("Starting to create scheduled workflow client by in cluster config.")
 	b := backoff.NewExponentialBackOff()

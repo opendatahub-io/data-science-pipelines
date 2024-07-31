@@ -20,8 +20,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/kubeflow/pipelines/backend/src/apiserver/client"
-	"google.golang.org/grpc/credentials"
 	"io"
 	"io/ioutil"
 	"math"
@@ -31,6 +29,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kubeflow/pipelines/backend/src/apiserver/client"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/golang/glog"
@@ -98,13 +99,13 @@ func main() {
 	)
 	err = loadSamples(resourceManager)
 	if err != nil {
-		glog.Fatalf("Failed to load samples. Err: %v", err)
+		glog.Fatalf("Failed to load samples.This can be safely ignored if sample configurations are not needed. Err: %v", err)
 	}
 
 	if !common.IsMultiUserMode() {
 		_, err = resourceManager.CreateDefaultExperiment("")
 		if err != nil {
-			glog.Fatalf("Failed to create default experiment. Err: %v", err)
+			glog.Fatalf("Failed to create default experiment.This can be safely ignored if the default experiment is not needed. Err: %v", err)
 		}
 	}
 
