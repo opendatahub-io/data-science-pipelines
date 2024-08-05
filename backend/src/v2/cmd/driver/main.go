@@ -37,6 +37,9 @@ import (
 
 const (
 	driverTypeArg = "type"
+	ROOT_DAG      = "ROOT_DAG"
+	DAG           = "DAG"
+	CONTAINER     = "CONTAINER"
 )
 
 var (
@@ -65,6 +68,8 @@ var (
 	// the value stored in the paths will be either 'true' or 'false'
 	cachedDecisionPath = flag.String("cached_decision_path", "", "Cached Decision output path")
 	conditionPath      = flag.String("condition_path", "", "Condition output path")
+
+	mlPipelineServiceTLSEnabledStr = flag.String("mlPipelineServiceTLSEnabled", "false", "Set to 'true' if mlpipeline api server serves over TLS (default: 'false').")
 )
 
 // func RootDAG(pipelineName string, runID string, component *pipelinespec.ComponentSpec, task *pipelinespec.PipelineTaskSpec, mlmd *metadata.Client) (*Execution, error) {
@@ -144,28 +149,34 @@ func drive() (err error) {
 	if err != nil {
 		return err
 	}
-	cacheClient, err := cacheutils.NewClient()
+	mlPipelineServiceTLSEnabled, err := strconv.ParseBool(*mlPipelineServiceTLSEnabledStr)
+	if err != nil {
+		return err
+	}
+
+	cacheClient, err := cacheutils.NewClient(mlPipelineServiceTLSEnabled)
 	if err != nil {
 		return err
 	}
 	options := driver.Options{
-		PipelineName:   *pipelineName,
-		RunID:          *runID,
-		Namespace:      namespace,
-		Component:      componentSpec,
-		Task:           taskSpec,
-		DAGExecutionID: *dagExecutionID,
-		IterationIndex: *iterationIndex,
+		PipelineName:         *pipelineName,
+		RunID:                *runID,
+		Namespace:            namespace,
+		Component:            componentSpec,
+		Task:                 taskSpec,
+		DAGExecutionID:       *dagExecutionID,
+		IterationIndex:       *iterationIndex,
+		MLPipelineTLSEnabled: mlPipelineServiceTLSEnabled,
 	}
 	var execution *driver.Execution
 	var driverErr error
 	switch *driverType {
-	case "ROOT_DAG":
+	case ROOT_DAG:
 		options.RuntimeConfig = runtimeConfig
 		execution, driverErr = driver.RootDAG(ctx, options, client)
-	case "DAG":
+	case DAG:
 		execution, driverErr = driver.DAG(ctx, options, client)
-	case "CONTAINER":
+	case CONTAINER:
 		options.Container = containerSpec
 		options.KubernetesExecutorConfig = k8sExecCfg
 		execution, driverErr = driver.Container(ctx, options, client, cacheClient)
@@ -183,35 +194,60 @@ func drive() (err error) {
 			err = driverErr
 		}()
 	}
+
+	executionPaths := &ExecutionPaths{
+		ExecutionID:    *executionIDPath,
+		IterationCount: *iterationCountPath,
+		CachedDecision: *cachedDecisionPath,
+		Condition:      *conditionPath,
+		PodSpecPatch:   *podSpecPatchPath}
+
+	return handleExecution(execution, *driverType, executionPaths)
+}
+
+func handleExecution(execution *driver.Execution, driverType string, executionPaths *ExecutionPaths) error {
 	if execution.ID != 0 {
 		glog.Infof("output execution.ID=%v", execution.ID)
-		if *executionIDPath != "" {
-			if err = writeFile(*executionIDPath, []byte(fmt.Sprint(execution.ID))); err != nil {
+		if executionPaths.ExecutionID != "" {
+			if err := writeFile(executionPaths.ExecutionID, []byte(fmt.Sprint(execution.ID))); err != nil {
 				return fmt.Errorf("failed to write execution ID to file: %w", err)
 			}
 		}
 	}
 	if execution.IterationCount != nil {
-		if err = writeFile(*iterationCountPath, []byte(fmt.Sprintf("%v", *execution.IterationCount))); err != nil {
+		if err := writeFile(executionPaths.IterationCount, []byte(fmt.Sprintf("%v", *execution.IterationCount))); err != nil {
 			return fmt.Errorf("failed to write iteration count to file: %w", err)
+		}
+	} else {
+		if driverType == ROOT_DAG {
+			if err := writeFile(executionPaths.IterationCount, []byte("0")); err != nil {
+				return fmt.Errorf("failed to write iteration count to file: %w", err)
+			}
 		}
 	}
 	if execution.Cached != nil {
-		if err = writeFile(*cachedDecisionPath, []byte(strconv.FormatBool(*execution.Cached))); err != nil {
+		if err := writeFile(executionPaths.CachedDecision, []byte(strconv.FormatBool(*execution.Cached))); err != nil {
 			return fmt.Errorf("failed to write cached decision to file: %w", err)
 		}
 	}
 	if execution.Condition != nil {
-		if err = writeFile(*conditionPath, []byte(strconv.FormatBool(*execution.Condition))); err != nil {
+		if err := writeFile(executionPaths.Condition, []byte(strconv.FormatBool(*execution.Condition))); err != nil {
 			return fmt.Errorf("failed to write condition to file: %w", err)
+		}
+	} else {
+		// nil is a valid value for Condition
+		if driverType == ROOT_DAG || driverType == CONTAINER {
+			if err := writeFile(executionPaths.Condition, []byte("nil")); err != nil {
+				return fmt.Errorf("failed to write condition to file: %w", err)
+			}
 		}
 	}
 	if execution.PodSpecPatch != "" {
 		glog.Infof("output podSpecPatch=\n%s\n", execution.PodSpecPatch)
-		if *podSpecPatchPath == "" {
+		if executionPaths.PodSpecPatch == "" {
 			return fmt.Errorf("--pod_spec_patch_path is required for container executor drivers")
 		}
-		if err = writeFile(*podSpecPatchPath, []byte(execution.PodSpecPatch)); err != nil {
+		if err := writeFile(executionPaths.PodSpecPatch, []byte(execution.PodSpecPatch)); err != nil {
 			return fmt.Errorf("failed to write pod spec patch to file: %w", err)
 		}
 	}

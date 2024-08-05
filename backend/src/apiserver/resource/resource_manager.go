@@ -18,9 +18,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
+	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
+	"github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
 	"io"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/cenkalti/backoff"
 	"github.com/golang/glog"
@@ -91,6 +95,7 @@ type ClientManagerInterface interface {
 	KubernetesCoreClient() client.KubernetesCoreInterface
 	SubjectAccessReviewClient() client.SubjectAccessReviewInterface
 	TokenReviewClient() client.TokenReviewInterface
+	MetadataClient() metadata.ClientInterface
 	LogArchive() archive.LogArchiveInterface
 	Time() util.TimeInterface
 	UUID() util.UUIDGeneratorInterface
@@ -116,6 +121,7 @@ type ResourceManager struct {
 	k8sCoreClient             client.KubernetesCoreInterface
 	subjectAccessReviewClient client.SubjectAccessReviewInterface
 	tokenReviewClient         client.TokenReviewInterface
+	metadataClient            metadata.ClientInterface
 	logArchive                archive.LogArchiveInterface
 	time                      util.TimeInterface
 	uuid                      util.UUIDGeneratorInterface
@@ -139,6 +145,7 @@ func NewResourceManager(clientManager ClientManagerInterface, options *ResourceM
 		k8sCoreClient:             clientManager.KubernetesCoreClient(),
 		subjectAccessReviewClient: clientManager.SubjectAccessReviewClient(),
 		tokenReviewClient:         clientManager.TokenReviewClient(),
+		metadataClient:            clientManager.MetadataClient(),
 		logArchive:                clientManager.LogArchive(),
 		time:                      clientManager.Time(),
 		uuid:                      clientManager.UUID(),
@@ -550,6 +557,13 @@ func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to create a run")
 	}
+
+	// Upon run creation, update owning experiment
+	err = r.experimentStore.SetLastRunTimestamp(newRun)
+	if err != nil {
+		return nil, util.Wrap(err, fmt.Sprintf("Failed to set last run timestamp on experiment %s for run %s", newRun.ExperimentId, newRun.UUID))
+	}
+
 	return newRun, nil
 }
 
@@ -967,7 +981,7 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 
 	// TODO(gkcalat): consider changing the flow. Other resource UUIDs are assigned by their respective stores (DB).
 	// Convert modelJob into scheduledWorkflow.
-	scheduledWorkflow, err := tmpl.ScheduledWorkflow(job)
+	scheduledWorkflow, err := tmpl.ScheduledWorkflow(job, r.getOwnerReferences())
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to create a recurring run during scheduled workflow creation")
 	}
@@ -1010,6 +1024,27 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 		job.PipelineSpec.PipelineSpecManifest = manifest
 	}
 	return r.jobStore.CreateJob(job)
+}
+
+func (r *ResourceManager) getOwnerReferences() []v1.OwnerReference {
+	ownerName := common.GetStringConfigWithDefault("OWNER_NAME", "")
+	ownerAPIVersion := common.GetStringConfigWithDefault("OWNER_API_VERSION", "")
+	ownerKind := common.GetStringConfigWithDefault("OWNER_KIND", "")
+	ownerUID := types.UID(common.GetStringConfigWithDefault("OWNER_UID", ""))
+
+	if ownerName == "" || ownerAPIVersion == "" || ownerKind == "" || ownerUID == "" {
+		glog.Info("Missing ScheduledWorkflow owner fields. Proceeding without OwnerReferences")
+		return []v1.OwnerReference{}
+	} else {
+		return []v1.OwnerReference{
+			{
+				APIVersion: ownerAPIVersion,
+				Kind:       ownerKind,
+				Name:       ownerName,
+				UID:        ownerUID,
+			},
+		}
+	}
 }
 
 // Enables or disables a recurring run with given id.
@@ -1234,6 +1269,10 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 			return nil, util.Wrapf(err, "Failed to report a workflow due to error creating run %s", runId)
 		} else {
 			runId = run.UUID
+		}
+		// Upon run creation, update owning experiment
+		if updateError = r.experimentStore.SetLastRunTimestamp(run); updateError != nil {
+			return nil, util.Wrapf(updateError, "Failed to report a workflow for existing run %s during updating the owning experiment.", runId)
 		}
 	}
 	if execStatus.IsInFinalState() {
@@ -1883,4 +1922,97 @@ func (r *ResourceManager) GetTask(taskId string) (*model.Task, error) {
 		return nil, util.Wrapf(err, "Failed to fetch task %v", taskId)
 	}
 	return task, nil
+}
+
+// GetContexts Fetches Contexts with the given sort/filter options.
+func (r *ResourceManager) GetContexts(ctx context.Context, maxResultSize int32, orderByAscending bool, orderByField, filterQuery, nextPageToken string) ([]*ml_metadata.Context, *string, error) {
+	return r.metadataClient.GetContexts(ctx, maxResultSize, orderByAscending, orderByField, filterQuery, nextPageToken)
+}
+
+// GetArtifacts Fetches Artifacts with the given sort/filter options.
+func (r *ResourceManager) GetArtifacts(ctx context.Context, maxResultSize int32, orderByAscending bool, orderByField, filterQuery, nextPageToken string) ([]*ml_metadata.Artifact, *string, error) {
+	return r.metadataClient.GetArtifacts(ctx, maxResultSize, orderByAscending, orderByField, filterQuery, nextPageToken)
+}
+
+// GetArtifactById Fetches Artifacts with the given artifact ids.
+func (r *ResourceManager) GetArtifactById(ctx context.Context, id []int64) ([]*ml_metadata.Artifact, error) {
+	return r.metadataClient.GetArtifactsByID(ctx, id)
+}
+
+// GetArtifactSessionInfo provides the bucket config that contains a session info for a given Artifact.
+// The bucket config contains information on where the artifact is store within object store.
+// The session info is pulled from the artifact's parent context.
+// TODO: In kfp 2.3 the session info can be retrieved directly from the Artifact custom properties.
+func (r *ResourceManager) GetArtifactSessionInfo(ctx context.Context, artifact *ml_metadata.Artifact) (*objectstore.Config, string, error) {
+	artifactCtx, err := r.metadataClient.GetContextByArtifactID(ctx, artifact.GetId())
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Retrieve Pipeline Root info
+	pipelineRoot := artifactCtx.CustomProperties["pipeline_root"].GetStringValue()
+	if pipelineRoot == "" {
+		return nil, "", fmt.Errorf("Unable to retrieve artifact pipeline_root info via context property.")
+	}
+
+	// Retrieve Session info
+	sessionInfoString := artifactCtx.CustomProperties["bucket_session_info"].GetStringValue()
+	if sessionInfoString == "" {
+		return nil, "", fmt.Errorf("Unable to retrieve artifact session info via context property.")
+	}
+	sessionInfo, err := objectstore.GetSessionInfoFromString(sessionInfoString)
+	if err != nil {
+		return nil, "", err
+	}
+	config, err := objectstore.ParseBucketConfig(pipelineRoot, sessionInfo)
+	if err != nil {
+		return nil, "", err
+	}
+	if artifact.Uri == nil {
+		return nil, "", fmt.Errorf("Artifact did not have a URI property.")
+	}
+
+	// Retrieve namespace
+	namespace := artifactCtx.CustomProperties["namespace"].GetStringValue()
+	if namespace == "" {
+		return nil, "", fmt.Errorf("Unable to retrieve artifact namespace info via context property.")
+	}
+
+	return config, namespace, nil
+}
+
+// GetSecretKeyValue retrieves the value identified by the Secret name and key within the provided namespace.
+func (r *ResourceManager) GetSecretKeyValue(ctx context.Context, ns, name, key string) (string, error) {
+	secret, err := r.k8sCoreClient.SecretClient(ns).Get(ctx, name, v1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return string(secret.Data[key]), nil
+}
+
+// GetSecret retrieves the secret identified by name from the provided namespace.
+func (r *ResourceManager) GetSecret(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
+	secret, err := r.k8sCoreClient.SecretClient(namespace).Get(ctx, name, v1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return secret, nil
+}
+
+// GetSignedUrl retrieves a signed url for the associated artifact.
+func (r *ResourceManager) GetSignedUrl(bucketConfig *objectstore.Config, secret *corev1.Secret, expirySeconds time.Duration, artifactURI string) (string, error) {
+	signedUrl, err := r.objectStore.GetSignedUrl(bucketConfig, secret, expirySeconds, artifactURI)
+	if err != nil {
+		return "", err
+	}
+	return signedUrl, nil
+}
+
+// GetObjectSize retrieves the size of the Artifact's object in bytes.
+func (r *ResourceManager) GetObjectSize(bucketConfig *objectstore.Config, secret *corev1.Secret, artifactURI string) (int64, error) {
+	size, err := r.objectStore.GetObjectSize(bucketConfig, secret, artifactURI)
+	if err != nil {
+		return 0, err
+	}
+	return size, nil
 }

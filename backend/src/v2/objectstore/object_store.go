@@ -17,6 +17,7 @@ package objectstore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -42,6 +43,7 @@ type Config struct {
 	BucketName  string
 	Prefix      string
 	QueryString string
+	Session     *SessionInfo
 }
 
 func OpenBucket(ctx context.Context, k8sClient kubernetes.Interface, namespace string, config *Config) (bucket *blob.Bucket, err error) {
@@ -50,29 +52,24 @@ func OpenBucket(ctx context.Context, k8sClient kubernetes.Interface, namespace s
 			err = fmt.Errorf("Failed to open bucket %q: %w", config.BucketName, err)
 		}
 	}()
-	if config.Scheme == "minio://" {
-		cred, err := getMinioCredential(ctx, k8sClient, namespace)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to get minio credential: %w", err)
-		}
-		sess, err := session.NewSession(&aws.Config{
-			Credentials:      cred,
-			Region:           aws.String("minio"),
-			Endpoint:         aws.String(MinioDefaultEndpoint()),
-			DisableSSL:       aws.Bool(true),
-			S3ForcePathStyle: aws.Bool(true),
-		})
 
-		if err != nil {
-			return nil, fmt.Errorf("Failed to create session to access minio: %v", err)
-		}
-		minioBucket, err := s3blob.OpenBucket(ctx, sess, config.BucketName, nil)
+	creds, err := getBucketCredential(ctx, k8sClient, namespace, config.Session.SecretName, config.Session.SecretKeyKey, config.Session.AccessKeyKey)
+	if err != nil {
+		return nil, err
+	}
+
+	sess, err := createBucketSession(config.Session, creds)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to retrieve credentials for bucket %s: %w", config.BucketName, err)
+	}
+	if sess != nil {
+		openedBucket, err := s3blob.OpenBucket(ctx, sess, config.BucketName, nil)
 		if err != nil {
 			return nil, err
 		}
 		// Directly calling s3blob.OpenBucket does not allow overriding prefix via bucketConfig.BucketURL().
 		// Therefore, we need to explicitly configure the prefixed bucket.
-		return blob.PrefixedBucket(minioBucket, config.Prefix), nil
+		return blob.PrefixedBucket(openedBucket, config.Prefix), nil
 
 	}
 	return blob.OpenBucket(ctx, config.bucketURL())
@@ -181,7 +178,17 @@ func DownloadBlob(ctx context.Context, bucket *blob.Bucket, localDir, blobDir st
 
 var bucketPattern = regexp.MustCompile(`(^[a-z][a-z0-9]+:///?)([^/?]+)(/[^?]*)?(\?.+)?$`)
 
-func ParseBucketConfig(path string) (*Config, error) {
+func ParseBucketConfig(path string, sess *SessionInfo) (*Config, error) {
+	config, err := ParseBucketPathToConfig(path)
+	if err != nil {
+		return nil, err
+	}
+	config.Session = sess
+
+	return config, nil
+}
+
+func ParseBucketPathToConfig(path string) (*Config, error) {
 	ms := bucketPattern.FindStringSubmatch(path)
 	if ms == nil || len(ms) != 5 {
 		return nil, fmt.Errorf("parse bucket config failed: unrecognized pipeline root format: %q", path)
@@ -220,6 +227,15 @@ func ParseBucketConfigForArtifactURI(uri string) (*Config, error) {
 		Scheme:     ms[1],
 		BucketName: ms[2],
 	}, nil
+}
+
+// ArtifactKeyFromURI extracts the object key from the artifact uri
+func ArtifactKeyFromURI(uri string) (string, error) {
+	ms := bucketPattern.FindStringSubmatch(uri)
+	if ms == nil || len(ms) != 5 {
+		return "", fmt.Errorf("parse uri failed: unrecognized uri format: %q", uri)
+	}
+	return strings.TrimPrefix(ms[3], "/"), nil
 }
 
 // TODO(neuromage): Move these helper functions to a storage package and add tests.
@@ -339,4 +355,84 @@ func getMinioCredential(ctx context.Context, clientSet kubernetes.Interface, nam
 
 func getAWSCredential() (cred *credentials.Credentials, err error) {
 	return credentials.NewCredentials(&credentials.ChainProvider{}), nil
+}
+
+type SessionInfo struct {
+	Region       string
+	Endpoint     string
+	DisableSSL   bool
+	SecretName   string
+	AccessKeyKey string
+	SecretKeyKey string
+}
+
+func createBucketSession(sessionInfo *SessionInfo, creds *credentials.Credentials) (*session.Session, error) {
+	if sessionInfo == nil {
+		return nil, nil
+	}
+	config := &aws.Config{}
+	config.Credentials = creds
+	config.Region = aws.String(sessionInfo.Region)
+	config.DisableSSL = aws.Bool(sessionInfo.DisableSSL)
+	config.S3ForcePathStyle = aws.Bool(true)
+	// AWS Specific:
+	// Path-style S3 endpoints, which are commonly used, may fall into either of two subdomains:
+	// 1) s3.amazonaws.com
+	// 2) s3.<AWS Region>.amazonaws.com
+	// for (1) the endpoint is not required, thus we skip it, otherwise the writer will fail to close due to region mismatch.
+	// https://aws.amazon.com/blogs/infrastructure-and-automation/best-practices-for-using-amazon-s3-endpoints-in-aws-cloudformation-templates/
+	// https://docs.aws.amazon.com/sdk-for-go/api/aws/session/
+	awsEndpoint, _ := regexp.MatchString(`^(https://)?s3.amazonaws.com`, strings.ToLower(sessionInfo.Endpoint))
+	if !awsEndpoint {
+		config.Endpoint = aws.String(sessionInfo.Endpoint)
+	}
+	sess, err := session.NewSession(config)
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create session to access minio: %v", err)
+	}
+	return sess, nil
+}
+
+func getBucketCredential(
+	ctx context.Context,
+	clientSet kubernetes.Interface,
+	namespace string,
+	secretName string,
+	bucketSecretKeyKey string,
+	bucketAccessKeyKey string,
+) (cred *credentials.Credentials, err error) {
+	defer func() {
+		if err != nil {
+			// wrap error before returning
+			err = fmt.Errorf("Failed to get Bucket credentials from secret name=%q namespace=%q: %w", secretName, namespace, err)
+		}
+	}()
+	secret, err := clientSet.CoreV1().Secrets(namespace).Get(
+		ctx,
+		secretName,
+		metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	accessKey := string(secret.Data[bucketAccessKeyKey])
+	secretKey := string(secret.Data[bucketSecretKeyKey])
+
+	if accessKey != "" && secretKey != "" {
+		cred = credentials.NewStaticCredentials(accessKey, secretKey, "")
+		return cred, err
+	}
+	return nil, fmt.Errorf("could not find specified keys '%s' or '%s'", bucketAccessKeyKey, bucketSecretKeyKey)
+}
+
+func GetSessionInfoFromString(sessionInfoJSON string) (*SessionInfo, error) {
+	sessionInfo := &SessionInfo{}
+	if sessionInfoJSON == "" {
+		return nil, nil
+	}
+	err := json.Unmarshal([]byte(sessionInfoJSON), sessionInfo)
+	if err != nil {
+		return nil, fmt.Errorf("Encountered error when attempting to unmarshall bucket session properties: %w", err)
+	}
+	return sessionInfo, nil
 }

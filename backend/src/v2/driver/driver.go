@@ -32,6 +32,7 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/v2/config"
 	"github.com/kubeflow/pipelines/backend/src/v2/expression"
 	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
+	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	"github.com/kubeflow/pipelines/kubernetes_platform/go/kubernetesplatform"
 	pb "github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -73,6 +74,9 @@ type Options struct {
 
 	// optional, allows to specify kubernetes-specific executor config
 	KubernetesExecutorConfig *kubernetesplatform.KubernetesExecutorConfig
+
+	// set to true if ml pipeline server is serving over tls
+	MLPipelineTLSEnabled bool
 }
 
 // Identifying information used for error messages
@@ -132,26 +136,38 @@ func RootDAG(ctx context.Context, opts Options, mlmd *metadata.Client) (executio
 	}
 	// TODO(v2): in pipeline spec, rename GCS output directory to pipeline root.
 	pipelineRoot := opts.RuntimeConfig.GetGcsOutputDirectory()
+
+	restConfig, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize kubernetes client: %w", err)
+	}
+	k8sClient, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize kubernetes client set: %w", err)
+	}
+	cfg, err := config.FromConfigMap(ctx, k8sClient, opts.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	pipelineBucketSessionInfo := objectstore.SessionInfo{}
 	if pipelineRoot != "" {
 		glog.Infof("PipelineRoot=%q", pipelineRoot)
 	} else {
-		restConfig, err := rest.InClusterConfig()
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize kubernetes client: %w", err)
-		}
-		k8sClient, err := kubernetes.NewForConfig(restConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize kubernetes client set: %w", err)
-		}
-		cfg, err := config.FromConfigMap(ctx, k8sClient, opts.Namespace)
-		if err != nil {
-			return nil, err
-		}
 		pipelineRoot = cfg.DefaultPipelineRoot()
 		glog.Infof("PipelineRoot=%q from default config", pipelineRoot)
 	}
+	pipelineBucketSessionInfo, err = cfg.GetBucketSessionInfo(pipelineRoot)
+	if err != nil {
+		return nil, err
+	}
+	bucketSessionInfo, err := json.Marshal(pipelineBucketSessionInfo)
+	if err != nil {
+		return nil, err
+	}
+	bucketSessionInfoEntry := string(bucketSessionInfo)
 	// TODO(Bobgy): fill in run resource.
-	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, opts.Namespace, "run-resource", pipelineRoot)
+	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, opts.Namespace, "run-resource", pipelineRoot, bucketSessionInfoEntry)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +246,7 @@ func Container(ctx context.Context, opts Options, mlmd *metadata.Client, cacheCl
 	}
 	// TODO(Bobgy): there's no need to pass any parameters, because pipeline
 	// and pipeline run context have been created by root DAG driver.
-	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "")
+	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +339,7 @@ func Container(ctx context.Context, opts Options, mlmd *metadata.Client, cacheCl
 		return execution, nil
 	}
 
-	podSpec, err := initPodSpecPatch(opts.Container, opts.Component, executorInput, execution.ID, opts.PipelineName, opts.RunID)
+	podSpec, err := initPodSpecPatch(opts.Container, opts.Component, executorInput, execution.ID, opts.PipelineName, opts.RunID, opts.MLPipelineTLSEnabled)
 	if err != nil {
 		return execution, err
 	}
@@ -356,6 +372,7 @@ func initPodSpecPatch(
 	executionID int64,
 	pipelineName string,
 	runID string,
+	mlPipelineTLSEnabled bool,
 ) (*k8score.PodSpec, error) {
 	executorInputJSON, err := protojson.Marshal(executorInput)
 	if err != nil {
@@ -394,6 +411,8 @@ func initPodSpecPatch(
 		fmt.Sprintf("$(%s)", component.EnvMetadataHost),
 		"--mlmd_server_port",
 		fmt.Sprintf("$(%s)", component.EnvMetadataPort),
+		"--mlPipelineServiceTLSEnabled",
+		fmt.Sprintf("%v", mlPipelineTLSEnabled),
 		"--", // separater before user command and args
 	}
 	res := k8score.ResourceRequirements{
@@ -477,17 +496,58 @@ func extendPodSpecPatch(
 		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, volumeMounts...)
 	}
 
+	// Get image pull policy
+	pullPolicy := kubernetesExecutorConfig.GetImagePullPolicy()
+	if pullPolicy != "" {
+		policies := []string{"Always", "Never", "IfNotPresent"}
+		found := false
+		for _, value := range policies {
+			if value == pullPolicy {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("unsupported value: %s. ImagePullPolicy should be one of 'Always', 'Never' or 'IfNotPresent'", pullPolicy)
+		}
+		// We assume that the user container always gets executed first within a pod.
+		podSpec.Containers[0].ImagePullPolicy = k8score.PullPolicy(pullPolicy)
+	}
+
 	// Get node selector information
 	if kubernetesExecutorConfig.GetNodeSelector() != nil {
 		podSpec.NodeSelector = kubernetesExecutorConfig.GetNodeSelector().GetLabels()
 	}
 
+	if tolerations := kubernetesExecutorConfig.GetTolerations(); tolerations != nil {
+		var k8sTolerations []k8score.Toleration
+
+		glog.Infof("Tolerations passed: %+v", tolerations)
+
+		for _, toleration := range tolerations {
+			if toleration != nil {
+				k8sToleration := k8score.Toleration{
+					Key:               toleration.Key,
+					Operator:          k8score.TolerationOperator(toleration.Operator),
+					Value:             toleration.Value,
+					Effect:            k8score.TaintEffect(toleration.Effect),
+					TolerationSeconds: toleration.TolerationSeconds,
+				}
+
+				k8sTolerations = append(k8sTolerations, k8sToleration)
+			}
+		}
+
+		podSpec.Tolerations = k8sTolerations
+	}
+
 	// Get secret mount information
 	for _, secretAsVolume := range kubernetesExecutorConfig.GetSecretAsVolume() {
+		optional := secretAsVolume.Optional != nil && *secretAsVolume.Optional
 		secretVolume := k8score.Volume{
 			Name: secretAsVolume.GetSecretName(),
 			VolumeSource: k8score.VolumeSource{
-				Secret: &k8score.SecretVolumeSource{SecretName: secretAsVolume.GetSecretName()},
+				Secret: &k8score.SecretVolumeSource{SecretName: secretAsVolume.GetSecretName(), Optional: &optional},
 			},
 		}
 		secretVolumeMount := k8score.VolumeMount{
@@ -514,6 +574,64 @@ func extendPodSpecPatch(
 		}
 	}
 
+	// Get config map mount information
+	for _, configMapAsVolume := range kubernetesExecutorConfig.GetConfigMapAsVolume() {
+		optional := configMapAsVolume.Optional != nil && *configMapAsVolume.Optional
+		configMapVolume := k8score.Volume{
+			Name: configMapAsVolume.GetConfigMapName(),
+			VolumeSource: k8score.VolumeSource{
+				ConfigMap: &k8score.ConfigMapVolumeSource{
+					LocalObjectReference: k8score.LocalObjectReference{Name: configMapAsVolume.GetConfigMapName()}, Optional: &optional},
+			},
+		}
+		configMapVolumeMount := k8score.VolumeMount{
+			Name:      configMapAsVolume.GetConfigMapName(),
+			MountPath: configMapAsVolume.GetMountPath(),
+		}
+		podSpec.Volumes = append(podSpec.Volumes, configMapVolume)
+		podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, configMapVolumeMount)
+	}
+
+	// Get config map env information
+	for _, configMapAsEnv := range kubernetesExecutorConfig.GetConfigMapAsEnv() {
+		for _, keyToEnv := range configMapAsEnv.GetKeyToEnv() {
+			configMapEnvVar := k8score.EnvVar{
+				Name: keyToEnv.GetEnvVar(),
+				ValueFrom: &k8score.EnvVarSource{
+					ConfigMapKeyRef: &k8score.ConfigMapKeySelector{
+						Key: keyToEnv.GetConfigMapKey(),
+					},
+				},
+			}
+			configMapEnvVar.ValueFrom.ConfigMapKeyRef.LocalObjectReference.Name = configMapAsEnv.GetConfigMapName()
+			podSpec.Containers[0].Env = append(podSpec.Containers[0].Env, configMapEnvVar)
+		}
+	}
+
+	// Get image pull secret information
+	for _, imagePullSecret := range kubernetesExecutorConfig.GetImagePullSecret() {
+		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, k8score.LocalObjectReference{Name: imagePullSecret.GetSecretName()})
+	}
+
+	// Get Kubernetes FieldPath Env information
+	for _, fieldPathAsEnv := range kubernetesExecutorConfig.GetFieldPathAsEnv() {
+		fieldPathEnvVar := k8score.EnvVar{
+			Name: fieldPathAsEnv.GetName(),
+			ValueFrom: &k8score.EnvVarSource{
+				FieldRef: &k8score.ObjectFieldSelector{
+					FieldPath: fieldPathAsEnv.GetFieldPath(),
+				},
+			},
+		}
+		podSpec.Containers[0].Env = append(podSpec.Containers[0].Env, fieldPathEnvVar)
+	}
+
+	// Get container timeout information
+	timeout := kubernetesExecutorConfig.GetActiveDeadlineSeconds()
+	if timeout > 0 {
+		podSpec.ActiveDeadlineSeconds = &timeout
+	}
+
 	return nil
 }
 
@@ -535,7 +653,7 @@ func DAG(ctx context.Context, opts Options, mlmd *metadata.Client) (execution *E
 	}
 	// TODO(Bobgy): there's no need to pass any parameters, because pipeline
 	// and pipeline run context have been created by root DAG driver.
-	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "")
+	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -1206,7 +1324,7 @@ func createPVC(
 	// Create execution regardless the operation succeeds or not
 	defer func() {
 		if createdExecution == nil {
-			pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "")
+			pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "", "")
 			if err != nil {
 				return
 			}
@@ -1286,7 +1404,7 @@ func createPVC(
 	ecfg.CachedMLMDExecutionID = cachedMLMDExecutionID
 	ecfg.FingerPrint = fingerPrint
 
-	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "")
+	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "", "")
 	if err != nil {
 		return "", createdExecution, pb.Execution_FAILED, fmt.Errorf("error getting pipeline from MLMD: %w", err)
 	}
@@ -1376,7 +1494,7 @@ func deletePVC(
 	// Create execution regardless the operation succeeds or not
 	defer func() {
 		if createdExecution == nil {
-			pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "")
+			pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "", "")
 			if err != nil {
 				return
 			}
@@ -1406,7 +1524,7 @@ func deletePVC(
 	ecfg.CachedMLMDExecutionID = cachedMLMDExecutionID
 	ecfg.FingerPrint = fingerPrint
 
-	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "")
+	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, "", "", "", "")
 	if err != nil {
 		return createdExecution, pb.Execution_FAILED, fmt.Errorf("error getting pipeline from MLMD: %w", err)
 	}

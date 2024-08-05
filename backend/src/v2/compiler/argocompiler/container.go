@@ -16,18 +16,32 @@ package argocompiler
 
 import (
 	wfapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
-	"os"
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/v2/component"
 	k8score "k8s.io/api/core/v1"
+	"os"
+	"strconv"
 )
 
 const (
-	volumeNameKFPLauncher = "kfp-launcher"
-	DefaultLauncherImage = "gcr.io/ml-pipeline/kfp-launcher@sha256:80cf120abd125db84fa547640fd6386c4b2a26936e0c2b04a7d3634991a850a4"
-	LauncherImageEnvVar   = "V2_LAUNCHER_IMAGE"
-	DefaultDriverImage = "gcr.io/ml-pipeline/kfp-driver@sha256:8e60086b04d92b657898a310ca9757631d58547e76bbbb8bfc376d654bef1707"
-	DriverImageEnvVar   = "V2_DRIVER_IMAGE"
+	volumeNameKFPLauncher    = "kfp-launcher"
+	volumeNameCABUndle       = "ca-bundle"
+	DefaultLauncherImage     = "gcr.io/ml-pipeline/kfp-launcher@sha256:80cf120abd125db84fa547640fd6386c4b2a26936e0c2b04a7d3634991a850a4"
+	LauncherImageEnvVar      = "V2_LAUNCHER_IMAGE"
+	DefaultDriverImage       = "gcr.io/ml-pipeline/kfp-driver@sha256:8e60086b04d92b657898a310ca9757631d58547e76bbbb8bfc376d654bef1707"
+	DriverImageEnvVar        = "V2_DRIVER_IMAGE"
+	gcsScratchLocation       = "/gcs"
+	gcsScratchName           = "gcs-scratch"
+	s3ScratchLocation        = "/s3"
+	s3ScratchName            = "s3-scratch"
+	minioScratchLocation     = "/minio"
+	minioScratchName         = "minio-scratch"
+	dotLocalScratchLocation  = "/.local"
+	dotLocalScratchName      = "dot-local-scratch"
+	dotCacheScratchLocation  = "/.cache"
+	dotCacheScratchName      = "dot-cache-scratch"
+	dotConfigScratchLocation = "/.config"
+	dotConfigScratchName     = "dot-config-scratch"
 )
 
 func (c *workflowCompiler) Container(name string, component *pipelinespec.ComponentSpec, container *pipelinespec.PipelineDeploymentConfig_PipelineContainerSpec) error {
@@ -58,19 +72,19 @@ type containerDriverInputs struct {
 }
 
 func GetLauncherImage() string {
-    launcherImage := os.Getenv(LauncherImageEnvVar)
-    if launcherImage == "" {
-        launcherImage = DefaultLauncherImage
-    }
-    return launcherImage
+	launcherImage := os.Getenv(LauncherImageEnvVar)
+	if launcherImage == "" {
+		launcherImage = DefaultLauncherImage
+	}
+	return launcherImage
 }
 
 func GetDriverImage() string {
-    driverImage := os.Getenv(DriverImageEnvVar)
-    if driverImage == "" {
-        driverImage = DefaultDriverImage
-    }
-    return driverImage
+	driverImage := os.Getenv(DriverImageEnvVar)
+	if driverImage == "" {
+		driverImage = DefaultDriverImage
+	}
+	return driverImage
 }
 
 func (c *workflowCompiler) containerDriverTask(name string, inputs containerDriverInputs) (*wfapi.DAGTask, *containerDriverOutputs) {
@@ -134,6 +148,7 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 		Container: &k8score.Container{
 			Image:   GetDriverImage(),
 			Command: []string{"driver"},
+			Env:     MLPipelineServiceEnv,
 			Args: []string{
 				"--type", "CONTAINER",
 				"--pipeline_name", c.spec.GetPipelineInfo().GetName(),
@@ -147,10 +162,14 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 				"--pod_spec_patch_path", outputPath(paramPodSpecPatch),
 				"--condition_path", outputPath(paramCondition),
 				"--kubernetes_config", inputValue(paramKubernetesConfig),
+				"--mlPipelineServiceTLSEnabled", strconv.FormatBool(c.mlPipelineServiceTLSEnabled),
 			},
 			Resources: driverResources,
 		},
 	}
+
+	ConfigureCABundle(t)
+
 	c.templates[name] = t
 	c.wf.Spec.Templates = append(c.wf.Spec.Templates, *t)
 	return name
@@ -238,21 +257,61 @@ func (c *workflowCompiler) addContainerExecutorTemplate() string {
 		// args come from. It is treated as a strategic merge patch on
 		// top of the Pod spec.
 		PodSpecPatch: inputValue(paramPodSpecPatch),
-		Volumes: []k8score.Volume{{
-			Name: volumeNameKFPLauncher,
-			VolumeSource: k8score.VolumeSource{
-				EmptyDir: &k8score.EmptyDirVolumeSource{},
+		Volumes: []k8score.Volume{
+			{
+				Name: volumeNameKFPLauncher,
+				VolumeSource: k8score.VolumeSource{
+					EmptyDir: &k8score.EmptyDirVolumeSource{},
+				},
 			},
-		}},
+			{
+				Name: gcsScratchName,
+				VolumeSource: k8score.VolumeSource{
+					EmptyDir: &k8score.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: s3ScratchName,
+				VolumeSource: k8score.VolumeSource{
+					EmptyDir: &k8score.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: minioScratchName,
+				VolumeSource: k8score.VolumeSource{
+					EmptyDir: &k8score.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: dotLocalScratchName,
+				VolumeSource: k8score.VolumeSource{
+					EmptyDir: &k8score.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: dotCacheScratchName,
+				VolumeSource: k8score.VolumeSource{
+					EmptyDir: &k8score.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: dotConfigScratchName,
+				VolumeSource: k8score.VolumeSource{
+					EmptyDir: &k8score.EmptyDirVolumeSource{},
+				},
+			},
+		},
 		InitContainers: []wfapi.UserContainer{{
 			Container: k8score.Container{
 				Name:    "kfp-launcher",
 				Image:   GetLauncherImage(),
 				Command: []string{"launcher-v2", "--copy", component.KFPLauncherPath},
-				VolumeMounts: []k8score.VolumeMount{{
-					Name:      volumeNameKFPLauncher,
-					MountPath: component.VolumePathKFPLauncher,
-				}},
+				VolumeMounts: []k8score.VolumeMount{
+					{
+						Name:      volumeNameKFPLauncher,
+						MountPath: component.VolumePathKFPLauncher,
+					},
+				},
 				Resources: launcherResources,
 			},
 		}},
@@ -265,14 +324,41 @@ func (c *workflowCompiler) addContainerExecutorTemplate() string {
 			// These are added to pass argo workflows linting.
 			Image:   "gcr.io/ml-pipeline/should-be-overridden-during-runtime",
 			Command: []string{"should-be-overridden-during-runtime"},
-			VolumeMounts: []k8score.VolumeMount{{
-				Name:      volumeNameKFPLauncher,
-				MountPath: component.VolumePathKFPLauncher,
-			}},
+			VolumeMounts: []k8score.VolumeMount{
+				{
+					Name:      volumeNameKFPLauncher,
+					MountPath: component.VolumePathKFPLauncher,
+				},
+				{
+					Name:      gcsScratchName,
+					MountPath: gcsScratchLocation,
+				},
+				{
+					Name:      s3ScratchName,
+					MountPath: s3ScratchLocation,
+				},
+				{
+					Name:      minioScratchName,
+					MountPath: minioScratchLocation,
+				},
+				{
+					Name:      dotLocalScratchName,
+					MountPath: dotLocalScratchLocation,
+				},
+				{
+					Name:      dotCacheScratchName,
+					MountPath: dotCacheScratchLocation,
+				},
+				{
+					Name:      dotConfigScratchName,
+					MountPath: dotConfigScratchLocation,
+				},
+			},
 			EnvFrom: []k8score.EnvFromSource{metadataEnvFrom},
-			Env:     commonEnvs,
+			Env:     append(commonEnvs, MLPipelineServiceEnv...),
 		},
 	}
+	ConfigureCABundle(executor)
 	c.templates[nameContainerImpl] = executor
 	c.wf.Spec.Templates = append(c.wf.Spec.Templates, *container, *executor)
 	return nameContainerExecutor
