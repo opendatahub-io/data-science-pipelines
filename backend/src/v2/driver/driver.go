@@ -544,14 +544,34 @@ func extendPodSpecPatch(
 	// Get secret mount information
 	for _, secretAsVolume := range kubernetesExecutorConfig.GetSecretAsVolume() {
 		optional := secretAsVolume.Optional != nil && *secretAsVolume.Optional
+
+		// Read the secret name passed in. If it has braces around it, it is dynamic, and we
+		// need to check the parameter inputs map for the actual runtime value to use.
+		// If there are no braces, it IS the name of the secret to mount -- just use it.
+		secretName := secretAsVolume.GetSecretName()
+		if strings.HasPrefix(secretName, "{{") {
+			// it looks like this in the protobuf:
+			// secretName: '{{my_secret}}'
+			// strip the braces
+			key := secretName[2 : len(secretName)-2]
+
+			// get the value from the parameter inputs map
+			inputParams, _, err := dag.Execution.GetParameters()
+			if err != nil {
+				return err
+			}
+			val := inputParams[key]
+			secretName = val.GetStringValue()
+		}
+
 		secretVolume := k8score.Volume{
-			Name: secretAsVolume.GetSecretName(),
+			Name: secretName,
 			VolumeSource: k8score.VolumeSource{
-				Secret: &k8score.SecretVolumeSource{SecretName: secretAsVolume.GetSecretName(), Optional: &optional},
+				Secret: &k8score.SecretVolumeSource{SecretName: secretName, Optional: &optional},
 			},
 		}
 		secretVolumeMount := k8score.VolumeMount{
-			Name:      secretAsVolume.GetSecretName(),
+			Name:      secretName,
 			MountPath: secretAsVolume.GetMountPath(),
 		}
 		podSpec.Volumes = append(podSpec.Volumes, secretVolume)
