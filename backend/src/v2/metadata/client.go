@@ -1131,6 +1131,28 @@ func (c *Client) getContextTypeID(ctx context.Context, contextType *pb.ContextTy
 func (c *Client) getOrInsertContext(ctx context.Context, name string, contextType *pb.ContextType, customProps map[string]*pb.Value) (*pb.Context, error) {
 	fmt.Printf("getOrInsertContext: name=%q, type=%q\n", name, contextType.GetName())
 
+	marshaler := protojson.MarshalOptions{
+		Multiline: true,
+		Indent:    "  ",
+	}
+
+	jsonStr, err := marshaler.Marshal(contextType)
+	if err != nil {
+		fmt.Printf("Failed to marshal: %v", err)
+	}
+
+	fmt.Println("contextType:")
+	fmt.Println(string(jsonStr))
+
+	fmt.Println("customProps:")
+	for key, value := range customProps {
+		jsonStr, err := marshaler.Marshal(value)
+		if err != nil {
+			fmt.Printf("Failed to marshal key %s: %v", key, err)
+		}
+		fmt.Printf("Key: %s, Value: %s\n", key, string(jsonStr))
+	}
+
 	// This function is known to be flaky and racy right after a server is initially created
 	// and pipeline runs are just starting, so we retry up to 3 times. The actual cause of the
 	// race isn't fully understood, but it's probably caused by deadlocks in MLMD SQL code.
