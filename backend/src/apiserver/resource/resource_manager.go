@@ -1967,7 +1967,40 @@ func (r *ResourceManager) GetArtifactSessionInfo(ctx context.Context, artifact *
 	}
 
 	// Retrieve Session info
-	sessionInfoString := artifactCtx.CustomProperties["store_session_info"].GetStringValue()
+	storeSessionInfo, ok_session := artifactCtx.CustomProperties["store_session_info"]
+
+	var sessionInfoString = ""
+
+	if ok_session {
+		sessionInfoString = storeSessionInfo.GetStringValue()
+	} else {
+		// bucket_session_info is an old struct that needs to be converted to store_session_info
+		bucketSession := &objectstore.S3Params{}
+		err := json.Unmarshal([]byte(artifactCtx.CustomProperties["bucket_session_info"].GetStringValue()), bucketSession)
+		if err != nil {
+			return nil, "", err
+		}
+		sessionInfoParams := &map[string]string{
+			"fromEnv":      "false",
+			"endpoint":     bucketSession.Endpoint,
+			"region":       bucketSession.Region,
+			"disableSSL":   strconv.FormatBool(bucketSession.DisableSSL),
+			"decretName":   bucketSession.SecretName,
+			"accessKeyKey": bucketSession.AccessKeyKey,
+			"secretKeyKey": bucketSession.SecretKeyKey,
+		}
+
+		sessionInfo := &objectstore.SessionInfo{
+			Provider: "s3",
+			Params:   *sessionInfoParams,
+		}
+		sessionInfoBytes, err := json.Marshal(*sessionInfo)
+		if err != nil {
+			return nil, "", err
+		}
+		sessionInfoString = string(sessionInfoBytes)
+	}
+
 	if sessionInfoString == "" {
 		return nil, "", fmt.Errorf("Unable to retrieve artifact session info via context property.")
 	}
