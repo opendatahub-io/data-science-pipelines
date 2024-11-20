@@ -12,44 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Build arguments
-ARG SOURCE_CODE=.
+FROM golang:1.21.7-alpine3.19 as builder
 
-# Use ubi8/nodejs-14 as base image
-FROM registry.access.redhat.com/ubi8/go-toolset:1.21 as builder
+WORKDIR /go/src/github.com/kubeflow/pipelines
+COPY . .
 
-## Build args to be used at this step
-ARG SOURCE_CODE
-
-## Switch to root as required for some operations
-USER root
-
-RUN dnf upgrade -y && \
-    dnf install -y bash \
-                   git \
-                   openssh \
-                   gcc && \
-    dnf clean all && rm -rf /var/cache/yum
-
-
-COPY ${SOURCE_CODE}/go.mod ./
-COPY ${SOURCE_CODE}/go.sum ./
-
-RUN GO111MODULE=on go mod download
-
-# Copy the source
-COPY ${SOURCE_CODE}/ ./
+# Needed musl-dev for github.com/mattn/go-sqlite3
+RUN apk update && apk upgrade && \
+    apk add --no-cache bash git openssh gcc musl-dev
 
 RUN GO111MODULE=on go build -o /bin/controller backend/src/crd/controller/scheduledworkflow/*.go
+# Check licenses and comply with license terms.
+RUN ./hack/install-go-licenses.sh
+# First, make sure there's no forbidden license.
+RUN go-licenses check ./backend/src/crd/controller/scheduledworkflow
+RUN go-licenses csv ./backend/src/crd/controller/scheduledworkflow > /tmp/licenses.csv && \
+    diff /tmp/licenses.csv backend/third_party_licenses/swf.csv && \
+    go-licenses save ./backend/src/crd/controller/scheduledworkflow --save_path /tmp/NOTICES
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+FROM alpine:3.19
+
+RUN apk --no-cache add tzdata
+
+RUN adduser -S appuser
+USER appuser
+
 WORKDIR /bin
 
 COPY --from=builder /bin/controller /bin/controller
-RUN chmod +x /bin/controller
-
-RUN microdnf makecache && \
-     microdnf install -y tzdata.noarch
+# Copy licenses and notices.
+COPY --from=builder /tmp/licenses.csv /third_party/licenses.csv
+COPY --from=builder /tmp/NOTICES /third_party/NOTICES
 
 ENV NAMESPACE ""
 ENV LOG_LEVEL info

@@ -42,7 +42,7 @@ git merge opendatahub/master
 
 This action will need to resolve some conflicts manually. Some recommentations when working in this task are:
 
-* Dockerfiles are not expected to have any merge conflicts. We should have our dsp images stored in a separate path from the kfp ones.
+* Track upstream changes to Dockerfiles in the kubeflow/pipelines repository and update the corresponding DSP-related Dockerfiles in the /odh_images path to stay in sync with upstream changes.
 * Any changes in generated files (go.mod, go.sum, package.json, package-lock.json) should always prioritize upstream changes.
 * In case of changes in backend code that diverges completelly between kfp and dsp, you should use `git blame` to find the author(s) of the changes and work together to fix the conflicts. Do not try to fix by yourself, you are not alone in this.
 

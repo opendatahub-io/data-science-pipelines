@@ -74,17 +74,17 @@ jobs:
       matrix:
         include:
           - image: ds-pipelines-api-server
-            dockerfile: backend/Dockerfile
+            dockerfile: odh_images/Dockerfile
           - image: ds-pipelines-frontend
             dockerfile: frontend/Dockerfile
           - image: ds-pipelines-persistenceagent
-            dockerfile: backend/Dockerfile.persistenceagent
+            dockerfile: odh_images/Dockerfile.persistenceagent
           - image: ds-pipelines-scheduledworkflow
-            dockerfile: backend/Dockerfile.scheduledworkflow
+            dockerfile: odh_images/Dockerfile.scheduledworkflow
           - image: ds-pipelines-driver
-            dockerfile: backend/Dockerfile.driver
+            dockerfile: odh_images/Dockerfile.driver
           - image: ds-pipelines-launcher
-            dockerfile: backend/Dockerfile.launcher
+            dockerfile: odh_images/Dockerfile.launcher
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/build
