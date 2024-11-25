@@ -2052,6 +2052,14 @@ func (r *ResourceManager) GetSignedUrl(bucketConfig *objectstore.Config, secret 
 	return signedUrl, nil
 }
 
+func (r *ResourceManager) GetSignedUrlWithoutContentDisposition(bucketConfig *objectstore.Config, secret *corev1.Secret, expirySeconds time.Duration, artifactURI string) (string, error) {
+	signedUrl, err := r.objectStore.GetSignedUrlWithoutContentDisposition(bucketConfig, secret, expirySeconds, artifactURI)
+	if err != nil {
+		return "", err
+	}
+	return signedUrl, nil
+}
+
 // GetObjectSize retrieves the size of the Artifact's object in bytes.
 func (r *ResourceManager) GetObjectSize(bucketConfig *objectstore.Config, secret *corev1.Secret, artifactURI string) (int64, error) {
 	size, err := r.objectStore.GetObjectSize(bucketConfig, secret, artifactURI)

@@ -141,7 +141,7 @@ func (s *ArtifactServer) ListArtifacts(ctx context.Context, r *apiv2beta1.ListAr
 		if err1 != nil || bucketConfig == nil {
 			return nil, util.NewInternalServerError(fmt.Errorf("failed to retrieve session info error: %v", err1), artifactId)
 		}
-		artifactResp, err1 := s.generateResponseArtifact(ctx, artifact, bucketConfig, namespace, false)
+		artifactResp, err1 := s.generateResponseArtifact(ctx, artifact, bucketConfig, namespace, false, false)
 		if err1 != nil {
 			return nil, util.NewInternalServerError(fmt.Errorf("encountered error parsing artifact: %v", err), artifactId)
 		}
@@ -186,12 +186,15 @@ func (s *ArtifactServer) GetArtifact(ctx context.Context, r *apiv2beta1.GetArtif
 		return nil, util.Wrap(err, "Failed to authorize the request")
 	}
 
-	downloadURL := false
-	if r.GetView() == apiv2beta1.GetArtifactRequest_DOWNLOAD {
-		downloadURL = true
-	}
+	downloadURL, renderURL := false, false
 
-	artifactResp, err := s.generateResponseArtifact(ctx, artifact, sessionInfo, namespace, downloadURL)
+	switch r.GetView() {
+	case apiv2beta1.GetArtifactRequest_DOWNLOAD:
+		downloadURL = true
+	case apiv2beta1.GetArtifactRequest_RENDER:
+		renderURL = true
+	}
+	artifactResp, err := s.generateResponseArtifact(ctx, artifact, sessionInfo, namespace, downloadURL, renderURL)
 	if err != nil {
 		return nil, util.NewInternalServerError(fmt.Errorf("encountered error parsing artifact: %v", err), r.ArtifactId)
 	}
@@ -212,6 +215,7 @@ func (s *ArtifactServer) generateResponseArtifact(
 	bucketConfig *objectstore.Config,
 	namespace string,
 	includeShareUrl bool,
+	includeRenderUrl bool,
 ) (*apiv2beta1.Artifact, error) {
 	params, err := objectstore.StructuredS3Params(bucketConfig.SessionInfo.Params)
 	if err != nil {
@@ -249,6 +253,15 @@ func (s *ArtifactServer) generateResponseArtifact(
 			return nil, err
 		}
 		artifactResp.DownloadUrl = shareUrl
+	}
+
+	if includeRenderUrl {
+		expiry := time.Second * time.Duration(common.GetSignedURLExpiryTimeSeconds())
+		renderUrl, err := s.resourceManager.GetSignedUrlWithoutContentDisposition(bucketConfig, secret, expiry, *artifact.Uri)
+		if err != nil {
+			return nil, err
+		}
+		artifactResp.RenderUrl = renderUrl
 	}
 
 	return artifactResp, nil
