@@ -41,6 +41,7 @@ type ObjectStoreInterface interface {
 	GetFromYamlFile(o interface{}, filePath string) error
 	GetPipelineKey(pipelineId string) string
 	GetSignedUrl(bucketConfig *objectstore.Config, secret *v1.Secret, expirySeconds time.Duration, artifactURI string) (string, error)
+	GetSignedUrlWithoutContentDisposition(bucketConfig *objectstore.Config, secret *v1.Secret, expirySeconds time.Duration, artifactURI string) (string, error)
 	GetObjectSize(bucketConfig *objectstore.Config, secret *v1.Secret, artifactURI string) (int64, error)
 }
 
@@ -143,6 +144,27 @@ func (m *MinioObjectStore) GetSignedUrl(bucketConfig *objectstore.Config, secret
 		return "", err
 	}
 	reqParams := make(url.Values)
+	reqParams.Set("response-content-disposition", "attachment; filename=\""+key+"\"")
+	signedUrl, err := s3Client.Presign("GET", bucketConfig.BucketName, key, expirySeconds, reqParams)
+	if err != nil {
+		return "", util.Wrap(err, "Failed to generate signed url")
+	}
+
+	return signedUrl.String(), nil
+}
+
+func (m *MinioObjectStore) GetSignedUrlWithoutContentDisposition(bucketConfig *objectstore.Config, secret *v1.Secret, expirySeconds time.Duration, artifactURI string) (string, error) {
+	s3Client, err := buildClientFromConfig(bucketConfig, secret)
+	if err != nil {
+		return "", err
+	}
+
+	key, err := objectstore.ArtifactKeyFromURI(artifactURI)
+	if err != nil {
+		return "", err
+	}
+	reqParams := make(url.Values)
+	reqParams.Set("response-content-disposition", "inline")
 	signedUrl, err := s3Client.Presign("GET", bucketConfig.BucketName, key, expirySeconds, reqParams)
 	if err != nil {
 		return "", util.Wrap(err, "Failed to generate signed url")

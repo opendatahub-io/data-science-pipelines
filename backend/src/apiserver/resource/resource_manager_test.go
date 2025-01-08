@@ -87,6 +87,10 @@ func (m *FakeBadObjectStore) GetSignedUrl(bucketConfig *objectstore.Config, secr
 	return "", util.NewInternalServerError(errors.New("Error"), "bad object store")
 }
 
+func (m *FakeBadObjectStore) GetSignedUrlWithoutContentDisposition(bucketConfig *objectstore.Config, secret *corev1.Secret, expirySeconds time.Duration, artifactURI string) (string, error) {
+	return "", util.NewInternalServerError(errors.New("Error"), "bad object store")
+}
+
 func (m *FakeBadObjectStore) GetObjectSize(bucketConfig *objectstore.Config, secret *corev1.Secret, artifactURI string) (int64, error) {
 	return 0, util.NewInternalServerError(errors.New("Error"), "bad object store")
 }
