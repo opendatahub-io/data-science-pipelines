@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM ubuntu:16.04
+FROM ubuntu:xenial-20210114
 
 RUN apt-get update -y && \
     apt-get install --no-install-recommends -y -q ca-certificates curl python-dev python-setuptools wget unzip
