@@ -139,6 +139,10 @@ var referencesOfInvalidPipelineVersion = []*apiv1beta1.ResourceReference{
 // This automatically runs before all the tests.
 func initEnvVars() {
 	viper.Set(common.PodNamespace, "ns1")
+	viper.Set("OWNER_UID", "something")
+	viper.Set("OWNER_NAME", "test")
+	viper.Set("OWNER_API_VERSION", "datasciencepipelinesapplications.opendatahub.io/v1")
+	viper.Set("OWNER_KIND", "DataSciencePipelinesApplication")
 }
 
 func initWithExperiment(t *testing.T) (*resource.FakeClientManager, *resource.ResourceManager, *model.Experiment) {

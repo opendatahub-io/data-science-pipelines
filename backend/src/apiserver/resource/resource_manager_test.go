@@ -55,6 +55,10 @@ func strPtr(i string) *string {
 
 func initEnvVars() {
 	viper.Set(common.PodNamespace, "ns1")
+	viper.Set("OWNER_UID", "something")
+	viper.Set("OWNER_NAME", "test")
+	viper.Set("OWNER_API_VERSION", "datasciencepipelinesapplications.opendatahub.io/v1")
+	viper.Set("OWNER_KIND", "DataSciencePipelinesApplication")
 }
 
 type FakeBadObjectStore struct{}
@@ -2380,7 +2384,7 @@ func TestCreateJob_ThroughWorkflowSpecV2(t *testing.T) {
 		DisplayName:    "j1",
 		K8SName:        "job-",
 		Namespace:      "ns1",
-		ServiceAccount: "pipeline-runner",
+		ServiceAccount: "pipeline-runner-test",
 		Enabled:        true,
 		ExperimentId:   DefaultFakeUUID,
 		CreatedAtInSec: 2,
@@ -3173,7 +3177,7 @@ func TestReportScheduledWorkflowResource_Success_withRuntimeParamsV2(t *testing.
 		DisplayName:    "j1",
 		Namespace:      "ns1",
 		ExperimentId:   job.ExperimentId,
-		ServiceAccount: "pipeline-runner",
+		ServiceAccount: "pipeline-runner-test",
 		Enabled:        false,
 		UUID:           actualJob.UUID,
 		Conditions:     "STATUS_UNSPECIFIED",
