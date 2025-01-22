@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	wfapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	"io"
 	"regexp"
 	"strings"
@@ -79,7 +80,19 @@ func (t *V2Spec) ScheduledWorkflow(modelJob *model.Job, ownerReferences []metav1
 
 	var obj interface{}
 	if util.CurrentExecutionType() == util.ArgoWorkflow {
+		var dspaName = ""
+		for _, ownerRef := range ownerReferences {
+			if ownerRef.Kind == "DataSciencePipelinesApplication" {
+				dspaName = ownerRef.Name
+			}
+		}
+
+		if dspaName == "" {
+			return nil, errors.New("failed to get the name of the DataSciencePipelinesApplication to mount the ServiceAccountName")
+		}
+
 		obj, err = argocompiler.Compile(job, kubernetesSpec, nil)
+		obj.(*wfapi.Workflow).Spec.ServiceAccountName += "-" + dspaName
 	} else if util.CurrentExecutionType() == util.TektonPipelineRun {
 		obj, err = tektoncompiler.Compile(job, kubernetesSpec, &tektoncompiler.Options{LauncherImage: Launcher})
 	}

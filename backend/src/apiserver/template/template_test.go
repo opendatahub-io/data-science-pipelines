@@ -197,6 +197,15 @@ func TestScheduledWorkflow(t *testing.T) {
 		},
 	}
 
+	ownerReferences := []metav1.OwnerReference{
+		{
+			APIVersion: "datasciencepipelinesapplications.opendatahub.io/v1",
+			Kind:       "DataSciencePipelinesApplication",
+			Name:       "test",
+			UID:        "something",
+		},
+	}
+
 	expectedScheduledWorkflow := scheduledworkflow.ScheduledWorkflow{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "kubeflow.org/v2beta1",
@@ -204,7 +213,7 @@ func TestScheduledWorkflow(t *testing.T) {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName:    "name1",
-			OwnerReferences: []metav1.OwnerReference{},
+			OwnerReferences: ownerReferences,
 		},
 		Spec: scheduledworkflow.ScheduledWorkflowSpec{
 			Enabled:        true,
@@ -223,11 +232,11 @@ func TestScheduledWorkflow(t *testing.T) {
 			PipelineId:     "1",
 			PipelineName:   "pipeline name",
 			NoCatchup:      util.BoolPointer(true),
-			ServiceAccount: "pipeline-runner",
+			ServiceAccount: "pipeline-runner-test",
 		},
 	}
 
-	actualScheduledWorkflow, err := v2Template.ScheduledWorkflow(modelJob, []metav1.OwnerReference{})
+	actualScheduledWorkflow, err := v2Template.ScheduledWorkflow(modelJob, ownerReferences)
 	assert.Nil(t, err)
 
 	// We don't compare this field because it changes with every driver/launcher image release.
