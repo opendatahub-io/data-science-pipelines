@@ -617,23 +617,25 @@ def build_container_spec_for_task(
 
     if task.container_spec.resources is not None:
         if task.container_spec.resources.cpu_request is not None:
-            container_spec.resources.cpu_request = (
+            container_spec.resources.resource_cpu_request = convert_to_placeholder(
                 task.container_spec.resources.cpu_request)
         if task.container_spec.resources.cpu_limit is not None:
-            container_spec.resources.cpu_limit = (
+            container_spec.resources.resource_cpu_limit = convert_to_placeholder(
                 task.container_spec.resources.cpu_limit)
         if task.container_spec.resources.memory_request is not None:
-            container_spec.resources.memory_request = (
+            container_spec.resources.resource_memory_request = convert_to_placeholder(
                 task.container_spec.resources.memory_request)
         if task.container_spec.resources.memory_limit is not None:
-            container_spec.resources.memory_limit = (
+            container_spec.resources.resource_memory_limit = convert_to_placeholder(
                 task.container_spec.resources.memory_limit)
         if task.container_spec.resources.accelerator_count is not None:
             container_spec.resources.accelerator.CopyFrom(
                 pipeline_spec_pb2.PipelineDeploymentConfig.PipelineContainerSpec
                 .ResourceSpec.AcceleratorConfig(
-                    type=task.container_spec.resources.accelerator_type,
-                    count=task.container_spec.resources.accelerator_count,
+                    resource_type=convert_to_placeholder(
+                        task.container_spec.resources.accelerator_type),
+                    resource_count=convert_to_placeholder(
+                        task.container_spec.resources.accelerator_count),
                 ))
 
     return container_spec
