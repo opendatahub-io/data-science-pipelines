@@ -55,6 +55,10 @@ func strPtr(i string) *string {
 
 func initEnvVars() {
 	viper.Set(common.PodNamespace, "ns1")
+	viper.Set("OWNER_UID", "something")
+	viper.Set("OWNER_NAME", "test")
+	viper.Set("OWNER_API_VERSION", "datasciencepipelinesapplications.opendatahub.io/v1")
+	viper.Set("OWNER_KIND", "DataSciencePipelinesApplication")
 }
 
 type FakeBadObjectStore struct{}
@@ -2380,7 +2384,7 @@ func TestCreateJob_ThroughWorkflowSpecV2(t *testing.T) {
 		DisplayName:    "j1",
 		K8SName:        "job-",
 		Namespace:      "ns1",
-		ServiceAccount: "pipeline-runner",
+		ServiceAccount: "pipeline-runner-test",
 		Enabled:        true,
 		ExperimentId:   DefaultFakeUUID,
 		CreatedAtInSec: 2,
@@ -3173,7 +3177,7 @@ func TestReportScheduledWorkflowResource_Success_withRuntimeParamsV2(t *testing.
 		DisplayName:    "j1",
 		Namespace:      "ns1",
 		ExperimentId:   job.ExperimentId,
-		ServiceAccount: "pipeline-runner",
+		ServiceAccount: "pipeline-runner-test",
 		Enabled:        false,
 		UUID:           actualJob.UUID,
 		Conditions:     "STATUS_UNSPECIFIED",
@@ -3198,6 +3202,35 @@ func TestReportScheduledWorkflowResource_Success_withRuntimeParamsV2(t *testing.
 	}
 	expectedJob.Conditions = "STATUS_UNSPECIFIED"
 	assert.Equal(t, expectedJob.ToV1(), actualJob.ToV1())
+}
+
+func TestReconcileSwfCrs(t *testing.T) {
+	store, manager, job := initWithJobV2(t)
+	defer store.Close()
+
+	fetchedJob, err := manager.GetJob(job.UUID)
+	require.Nil(t, err)
+	require.NotNil(t, fetchedJob)
+
+	swfClient := store.SwfClient().ScheduledWorkflow("ns1")
+
+	options := v1.GetOptions{}
+	ctx := context.Background()
+
+	swf, err := swfClient.Get(ctx, "job-", options)
+	require.Nil(t, err)
+
+	// emulates an invalid/outdated spec
+	swf.Spec.Workflow.Spec = nil
+	swf, err = swfClient.Update(ctx, swf)
+	require.Nil(t, swf.Spec.Workflow.Spec)
+
+	err = manager.ReconcileSwfCrs(ctx)
+	require.Nil(t, err)
+
+	swf, err = swfClient.Get(ctx, "job-", options)
+	require.Nil(t, err)
+	require.NotNil(t, swf.Spec.Workflow.Spec)
 }
 
 func TestReportScheduledWorkflowResource_Error(t *testing.T) {

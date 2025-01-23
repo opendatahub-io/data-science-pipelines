@@ -450,7 +450,7 @@ func TestCreateJob_V2(t *testing.T) {
 	expectedJob_V2 := &apiv1beta1.Job{
 		Id:             "123e4567-e89b-12d3-a456-426655440000",
 		Name:           "job1",
-		ServiceAccount: "pipeline-runner",
+		ServiceAccount: "pipeline-runner-test",
 		Enabled:        true,
 		MaxConcurrency: 1,
 		Trigger: &apiv1beta1.Trigger{
@@ -540,7 +540,7 @@ func TestListRecurringRuns_MultiUser(t *testing.T) {
 	expectedRecurringRun := &apiv2beta1.RecurringRun{
 		RecurringRunId: "123e4567-e89b-12d3-a456-426655440000",
 		DisplayName:    "recurring_run_1",
-		ServiceAccount: "pipeline-runner",
+		ServiceAccount: "pipeline-runner-test",
 		Mode:           apiv2beta1.RecurringRun_ENABLE,
 		Namespace:      "ns1",
 		MaxConcurrency: 1,
@@ -972,7 +972,7 @@ func TestCreateRecurringRun(t *testing.T) {
 	expectedRecurringRun := &apiv2beta1.RecurringRun{
 		RecurringRunId: "123e4567-e89b-12d3-a456-426655440000",
 		DisplayName:    "recurring_run_1",
-		ServiceAccount: "pipeline-runner",
+		ServiceAccount: "pipeline-runner-test",
 		Mode:           apiv2beta1.RecurringRun_ENABLE,
 		Namespace:      "ns1",
 		MaxConcurrency: 1,
@@ -1034,7 +1034,7 @@ func TestGetRecurringRun(t *testing.T) {
 	expectedRecurringRun := &apiv2beta1.RecurringRun{
 		RecurringRunId: "123e4567-e89b-12d3-a456-426655440000",
 		DisplayName:    "recurring_run_1",
-		ServiceAccount: "pipeline-runner",
+		ServiceAccount: "pipeline-runner-test",
 		Mode:           apiv2beta1.RecurringRun_ENABLE,
 		Namespace:      "ns1",
 		MaxConcurrency: 1,
@@ -1099,7 +1099,7 @@ func TestListRecurringRuns(t *testing.T) {
 	expectedRecurringRun := &apiv2beta1.RecurringRun{
 		RecurringRunId: "123e4567-e89b-12d3-a456-426655440000",
 		DisplayName:    "recurring_run_1",
-		ServiceAccount: "pipeline-runner",
+		ServiceAccount: "pipeline-runner-test",
 		Mode:           apiv2beta1.RecurringRun_ENABLE,
 		Namespace:      "ns1",
 		MaxConcurrency: 1,
