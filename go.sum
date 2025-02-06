@@ -2036,8 +2036,8 @@ github.com/kubeflow/kfp-tekton/tekton-catalog/tekton-exithandler v0.0.0-20231127
 github.com/kubeflow/kfp-tekton/tekton-catalog/tekton-exithandler v0.0.0-20231127195001-a75d4b3711ff/go.mod h1:a6DSo/UxoG4hkJXJMo4nSmHURDEEiEVremmXy4GwdII=
 github.com/kubeflow/kfp-tekton/tekton-catalog/tekton-kfptask v0.0.0-20231127195001-a75d4b3711ff h1:9gC2hCj8pnbfUKIFQKbmGjlR4p7Vr5v0u9hyLygnybw=
 github.com/kubeflow/kfp-tekton/tekton-catalog/tekton-kfptask v0.0.0-20231127195001-a75d4b3711ff/go.mod h1:lAFdPugzj3bcAXyN3+8y0NByidZ88zwGxMc+gdc8cHw=
-github.com/kubeflow/pipelines/api v0.0.0-20231027040853-58ce09e07d03 h1:reL3LbkRIozBkKSUYjtQFV2kVC1R4WHG9FrTClRT1FY=
-github.com/kubeflow/pipelines/api v0.0.0-20231027040853-58ce09e07d03/go.mod h1:T7TOQB36gGe97yUdfVAnYK5uuT0+uQbLNHDUHxYkmE4=
+github.com/kubeflow/pipelines/api v0.0.0-20250102152816-873e9dedd766 h1:ZXz+Ki+hxez8vsr5hWHsjYWpa9V/dkp3iI4XTtMBH7A=
+github.com/kubeflow/pipelines/api v0.0.0-20250102152816-873e9dedd766/go.mod h1:puPWVUzB1VCb8lVq4g06IR2rIXuSpejDTd/FkSr6nvc=
 github.com/kubeflow/pipelines/kubernetes_platform v0.0.0-20240403164522-8b2a099e8c9f h1:O5GmJN8tALpiqL0dUo4uhOkqHG8xOkNCgT7QI9q9GnE=
 github.com/kubeflow/pipelines/kubernetes_platform v0.0.0-20240403164522-8b2a099e8c9f/go.mod h1:CJkKr356RlpZP/gQRuHf3Myrn1qJtoUVe4EMCmtwarg=
 github.com/kubeflow/pipelines/third_party/ml-metadata v0.0.0-20230810215105-e1f0c010f800 h1:YAW+X9xCW8Yq5tQaBBQaLTNU9CJj8Nr7lx1+k66ZHJ0=
