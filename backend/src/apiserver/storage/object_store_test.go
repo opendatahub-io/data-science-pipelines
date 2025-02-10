@@ -17,13 +17,17 @@ package storage
 import (
 	"bytes"
 	"io"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/kubeflow/pipelines/backend/src/common/util"
+	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	minio "github.com/minio/minio-go/v6"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
+	v1 "k8s.io/api/core/v1"
 )
 
 type Foo struct{ ID int }
@@ -124,4 +128,51 @@ func TestGetFromYamlFile_UnmarshalError(t *testing.T) {
 	error := manager.GetFromYamlFile(&foo, manager.GetPipelineKey("1"))
 	assert.Equal(t, codes.Internal, error.(*util.UserError).ExternalStatusCode())
 	assert.Contains(t, error.Error(), "Failed to unmarshal")
+}
+
+func TestGetSignedUrlWithoutContentDisposition(t *testing.T) {
+	minioClient := NewFakeMinioClient()
+	manager := &MinioObjectStore{minioClient: minioClient}
+	bucketConfig := &objectstore.Config{BucketName: "test-bucket"}
+	secret := &v1.Secret{}
+	expiry := time.Duration(3600) * time.Second
+	artifactURI := "s3://test-bucket/path/to/artifact"
+
+	signedURL, err := manager.GetSignedUrlWithoutContentDisposition(bucketConfig, secret, expiry, artifactURI)
+
+	assert.Nil(t, err)
+	assert.Contains(t, signedURL, "test-bucket")
+	assert.Contains(t, signedURL, "response-content-disposition=inline")
+}
+
+func TestGetSignedUrlWithQueryParams(t *testing.T) {
+	minioClient := NewFakeMinioClient()
+	manager := &MinioObjectStore{minioClient: minioClient}
+	bucketConfig := &objectstore.Config{BucketName: "test-bucket"}
+	secret := &v1.Secret{}
+	expiry := time.Duration(3600) * time.Second
+	artifactURI := "s3://test-bucket/path/to/artifact"
+	queryParams := url.Values{}
+	queryParams.Set("custom-param", "value")
+
+	signedURL, err := manager.GetSignedUrlWithQueryParams(bucketConfig, secret, expiry, artifactURI, queryParams)
+
+	assert.Nil(t, err)
+	assert.Contains(t, signedURL, "test-bucket")
+	assert.Contains(t, signedURL, "custom-param=value")
+}
+
+func TestGetSignedUrlWithQueryParams_Error(t *testing.T) {
+	manager := &MinioObjectStore{minioClient: &FakeBadMinioClient{}}
+	bucketConfig := &objectstore.Config{BucketName: "test-bucket"}
+	secret := &v1.Secret{}
+	expiry := time.Duration(3600) * time.Second
+	artifactURI := "s3://test-bucket/path/to/artifact"
+	queryParams := url.Values{}
+
+	signedURL, err := manager.GetSignedUrlWithQueryParams(bucketConfig, secret, expiry, artifactURI, queryParams)
+
+	assert.Empty(t, signedURL)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "Failed to generate signed URL")
 }
