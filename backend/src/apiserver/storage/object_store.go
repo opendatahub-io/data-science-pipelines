@@ -41,6 +41,8 @@ type ObjectStoreInterface interface {
 	GetFromYamlFile(o interface{}, filePath string) error
 	GetPipelineKey(pipelineId string) string
 	GetSignedUrl(bucketConfig *objectstore.Config, secret *v1.Secret, expirySeconds time.Duration, artifactURI string) (string, error)
+	GetSignedUrlWithoutContentDisposition(bucketConfig *objectstore.Config, secret *v1.Secret, expirySeconds time.Duration, artifactURI string) (string, error)
+	GetSignedUrlWithQueryParams(bucketConfig *objectstore.Config, secret *v1.Secret, expirySeconds time.Duration, artifactURI string, queryParams url.Values) (string, error)
 	GetObjectSize(bucketConfig *objectstore.Config, secret *v1.Secret, artifactURI string) (int64, error)
 }
 
@@ -133,6 +135,28 @@ func (m *MinioObjectStore) GetFromYamlFile(o interface{}, filePath string) error
 // Artifact downloads.
 // TODO: Add support for irsa and gcs app credentials pulled from environment
 func (m *MinioObjectStore) GetSignedUrl(bucketConfig *objectstore.Config, secret *v1.Secret, expirySeconds time.Duration, artifactURI string) (string, error) {
+	queryParams := make(url.Values)
+	key, err := objectstore.ArtifactKeyFromURI(artifactURI)
+	if err != nil {
+		return "", err
+	}
+	queryParams.Set("response-content-disposition", "attachment; filename=\""+key+"\"")
+
+	return m.GetSignedUrlWithQueryParams(bucketConfig, secret, expirySeconds, artifactURI, queryParams)
+}
+
+// GetSignedUrlWithoutContentDisposition generates a signed url for the artifact identified by artifactURI and bucketConfig.
+// The URL expires after expirySeconds. The secret contains the credentials for accessing the object
+// store for this artifact. Signed URLs without Content Disposition are built using the "GET" method, and are only intended for
+// Artifact preview.
+func (m *MinioObjectStore) GetSignedUrlWithoutContentDisposition(bucketConfig *objectstore.Config, secret *v1.Secret, expirySeconds time.Duration, artifactURI string) (string, error) {
+	queryParams := make(url.Values)
+	queryParams.Set("response-content-disposition", "inline")
+
+	return m.GetSignedUrlWithQueryParams(bucketConfig, secret, expirySeconds, artifactURI, queryParams)
+}
+
+func (m *MinioObjectStore) GetSignedUrlWithQueryParams(bucketConfig *objectstore.Config, secret *v1.Secret, expirySeconds time.Duration, artifactURI string, queryParams url.Values) (string, error) {
 	s3Client, err := buildClientFromConfig(bucketConfig, secret)
 	if err != nil {
 		return "", err
@@ -142,10 +166,14 @@ func (m *MinioObjectStore) GetSignedUrl(bucketConfig *objectstore.Config, secret
 	if err != nil {
 		return "", err
 	}
-	reqParams := make(url.Values)
-	signedUrl, err := s3Client.Presign("GET", bucketConfig.BucketName, key, expirySeconds, reqParams)
+
+	if queryParams == nil {
+		queryParams = make(url.Values)
+	}
+
+	signedUrl, err := s3Client.Presign("GET", bucketConfig.BucketName, key, expirySeconds, queryParams)
 	if err != nil {
-		return "", util.Wrap(err, "Failed to generate signed url")
+		return "", util.Wrap(err, "Failed to generate signed URL")
 	}
 
 	return signedUrl.String(), nil
