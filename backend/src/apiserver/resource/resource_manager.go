@@ -18,12 +18,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	scheduledworkflow "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 	"io"
 	"net"
+	"net/url"
 	"reflect"
 	"strconv"
 	"time"
+
+	scheduledworkflow "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 
 	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
 	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
@@ -2128,9 +2130,9 @@ func (r *ResourceManager) GetSecret(ctx context.Context, namespace, name string)
 	return secret, nil
 }
 
-// GetSignedUrl retrieves a signed url for the associated artifact.
-func (r *ResourceManager) GetSignedUrl(bucketConfig *objectstore.Config, secret *corev1.Secret, expirySeconds time.Duration, artifactURI string) (string, error) {
-	signedUrl, err := r.objectStore.GetSignedUrl(bucketConfig, secret, expirySeconds, artifactURI)
+// GetSignedUrlWithQueryParams retrieves a signed url for the associated artifact.
+func (r *ResourceManager) GetSignedUrlWithQueryParams(bucketConfig *objectstore.Config, secret *corev1.Secret, expirySeconds time.Duration, artifactURI string, queryParams url.Values) (string, error) {
+	signedUrl, err := r.objectStore.GetSignedUrlWithQueryParams(bucketConfig, secret, expirySeconds, artifactURI, queryParams)
 	if err != nil {
 		return "", err
 	}
