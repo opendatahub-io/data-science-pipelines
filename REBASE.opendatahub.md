@@ -178,8 +178,32 @@ Obviously, this will completely overwrite the git history of the `opendatahub/ma
 
 This process this obviously very heavy-handed and destructive, and depends on there being no carries or downstream-only commits.  We should adjust the procedure to account for this
 
+## Update the `rhods-cpaas-midstream` repository
+
+Changes to Dockerfiles should be done also in https://gitlab.cee.redhat.com/data-hub/rhods-cpaas-midstream.
+
+Before submitting a MR, check if the `@cpass-bot` has the `Developer` role at the `Members` page of your fork.
+
+Members page: `https://gitlab.cee.redhat.com/<your-user>/rhods-cpaas-midstream/-/project_members`
+
+![cpass-bot-developer-member.png](images/cpass-bot-developer-member.png)
+
+If `@cpass-bot` isn't a `Developer` member yet, invite it by clicking the `Invite members` button in the top right corner.
+
+### Update Dockerfiles
+
+* [odh-ml-pipelines-api-server-v2](https://gitlab.cee.redhat.com/data-hub/rhods-cpaas-midstream/-/blob/rhods-1.18-rhel-8/distgit/containers/odh-ml-pipelines-api-server-v2/Dockerfile.in?ref_type=heads)
+* [odh-ml-pipelines-driver](https://gitlab.cee.redhat.com/data-hub/rhods-cpaas-midstream/-/blob/rhods-1.18-rhel-8/distgit/containers/odh-ml-pipelines-driver/Dockerfile.in?ref_type=heads)
+* [odh-ml-pipelines-launcher](https://gitlab.cee.redhat.com/data-hub/rhods-cpaas-midstream/-/blob/rhods-1.18-rhel-8/distgit/containers/odh-ml-pipelines-launcher/Dockerfile.in?ref_type=heads)
+* [odh-ml-pipelines-persistenceagent-v2](https://gitlab.cee.redhat.com/data-hub/rhods-cpaas-midstream/-/blob/rhods-1.18-rhel-8/distgit/containers/odh-ml-pipelines-persistenceagent-v2/Dockerfile.in?ref_type=heads)
+* [odh-ml-pipelines-scheduledworkflow-v2](https://gitlab.cee.redhat.com/data-hub/rhods-cpaas-midstream/-/blob/rhods-1.18-rhel-8/distgit/containers/odh-ml-pipelines-scheduledworkflow-v2/Dockerfile.in?ref_type=heads)
+
+### Update `upstream_sources.yml`
+
+Update the commits for each rebased repository in https://gitlab.cee.redhat.com/data-hub/rhods-cpaas-midstream/-/blob/rhods-1.18-rhel-8/upstream_sources.yml?ref_type=heads.
+
 ## Followup work
-QE team has a Jenkins Job that can help test some basic features. Ask Diego Lovison to trigger the Jenkins job. You might need to create a separate branch DSPO from the code rebase to change `params.env` file with the values of the generated images from the previous PRs to run this Jenkins job.
+QE team has a Jenkins Job that can help test some basic features. Ask a QE to trigger the Jenkins job. You might need to create a separate branch DSPO from the code rebase to change `params.env` file with the values of the generated images from the previous PRs to run this Jenkins job.
 
 It is also good creating a follow-up task in JIRA to coordinate with QE to run some regression tests before merging the PRs.
 
