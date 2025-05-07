@@ -122,7 +122,7 @@ class SampleTest(unittest.TestCase):
         """Runs once before all tests."""
         print('Deploying pre-requisites....')
         for p in PREREQS:
-            deploy_k8s_yaml(_KFP_NAMESPACE, p)
+            delete_k8s_yaml(_KFP_NAMESPACE, p)
         print('Done deploying pre-requisites.')
 
     @classmethod
