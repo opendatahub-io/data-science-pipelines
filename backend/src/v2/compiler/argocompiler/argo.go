@@ -41,6 +41,8 @@ type Options struct {
 	DriverImage string
 	// optional
 	PipelineRoot string
+	// optional
+	CacheDisabled bool
 	// TODO(Bobgy): add an option -- dev mode, ImagePullPolicy should only be Always in dev mode.
 }
 
@@ -151,6 +153,7 @@ func Compile(jobArg *pipelinespec.PipelineJob, kubernetesSpecArg *pipelinespec.S
 	c.mlPipelineServiceTLSEnabled = mlPipelineTLSEnabled
 
 	if opts != nil {
+		c.cacheDisabled = opts.CacheDisabled
 		if opts.DriverImage != "" {
 			c.driverImage = opts.DriverImage
 		}
@@ -185,6 +188,7 @@ type workflowCompiler struct {
 	driverCommand               []string
 	launcherImage               string
 	launcherCommand             []string
+	cacheDisabled               bool
 	mlPipelineServiceTLSEnabled bool
 }
 

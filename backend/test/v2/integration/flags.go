@@ -25,6 +25,7 @@ var (
 	runIntegrationTests = flag.Bool("runIntegrationTests", false, "Whether to also run integration tests that call the service")
 	runUpgradeTests     = flag.Bool("runUpgradeTests", false, "Whether to run upgrade tests")
 	useProxy            = flag.Bool("useProxy", false, "Whether to run the proxy tests")
+	cacheEnabled        = flag.Bool("cacheEnabled", true, "Whether cache is enabled tests")
 )
 
 /**

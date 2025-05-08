@@ -52,7 +52,8 @@ type LauncherV2Options struct {
 	MLMDServerPort,
 	PipelineName,
 	RunID string
-	PublishLogs string
+	PublishLogs   string
+	CacheDisabled bool
 	// set to true if ml pipeline server is serving over tls
 	MLPipelineTLSEnabled bool
 	// set to true if metadata server is serving over tls
@@ -71,7 +72,7 @@ type LauncherV2 struct {
 	// clients
 	metadataClient metadata.ClientInterface
 	k8sClient      kubernetes.Interface
-	cacheClient    *cacheutils.Client
+	cacheClient    cacheutils.Client
 }
 
 // Client is the struct to hold the Kubernetes Clientset
@@ -118,7 +119,7 @@ func NewLauncherV2(ctx context.Context, executionID int64, executorInputJSON, co
 	if err != nil {
 		return nil, err
 	}
-	cacheClient, err := cacheutils.NewClient(opts.MLPipelineTLSEnabled)
+	cacheClient, err := cacheutils.NewClient(opts.CacheDisabled, opts.MLPipelineTLSEnabled)
 	if err != nil {
 		return nil, err
 	}

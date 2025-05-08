@@ -94,6 +94,12 @@ type Argo struct {
 	wf *util.Workflow
 }
 
+func (t *Argo) IsCacheDisabled() bool {
+	return false
+}
+
+var _ Template = &Argo{}
+
 func (t *Argo) ScheduledWorkflow(modelJob *model.Job, ownerReferences []metav1.OwnerReference) (*scheduledworkflow.ScheduledWorkflow, error) {
 	workflow := util.NewWorkflow(t.wf.Workflow.DeepCopy())
 	// Overwrite namespace from the job object

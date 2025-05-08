@@ -20,6 +20,8 @@ spec:
           type: RuntimeDefault
       containers:
         - env:
+            - name: CACHEENABLED
+              value: "false"
             # Whether or not to publish component logs to the object store.
             - name: PUBLISH_LOGS
               value: "true"
