@@ -84,8 +84,14 @@ func (c *workflowCompiler) addImporterTemplate() string {
 		"--metadataTLSEnabled", strconv.FormatBool(common.GetMetadataTLSEnabled()),
 		"--ca_cert_path", common.GetCaCertPath(),
 	}
+	if c.cacheDisabled {
+		args = append(args, "--cache_disabled", "true")
+	}
 	if value, ok := os.LookupEnv(PipelineLogLevelEnvVar); ok {
 		args = append(args, "--log_level", value)
+	}
+	if value, ok := os.LookupEnv(PublishLogsEnvVar); ok {
+		args = append(args, "--publish_logs", value)
 	}
 	importerTemplate := &wfapi.Template{
 		Name: name,

@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kubeflow/pipelines/backend/src/apiserver/config/proxy"
+
 	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	"github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
 
@@ -56,6 +58,7 @@ func strPtr(i string) *string {
 
 func initEnvVars() {
 	viper.Set(common.PodNamespace, "ns1")
+	proxy.InitializeConfigWithEmptyForTests()
 }
 
 type FakeBadObjectStore struct{}
@@ -114,7 +117,7 @@ func createPipelineVersion(pipelineId string, name string, description string, u
 	}
 	paramsJSON := "[{\"name\":\"param1\"}]"
 	spec := pipelineSpec
-	tmpl, err := template.New([]byte(pipelineSpec))
+	tmpl, err := template.New([]byte(pipelineSpec), false)
 	if err != nil {
 		spec = pipelineSpec
 	} else {
@@ -691,13 +694,13 @@ func TestCreatePipelineOrVersion_V2PipelineName(t *testing.T) {
 			require.Nil(t, err)
 			bytes, err := manager.GetPipelineVersionTemplate(version.UUID)
 			require.Nil(t, err)
-			tmpl, err := template.New(bytes)
+			tmpl, err := template.New(bytes, true)
 			require.Nil(t, err)
 			assert.Equal(t, test.pipelineName, tmpl.V2PipelineName())
 
 			bytes, err = manager.GetPipelineLatestTemplate(createdPipeline.UUID)
 			require.Nil(t, err)
-			tmpl, err = template.New(bytes)
+			tmpl, err = template.New(bytes, true)
 			require.Nil(t, err)
 			assert.Equal(t, test.pipelineName, tmpl.V2PipelineName())
 		})
@@ -732,6 +735,7 @@ func TestResourceManager_CreatePipelineAndPipelineVersion(t *testing.T) {
 				UUID:           DefaultFakePipelineIdTwo,
 				CreatedAtInSec: 1,
 				Name:           "pipeline v2",
+				DisplayName:    "pipeline v2",
 				Description:    "pipeline two",
 				Namespace:      "user1",
 				Status:         model.PipelineReady,
@@ -740,6 +744,48 @@ func TestResourceManager_CreatePipelineAndPipelineVersion(t *testing.T) {
 				UUID:            DefaultFakePipelineIdTwo,
 				CreatedAtInSec:  2,
 				Name:            "pipeline v2 version 1",
+				DisplayName:     "pipeline v2 version 1",
+				Description:     "pipeline v2 version description",
+				PipelineId:      DefaultFakePipelineIdTwo,
+				Status:          model.PipelineVersionReady,
+				CodeSourceUrl:   "gs://my-bucket/pipeline_v2.py",
+				PipelineSpec:    v2SpecHelloWorld,
+				PipelineSpecURI: "pipeline_version_two.yaml",
+				Parameters:      "[]",
+			},
+			false,
+			"",
+		},
+		{
+			"Valid - pipeline v2 (with name and display name)",
+			&model.Pipeline{
+				Name:        "pipeline v2",
+				DisplayName: "pipeline v2 display name",
+				Description: "pipeline two",
+				Namespace:   "user1",
+			},
+			&model.PipelineVersion{
+				Name:            "pipeline v2 version 1",
+				DisplayName:     "pipeline v2 version 1 display name",
+				Description:     "pipeline v2 version description",
+				CodeSourceUrl:   "gs://my-bucket/pipeline_v2.py",
+				PipelineSpec:    v2SpecHelloWorld,
+				PipelineSpecURI: "pipeline_version_two.yaml",
+			},
+			&model.Pipeline{
+				UUID:           DefaultFakePipelineIdTwo,
+				CreatedAtInSec: 1,
+				Name:           "pipeline v2",
+				DisplayName:    "pipeline v2 display name",
+				Description:    "pipeline two",
+				Namespace:      "user1",
+				Status:         model.PipelineReady,
+			},
+			&model.PipelineVersion{
+				UUID:            DefaultFakePipelineIdTwo,
+				CreatedAtInSec:  2,
+				Name:            "pipeline v2 version 1",
+				DisplayName:     "pipeline v2 version 1 display name",
 				Description:     "pipeline v2 version description",
 				PipelineId:      DefaultFakePipelineIdTwo,
 				Status:          model.PipelineVersionReady,
@@ -769,6 +815,7 @@ func TestResourceManager_CreatePipelineAndPipelineVersion(t *testing.T) {
 				UUID:           DefaultFakePipelineIdTwo,
 				CreatedAtInSec: 1,
 				Name:           "pipeline v1",
+				DisplayName:    "pipeline v1",
 				Description:    "pipeline one",
 				Parameters:     `[{"name":"param1","value":"one"},{"name":"param2","value":"two"}]`,
 				Status:         model.PipelineReady,
@@ -778,6 +825,7 @@ func TestResourceManager_CreatePipelineAndPipelineVersion(t *testing.T) {
 				CreatedAtInSec:  2,
 				PipelineId:      DefaultFakePipelineIdTwo,
 				Name:            "pipeline v1 version 1",
+				DisplayName:     "pipeline v1 version 1",
 				Description:     "pipeline v1 version description",
 				Status:          model.PipelineVersionReady,
 				CodeSourceUrl:   "gs://my-bucket/pipeline_v1.py",

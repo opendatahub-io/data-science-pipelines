@@ -15,6 +15,8 @@
 package integration
 
 import (
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -104,6 +106,8 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	helloPipeline, err := s.pipelineUploadClient.UploadFile("../resources/hello-world.yaml", upload_params.NewUploadPipelineParams())
 	require.Nil(t, err)
 	assert.Equal(t, "hello-world.yaml", helloPipeline.DisplayName)
+	// Verify that the pipeline name defaults to the display name for backwards compatibility.
+	assert.Equal(t, "hello-world.yaml", helloPipeline.Name)
 
 	/* ---------- Upload pipelines YAML ---------- */
 	time.Sleep(1 * time.Second)
@@ -121,6 +125,7 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	sequentialPipeline, err := s.pipelineClient.CreatePipelineAndVersion(&params.PipelineServiceCreatePipelineAndVersionParams{
 		Body: &model.V2beta1CreatePipelineAndVersionRequest{
 			Pipeline: &model.V2beta1Pipeline{
+				Name:        "sequential-v2",
 				DisplayName: "sequential",
 				Description: "sequential pipeline",
 			},
@@ -132,12 +137,14 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 		},
 	})
 	require.Nil(t, err)
+	assert.Equal(t, "sequential-v2", sequentialPipeline.Name)
 	assert.Equal(t, "sequential", sequentialPipeline.DisplayName)
 	assert.Equal(t, "sequential pipeline", sequentialPipeline.Description)
 	sequentialPipelineVersions, totalSize, _, err := s.pipelineClient.ListPipelineVersions(&params.PipelineServiceListPipelineVersionsParams{PipelineID: sequentialPipeline.PipelineID})
 	require.Nil(t, err)
 	assert.Equal(t, 1, totalSize)
 	assert.Equal(t, 1, len(sequentialPipelineVersions))
+	assert.Equal(t, "sequential-v2", sequentialPipelineVersions[0].Name)
 	assert.Equal(t, "sequential", sequentialPipelineVersions[0].DisplayName)
 	assert.Equal(t, "sequential pipeline", sequentialPipelineVersions[0].Description)
 	assert.Equal(t, sequentialPipeline.PipelineID, sequentialPipelineVersions[0].PipelineID)
@@ -151,6 +158,12 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	assert.Equal(t, "zip-arguments-parameters", argumentUploadPipeline.DisplayName)
 
 	/* ---------- Import pipeline tarball by URL ---------- */
+	pipelineURL := "https://github.com/kubeflow/pipelines/raw/refs/heads/master/backend/test/v2/resources/arguments.pipeline.zip"
+
+	if pullNumber := os.Getenv("PULL_NUMBER"); pullNumber != "" {
+		pipelineURL = fmt.Sprintf("https://raw.githubusercontent.com/opendatahub-io/data-science-pipelines/pull/%s/head/backend/test/v2/resources/arguments.pipeline.zip", pullNumber)
+	}
+
 	time.Sleep(1 * time.Second)
 	argumentUrlPipeline, err := s.pipelineClient.Create(&params.PipelineServiceCreatePipelineParams{
 		Body: &model.V2beta1Pipeline{DisplayName: "arguments.pipeline.zip"},
@@ -160,19 +173,19 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 		&params.PipelineServiceCreatePipelineVersionParams{
 			PipelineID: argumentUrlPipeline.PipelineID,
 			Body: &model.V2beta1PipelineVersion{
-				DisplayName: "argumentUrl-v1",
+				DisplayName: "argumenturl-v1",
 				Description: "1st version of argument url pipeline",
 				PipelineID:  sequentialPipeline.PipelineID,
 				PackageURL: &model.V2beta1URL{
-					PipelineURL: "https://github.com/kubeflow/pipelines/raw/refs/heads/master/backend/test/v2/resources/arguments.pipeline.zip",
+					PipelineURL: pipelineURL,
 				},
 			},
 		})
 	require.Nil(t, err)
-	assert.Equal(t, "argumentUrl-v1", argumentUrlPipelineVersion.DisplayName)
+	assert.Equal(t, "argumenturl-v1", argumentUrlPipelineVersion.DisplayName)
 	assert.Equal(t, "1st version of argument url pipeline", argumentUrlPipelineVersion.Description)
 	assert.Equal(t, argumentUrlPipeline.PipelineID, argumentUrlPipelineVersion.PipelineID)
-	assert.Equal(t, "https://github.com/kubeflow/pipelines/raw/refs/heads/master/backend/test/v2/resources/arguments.pipeline.zip", argumentUrlPipelineVersion.PackageURL.PipelineURL)
+	assert.Equal(t, pipelineURL, argumentUrlPipelineVersion.PackageURL.PipelineURL)
 
 	/* ---------- Verify list pipeline works ---------- */
 	pipelines, totalSize, _, err := s.pipelineClient.List(&params.PipelineServiceListPipelinesParams{})

@@ -15,13 +15,16 @@
 package clientmanager
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
-	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
-	"github.com/minio/minio-go/v6"
 	"os"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
+	"github.com/minio/minio-go/v6"
 
 	"github.com/cenkalti/backoff"
 	"github.com/go-sql-driver/mysql"
@@ -35,6 +38,10 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/model"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/storage"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
+	k8sapi "github.com/kubeflow/pipelines/backend/src/crd/kubernetes/v2beta1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -72,6 +79,18 @@ const (
 	clientBurst = "ClientBurst"
 )
 
+var scheme *runtime.Scheme
+
+func init() {
+	scheme = runtime.NewScheme()
+
+	err := k8sapi.AddToScheme(scheme)
+	if err != nil {
+		// Panic is okay here because it means there's a code issue and so the package shouldn't initialize.
+		panic(fmt.Sprintf("Failed to initialize the Kubernetes API scheme: %v", err))
+	}
+}
+
 // Container for all service clients.
 type ClientManager struct {
 	db                        *storage.DB
@@ -94,10 +113,28 @@ type ClientManager struct {
 	time                      util.TimeInterface
 	uuid                      util.UUIDGeneratorInterface
 	authenticators            []auth.Authenticator
+	controllerClient          ctrlclient.Client
+	controllerClientNoCache   ctrlclient.Client
+}
+
+// Options to pass to Client Manager initialization
+type Options struct {
+	UsePipelineKubernetesStorage bool
+	GlobalKubernetesWebhookMode  bool
+	Context                      context.Context
+	WaitGroup                    *sync.WaitGroup
 }
 
 func (c *ClientManager) TaskStore() storage.TaskStoreInterface {
 	return c.taskStore
+}
+
+func (c *ClientManager) ControllerClient(cacheEnabled bool) ctrlclient.Client {
+	if cacheEnabled {
+		return c.controllerClient
+	}
+
+	return c.controllerClientNoCache
 }
 
 func (c *ClientManager) ExperimentStore() storage.ExperimentStoreInterface {
@@ -172,24 +209,86 @@ func (c *ClientManager) Authenticators() []auth.Authenticator {
 	return c.authenticators
 }
 
-func (c *ClientManager) init() {
-	glog.Info("Initializing client manager")
-	glog.Info("Initializing DB client...")
-	db := InitDBClient(common.GetDurationConfig(initConnectionTimeout))
-	db.SetConnMaxLifetime(common.GetDurationConfig(dbConMaxLifeTime))
-	glog.Info("DB client initialized successfully")
+func (c *ClientManager) init(options *Options) error {
 	// time
 	c.time = util.NewRealTime()
 
 	// UUID generator
 	c.uuid = util.NewUUIDGenerator()
 
+	var pipelineStoreForRef storage.PipelineStoreInterface
+
+	if options.UsePipelineKubernetesStorage || options.GlobalKubernetesWebhookMode {
+		glog.Info("Initializing controller client...")
+		restConfig, err := util.GetKubernetesConfig()
+		if err != nil {
+			return err
+		}
+
+		var cacheConfig map[string]cache.Config
+
+		if !common.IsMultiUserMode() && common.GetPodNamespace() != "" && !options.GlobalKubernetesWebhookMode {
+			cacheConfig = map[string]cache.Config{common.GetPodNamespace(): {}}
+		}
+
+		k8sAPICache, err := cache.New(restConfig,
+			cache.Options{
+				DefaultNamespaces: cacheConfig,
+				Scheme:            scheme,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		options.WaitGroup.Add(1)
+		go func() {
+			defer options.WaitGroup.Done()
+
+			err := k8sAPICache.Start(options.Context)
+			if err != nil {
+				panic(fmt.Sprintf("Failed to start the cache to the cluster: %v", err))
+			}
+		}()
+
+		controllerClient, err := ctrlclient.New(
+			restConfig, ctrlclient.Options{Scheme: scheme, Cache: &ctrlclient.CacheOptions{Reader: k8sAPICache}},
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize the controller client: %w", err)
+		}
+
+		controllerClientNoCache, err := ctrlclient.New(restConfig, ctrlclient.Options{Scheme: scheme})
+		if err != nil {
+			return fmt.Errorf("failed to initialize the no cache controller client: %w", err)
+		}
+
+		glog.Info("Controller client initialized successfully.")
+
+		c.controllerClient = controllerClient
+		c.controllerClientNoCache = controllerClientNoCache
+		if options.GlobalKubernetesWebhookMode {
+			return nil
+		}
+
+		c.pipelineStore = storage.NewPipelineStoreKubernetes(controllerClient, controllerClientNoCache)
+		pipelineStoreForRef = c.pipelineStore
+	}
+
+	glog.Info("Initializing client manager")
+	glog.Info("Initializing DB client...")
+	db := InitDBClient(common.GetDurationConfig(initConnectionTimeout))
+	db.SetConnMaxLifetime(common.GetDurationConfig(dbConMaxLifeTime))
+	glog.Info("DB client initialized successfully")
+
 	c.db = db
+	if !options.UsePipelineKubernetesStorage {
+		c.pipelineStore = storage.NewPipelineStore(db, c.time, c.uuid)
+	}
 	c.experimentStore = storage.NewExperimentStore(db, c.time, c.uuid)
-	c.pipelineStore = storage.NewPipelineStore(db, c.time, c.uuid)
-	c.jobStore = storage.NewJobStore(db, c.time)
+	c.jobStore = storage.NewJobStore(db, c.time, pipelineStoreForRef)
 	c.taskStore = storage.NewTaskStore(db, c.time, c.uuid)
-	c.resourceReferenceStore = storage.NewResourceReferenceStore(db)
+	c.resourceReferenceStore = storage.NewResourceReferenceStore(db, pipelineStoreForRef)
 	c.dBStatusStore = storage.NewDBStatusStore(db)
 	c.defaultExperimentStore = storage.NewDefaultExperimentStore(db)
 	glog.Info("Initializing Minio client...")
@@ -227,10 +326,37 @@ func (c *ClientManager) init() {
 		c.authenticators = auth.GetAuthenticators(c.tokenReviewClient)
 	}
 	glog.Infof("Client manager initialized successfully")
+
+	return nil
 }
 
 func (c *ClientManager) Close() {
 	c.db.Close()
+}
+
+// addDisplayNameColumn adds a DisplayName column to the given table with a default value of Name.
+// It panics if this fails.
+func addDisplayNameColumn(db *gorm.DB, scope *gorm.Scope, quotedTableName string, driverName string) []error {
+	glog.Info("Adding DisplayName column to " + quotedTableName)
+
+	switch driverName {
+	case "mysql":
+		scope.Raw(
+			"ALTER TABLE " + quotedTableName + " ADD COLUMN DisplayName VARCHAR(255) NULL;",
+		).Exec()
+		scope.Raw("UPDATE " + quotedTableName + " SET DisplayName = Name").Exec()
+		scope.Raw("ALTER TABLE " + quotedTableName + " MODIFY COLUMN DisplayName VARCHAR(255) NOT NULL").Exec()
+	case "pgx":
+		scope.Raw(
+			"ALTER TABLE " + quotedTableName + " ADD COLUMN DisplayName VARCHAR(255);",
+		).Exec()
+		scope.Raw("UPDATE " + quotedTableName + " SET DisplayName = Name").Exec()
+		scope.Raw("ALTER TABLE " + quotedTableName + " ALTER COLUMN DisplayName SET NOT NULL").Exec()
+	}
+
+	scope.CommitOrRollback()
+
+	return db.GetErrors()
 }
 
 func InitDBClient(initConnectionTimeout time.Duration) *storage.DB {
@@ -254,6 +380,26 @@ func InitDBClient(initConnectionTimeout time.Duration) *storage.DB {
 		if tableName == "pipeline_versions" {
 			initializePipelineVersions = false
 			break
+		}
+	}
+
+	if db.HasTable(&model.Pipeline{}) {
+		scope := db.NewScope(&model.Pipeline{})
+		if !scope.Dialect().HasColumn(scope.TableName(), "DisplayName") {
+			errs := addDisplayNameColumn(db, scope, scope.QuotedTableName(), driverName)
+			if len(errs) > 0 {
+				glog.Fatalf("Failed to add DisplayName column to the %s table. Error(s): %v", scope.TableName(), errs)
+			}
+		}
+	}
+
+	if db.HasTable(&model.PipelineVersion{}) {
+		scope := db.NewScope(&model.PipelineVersion{})
+		if !scope.Dialect().HasColumn(scope.TableName(), "DisplayName") {
+			errs := addDisplayNameColumn(db, scope, scope.QuotedTableName(), driverName)
+			if len(errs) > 0 {
+				glog.Fatalf("Failed to add DisplayName column to the %s table. Error(s): %v", scope.TableName(), errs)
+			}
 		}
 	}
 
@@ -544,11 +690,14 @@ func initLogArchive() (logArchive archive.LogArchiveInterface) {
 }
 
 // NewClientManager creates and Init a new instance of ClientManager.
-func NewClientManager() ClientManager {
-	clientManager := ClientManager{}
-	clientManager.init()
+func NewClientManager(options *Options) (*ClientManager, error) {
+	clientManager := &ClientManager{}
+	err := clientManager.init(options)
+	if err != nil {
+		return nil, err
+	}
 
-	return clientManager
+	return clientManager, nil
 }
 
 // Data migration in 2 steps to introduce pipeline_versions table. This

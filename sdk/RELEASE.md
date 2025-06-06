@@ -10,6 +10,49 @@
 
 ## Documentation updates
 
+# 2.13.0
+
+## Features
+
+* feat(sdk): add upload pipeline and upload pipeline version from pipeline function (#11804)
+* fix(sdk): Add SDK support for setting resource limits on older KFP versions (#11839)
+* docs: mention that set_container_image works with dynamic images (#11795)
+* fix(local): warn about oci:// not supported too (#11794)
+* bug(backend,sdk): Use a valid path separator for Modelcar imports (#11767)
+* fix(sdk): avoid conflicting component names in DAG when reusing pipelines (#11071)
+
+## Breaking changes
+
+## Deprecations
+
+## Bug fixes and other changes
+
+* Depends on `google-cloud-storage>=2.2.1,<4` [\#11735](https://github.com/kubeflow/pipelines/pull/11735)
+
+# 2.12.2
+
+## Features
+
+## Breaking changes
+
+## Deprecations
+
+## Bug fixes and other changes
+
+# 2.12.1
+
+## Features
+
+## Breaking changes
+
+## Deprecations
+
+## Bug fixes and other changes
+
+* Depends on `kfp-server-api>=2.1.0,<2.5.0` [\#11685](https://github.com/kubeflow/pipelines/pull/11685)
+
+## Documentation updates
+
 # 2.12.0
 
 ## Features

@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kubeflow/pipelines/backend/src/apiserver/config/proxy"
+
 	wfapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
@@ -311,7 +313,7 @@ func (c *workflowCompiler) task(name string, task *pipelinespec.PipelineTaskSpec
 				condition:       driverOutputs.condition,
 				exitTemplate:    inputs.exitTemplate,
 				hookParentDagID: inputs.parentDagID,
-			}, task.GetComponentRef().GetName())
+			}, task)
 			executor.Depends = depends([]string{driverTaskName})
 			return []wfapi.DAGTask{*driver, *executor}, nil
 		case *pipelinespec.PipelineDeploymentConfig_ExecutorSpec_Importer:
@@ -553,14 +555,23 @@ func (c *workflowCompiler) addDAGDriverTemplate() string {
 		"--execution_id_path", outputPath(paramExecutionID),
 		"--iteration_count_path", outputPath(paramIterationCount),
 		"--condition_path", outputPath(paramCondition),
+		"--http_proxy", proxy.GetConfig().GetHttpProxy(),
+		"--https_proxy", proxy.GetConfig().GetHttpsProxy(),
+		"--no_proxy", proxy.GetConfig().GetNoProxy(),
 		"--mlPipelineServiceTLSEnabled", strconv.FormatBool(c.mlPipelineServiceTLSEnabled),
 		"--mlmd_server_address", common.GetMetadataGrpcServiceServiceHost(),
 		"--mlmd_server_port", common.GetMetadataGrpcServiceServicePort(),
 		"--metadataTLSEnabled", strconv.FormatBool(common.GetMetadataTLSEnabled()),
 		"--ca_cert_path", common.GetCaCertPath(),
 	}
+	if c.cacheDisabled {
+		args = append(args, "--cache_disabled", "true")
+	}
 	if value, ok := os.LookupEnv(PipelineLogLevelEnvVar); ok {
 		args = append(args, "--log_level", value)
+	}
+	if value, ok := os.LookupEnv(PublishLogsEnvVar); ok {
+		args = append(args, "--publish_logs", value)
 	}
 
 	t := &wfapi.Template{
@@ -585,9 +596,9 @@ func (c *workflowCompiler) addDAGDriverTemplate() string {
 		Container: &k8score.Container{
 			Image:     c.driverImage,
 			Command:   c.driverCommand,
-			Env:       MLPipelineServiceEnv,
 			Args:      args,
 			Resources: driverResources,
+			Env:       append(proxy.GetConfig().GetEnvVars(), MLPipelineServiceEnv...),
 		},
 	}
 	ConfigureCABundle(t)
