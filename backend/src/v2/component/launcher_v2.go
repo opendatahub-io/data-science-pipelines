@@ -919,6 +919,10 @@ func LocalPathForURI(uri string) (string, error) {
 }
 
 func prepareOutputFolders(executorInput *pipelinespec.ExecutorInput) error {
+	if err := os.MkdirAll("/tmp/kfp/outputs", 0755); err != nil {
+		return fmt.Errorf("failed to create base output directory: %w", err)
+	}
+
 	for name, parameter := range executorInput.GetOutputs().GetParameters() {
 		dir := filepath.Dir(parameter.OutputFile)
 		if err := os.MkdirAll(dir, 0755); err != nil {

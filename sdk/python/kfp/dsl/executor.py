@@ -188,6 +188,11 @@ class Executor:
 
         self.excutor_output['parameterValues'][name] = value
 
+        output_path = self.get_output_parameter_path(name)
+        if output_path:
+            with open(output_path, 'w') as f:
+                f.write(output)
+
     def write_output_artifact_payload(self, name: str, value: Any) -> None:
         path = self.get_output_artifact_path(name)
         with open(path, 'w') as f:
