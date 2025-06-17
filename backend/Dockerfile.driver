@@ -34,7 +34,14 @@ RUN GO111MODULE=on go mod download
 # Copy the source
 COPY ${SOURCE_CODE}/ ./
 
-RUN GO111MODULE=on CGO_ENABLED=1 GOOS=linux GOARCH=amd64 GOEXPERIMENT=strictfipsruntime go build -tags 'netgo strictfipsruntime' -o /bin/driver ./backend/src/v2/cmd/driver/*.go
+ARG PREBUILT_BINARY=unset
+
+# If PREBUILT_BINARY is set, use it; otherwise, build from source
+RUN if [ "$PREBUILT_BINARY" = "unset" ]; then \
+      GO111MODULE=on CGO_ENABLED=1 GOOS=linux GOARCH=amd64 GOEXPERIMENT=strictfipsruntime go build -tags 'netgo strictfipsruntime' -o /bin/driver ./backend/src/v2/cmd/driver/*.go; \
+    else \
+      cp ${PREBUILT_BINARY} /bin/driver; \
+    fi
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
 
