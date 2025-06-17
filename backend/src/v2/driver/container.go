@@ -133,19 +133,16 @@ func Container(ctx context.Context, opts Options, mlmd *metadata.Client, cacheCl
 		return execution, kubernetesPlatformOps(ctx, mlmd, cacheClient, execution, ecfg, &opts)
 	}
 
-	if !opts.CacheDisabled {
-		// Generate fingerprint and MLMD ID for cache
-		fingerPrint, cachedMLMDExecutionID, err := getFingerPrintsAndID(execution, &opts, cacheClient)
-		if err != nil {
-			return execution, err
-		}
-		ecfg.CachedMLMDExecutionID = cachedMLMDExecutionID
-		ecfg.FingerPrint = fingerPrint
+	// Always generate fingerprint and MLMD ID for proper execution tracking
+	fingerPrint, cachedMLMDExecutionID, err := getFingerPrintsAndID(execution, &opts, cacheClient)
+	if err != nil {
+		return execution, err
 	}
+	ecfg.CachedMLMDExecutionID = cachedMLMDExecutionID
+	ecfg.FingerPrint = fingerPrint
 
-	// TODO(Bobgy): change execution state to pending, because this is driver, execution hasn't started.
+	// Create execution in MLMD
 	createdExecution, err := mlmd.CreateExecution(ctx, pipeline, ecfg)
-
 	if err != nil {
 		return execution, err
 	}
@@ -155,29 +152,21 @@ func Container(ctx context.Context, opts Options, mlmd *metadata.Client, cacheCl
 		return execution, nil
 	}
 
-	// Use cache and skip launcher if all contions met:
-	// (1) Cache is enabled globally
-	// (2) Cache is enabled for the task
-	// (3) CachedMLMDExecutionID is non-empty, which means a cache entry exists
+	// Use cache if enabled and available
 	cached := false
 	execution.Cached = &cached
-	if !opts.CacheDisabled {
-		if opts.Task.GetCachingOptions().GetEnableCache() && ecfg.CachedMLMDExecutionID != "" {
-			executorOutput, outputArtifacts, err := reuseCachedOutputs(ctx, execution.ExecutorInput, mlmd, ecfg.CachedMLMDExecutionID)
-			if err != nil {
-				return execution, err
-			}
-			// TODO(Bobgy): upload output artifacts.
-			// TODO(Bobgy): when adding artifacts, we will need execution.pipeline to be non-nil, because we need
-			// to publish output artifacts to the context too.
-			if err := mlmd.PublishExecution(ctx, createdExecution, executorOutput.GetParameterValues(), outputArtifacts, pb.Execution_CACHED); err != nil {
-				return execution, fmt.Errorf("failed to publish cached execution: %w", err)
-			}
-			glog.Infof("Use cache for task %s", opts.Task.GetTaskInfo().GetName())
-			*execution.Cached = true
-			return execution, nil
+	if !opts.CacheDisabled && opts.Task.GetCachingOptions().GetEnableCache() && ecfg.CachedMLMDExecutionID != "" {
+		executorOutput, outputArtifacts, err := reuseCachedOutputs(ctx, execution.ExecutorInput, mlmd, ecfg.CachedMLMDExecutionID)
+		if err != nil {
+			return execution, err
 		}
-	} else {
+		if err := mlmd.PublishExecution(ctx, createdExecution, executorOutput.GetParameterValues(), outputArtifacts, pb.Execution_CACHED); err != nil {
+			return execution, fmt.Errorf("failed to publish cached execution: %w", err)
+		}
+		glog.Infof("Use cache for task %s", opts.Task.GetTaskInfo().GetName())
+		*execution.Cached = true
+		return execution, nil
+	} else if opts.CacheDisabled {
 		glog.Info("Cache disabled globally at the server level.")
 	}
 
