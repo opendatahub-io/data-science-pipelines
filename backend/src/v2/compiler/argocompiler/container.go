@@ -27,6 +27,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
+	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/v2/component"
 	"github.com/kubeflow/pipelines/kubernetes_platform/go/kubernetesplatform"
 	k8score "k8s.io/api/core/v1"
@@ -200,6 +201,11 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 		"--http_proxy", proxy.GetConfig().GetHttpProxy(),
 		"--https_proxy", proxy.GetConfig().GetHttpsProxy(),
 		"--no_proxy", proxy.GetConfig().GetNoProxy(),
+		"--mlPipelineServiceTLSEnabled", strconv.FormatBool(c.mlPipelineServiceTLSEnabled),
+		"--mlmd_server_address", common.GetMetadataGrpcServiceServiceHost(),
+		"--mlmd_server_port", common.GetMetadataGrpcServiceServicePort(),
+		"--metadataTLSEnabled", strconv.FormatBool(common.GetMetadataTLSEnabled()),
+		"--ca_cert_path", common.GetCaCertPath(),
 	}
 	if c.cacheDisabled {
 		args = append(args, "--cache_disabled")
@@ -235,9 +241,12 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 			Command:   c.driverCommand,
 			Args:      args,
 			Resources: driverResources,
-			Env:       proxy.GetConfig().GetEnvVars(),
+			Env:       append(proxy.GetConfig().GetEnvVars(), MLPipelineServiceEnv...),
 		},
 	}
+
+	ConfigureCABundle(t)
+
 	c.templates[name] = t
 	c.wf.Spec.Templates = append(c.wf.Spec.Templates, *t)
 	return name
@@ -462,9 +471,10 @@ func (c *workflowCompiler) addContainerExecutorTemplate(task *pipelinespec.Pipel
 				},
 			},
 			EnvFrom: []k8score.EnvFromSource{metadataEnvFrom},
-			Env:     commonEnvs,
+			Env:     append(commonEnvs, MLPipelineServiceEnv...),
 		},
 	}
+	ConfigureCABundle(executor)
 	// If retry policy is set, add retryStrategy to executor
 	if taskRetrySpec != nil {
 		executor.RetryStrategy = c.getTaskRetryStrategyFromInput(inputParameter(paramRetryMaxCount),
@@ -486,7 +496,7 @@ func (c *workflowCompiler) addContainerExecutorTemplate(task *pipelinespec.Pipel
 	caBundleMountPath := os.Getenv("EXECUTOR_CABUNDLE_MOUNTPATH")
 	if caBundleCfgMapName != "" && caBundleCfgMapKey != "" {
 		caFile := fmt.Sprintf("%s/%s", caBundleMountPath, caBundleCfgMapKey)
-		var certDirectories = []string{
+		certDirectories := []string{
 			caBundleMountPath,
 			"/etc/ssl/certs",
 			"/etc/pki/tls/certs",

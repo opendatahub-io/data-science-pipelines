@@ -66,17 +66,24 @@ type Options struct {
 
 	CacheDisabled bool
 
-	DriverType string
+	// set to true if ml pipeline server is serving over tls
+	MLPipelineTLSEnabled bool
+
+	MLMDServerAddress string
+
+	MLMDServerPort string
+
+	// set to true if MLMD server is serving over tls
+	MLMDTLSEnabled bool
+
+	CaCertPath string
 }
 
 // Identifying information used for error messages
 func (o Options) info() string {
 	msg := fmt.Sprintf("pipelineName=%v, runID=%v", o.PipelineName, o.RunID)
 	if o.Task.GetTaskInfo().GetName() != "" {
-		msg = msg + fmt.Sprintf(", taskDisplayName=%q", o.Task.GetTaskInfo().GetName())
-	}
-	if o.Task.GetTaskInfo().GetTaskName() != "" {
-		msg = msg + fmt.Sprintf(", taskName=%q", o.Task.GetTaskInfo().GetTaskName())
+		msg = msg + fmt.Sprintf(", task=%q", o.Task.GetTaskInfo().GetName())
 	}
 	if o.Task.GetComponentRef().GetName() != "" {
 		msg = msg + fmt.Sprintf(", component=%q", o.Task.GetComponentRef().GetName())
@@ -160,6 +167,11 @@ func initPodSpecPatch(
 	pipelineLogLevel string,
 	publishLogs string,
 	cacheDisabled string,
+	mlPipelineTLSEnabled bool,
+	mlmdServerAddress string,
+	mlmdServerPort string,
+	mlmdTLSEnabled bool,
+	caCertPath string,
 ) (*k8score.PodSpec, error) {
 	executorInputJSON, err := protojson.Marshal(executorInput)
 	if err != nil {
@@ -194,10 +206,14 @@ func initPodSpecPatch(
 		"--pod_uid",
 		fmt.Sprintf("$(%s)", component.EnvPodUID),
 		"--mlmd_server_address",
-		fmt.Sprintf("$(%s)", component.EnvMetadataHost),
+		mlmdServerAddress,
 		"--mlmd_server_port",
-		fmt.Sprintf("$(%s)", component.EnvMetadataPort),
+		mlmdServerPort,
 		"--publish_logs", publishLogs,
+		"--metadataTLSEnabled", fmt.Sprintf("%v", mlmdTLSEnabled),
+		"--mlPipelineServiceTLSEnabled",
+		fmt.Sprintf("%v", mlPipelineTLSEnabled),
+		"--ca_cert_path", caCertPath,
 	}
 	if cacheDisabled == "true" {
 		launcherCmd = append(launcherCmd, "--cache_disabled")

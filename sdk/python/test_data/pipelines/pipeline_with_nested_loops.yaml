@@ -43,7 +43,6 @@ components:
                 parameterExpressionSelector: parseJson(string_value)["q_a"]
           taskInfo:
             name: print-op
-            taskName: print-op
     inputDefinitions:
       parameters:
         pipelinechannel--loop_parameter-loop-item:
@@ -79,7 +78,6 @@ components:
                 componentInputParameter: pipelinechannel--loop-item-param-3
           taskInfo:
             name: print-op-2
-            taskName: print-op-2
     inputDefinitions:
       parameters:
         pipelinechannel--loop-item-param-3:
@@ -100,7 +98,6 @@ components:
                 componentInputParameter: pipelinechannel--loop-item-param-5
           taskInfo:
             name: print-op-3
-            taskName: print-op-3
     inputDefinitions:
       parameters:
         pipelinechannel--loop-item-param-3:
@@ -148,7 +145,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
           $0\" \"$@\"\n"
         - sh
@@ -177,7 +174,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
           $0\" \"$@\"\n"
         - sh
@@ -206,7 +203,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.13.0'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
           $0\" \"$@\"\n"
         - sh
@@ -265,4 +262,4 @@ root:
         isOptional: true
         parameterType: LIST
 schemaVersion: 2.1.0
-sdkVersion: kfp-2.13.0
+sdkVersion: kfp-2.7.0

@@ -33,7 +33,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 	goyaml "gopkg.in/yaml.v3"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -156,13 +155,6 @@ spec:
     container:
       image: docker/whalesay:latest`
 
-var defaultPVC = &corev1.PersistentVolumeClaimSpec{
-	AccessModes: []corev1.PersistentVolumeAccessMode{
-		corev1.ReadWriteMany,
-	},
-	StorageClassName: util.StringPointer("my-storage"),
-}
-
 func TestToSwfCRDResourceGeneratedName_SpecialCharsAndSpace(t *testing.T) {
 	name, err := toSWFCRDResourceGeneratedName("! HaVe ä £unky name")
 	assert.Nil(t, err)
@@ -185,7 +177,7 @@ func TestScheduledWorkflow(t *testing.T) {
 	proxy.InitializeConfigWithEmptyForTests()
 
 	v2SpecHelloWorldYAML := loadYaml(t, "testdata/hello_world.yaml")
-	v2Template, _ := New([]byte(v2SpecHelloWorldYAML), true, defaultPVC)
+	v2Template, _ := New([]byte(v2SpecHelloWorldYAML), true)
 
 	modelJob := &model.Job{
 		K8SName:        "name1",
@@ -214,7 +206,10 @@ func TestScheduledWorkflow(t *testing.T) {
 			APIVersion: "kubeflow.org/v2beta1",
 			Kind:       "ScheduledWorkflow",
 		},
-		ObjectMeta: metav1.ObjectMeta{GenerateName: "name1"},
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName:    "name1",
+			OwnerReferences: []metav1.OwnerReference{},
+		},
 		Spec: scheduledworkflow.ScheduledWorkflowSpec{
 			Enabled:        true,
 			MaxConcurrency: util.Int64Pointer(1),
@@ -236,7 +231,7 @@ func TestScheduledWorkflow(t *testing.T) {
 		},
 	}
 
-	actualScheduledWorkflow, err := v2Template.ScheduledWorkflow(modelJob)
+	actualScheduledWorkflow, err := v2Template.ScheduledWorkflow(modelJob, []metav1.OwnerReference{})
 	assert.Nil(t, err)
 
 	// We don't compare this field because it changes with every driver/launcher image release.
@@ -293,10 +288,9 @@ func TestNewTemplate_V2(t *testing.T) {
 	err = protojson.Unmarshal(jsonData, &expectedSpec)
 	assert.Nil(t, err)
 	expectedTemplate := &V2Spec{
-		spec:             &expectedSpec,
-		defaultWorkspace: defaultPVC,
+		spec: &expectedSpec,
 	}
-	templateV2Spec, err := New([]byte(template), false, defaultPVC)
+	templateV2Spec, err := New([]byte(template), false)
 	assert.Nil(t, err)
 	assert.Equal(t, expectedTemplate, templateV2Spec)
 }
@@ -322,18 +316,17 @@ func TestNewTemplate_WithPlatformSpec(t *testing.T) {
 	protojson.Unmarshal(jsonData, &expectedPlatformSpec)
 
 	expectedTemplate := &V2Spec{
-		spec:             &expectedPipelineSpec,
-		platformSpec:     &expectedPlatformSpec,
-		defaultWorkspace: defaultPVC,
+		spec:         &expectedPipelineSpec,
+		platformSpec: &expectedPlatformSpec,
 	}
-	templateV2Spec, err := New([]byte(template), false, defaultPVC)
+	templateV2Spec, err := New([]byte(template), false)
 	assert.Nil(t, err)
 	assert.Equal(t, expectedTemplate, templateV2Spec)
 }
 
 func TestNewTemplate_V2_InvalidSchemaVersion(t *testing.T) {
 	template := loadYaml(t, "testdata/hello_world_schema_2_0_0.yaml")
-	_, err := New([]byte(template), true, defaultPVC)
+	_, err := New([]byte(template), true)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "KFP only supports schema version 2.1.0")
 }
@@ -343,9 +336,9 @@ func TestNewTemplate_V2_InvalidSchemaVersion(t *testing.T) {
 // so we verify the parsed object.
 func TestBytes_V2_WithExecutorConfig(t *testing.T) {
 	template := loadYaml(t, "testdata/pipeline_with_volume.yaml")
-	templateV2Spec, _ := New([]byte(template), true, defaultPVC)
+	templateV2Spec, _ := New([]byte(template), true)
 	templateBytes := templateV2Spec.Bytes()
-	newTemplateV2Spec, err := New(templateBytes, true, defaultPVC)
+	newTemplateV2Spec, err := New(templateBytes, true)
 	assert.Nil(t, err)
 	assert.Equal(t, templateV2Spec, newTemplateV2Spec)
 }
@@ -355,9 +348,9 @@ func TestBytes_V2_WithExecutorConfig(t *testing.T) {
 // so we verify the parsed object.
 func TestBytes_V2(t *testing.T) {
 	template := loadYaml(t, "testdata/hello_world.yaml")
-	templateV2Spec, _ := New([]byte(template), true, defaultPVC)
+	templateV2Spec, _ := New([]byte(template), true)
 	templateBytes := templateV2Spec.Bytes()
-	newTemplateV2Spec, err := New(templateBytes, true, defaultPVC)
+	newTemplateV2Spec, err := New(templateBytes, true)
 	assert.Nil(t, err)
 	assert.Equal(t, templateV2Spec, newTemplateV2Spec)
 }

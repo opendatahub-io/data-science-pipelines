@@ -20,7 +20,6 @@ https://docs.google.com/document/d/1PUDuSQ8vmeKSBloli53mp7GIvzekaY7sggg6ywy35Dk/
 from typing import Any, Dict, Optional
 
 from kfp.compiler import pipeline_spec_builder as builder
-from kfp.compiler.compiler_utils import KubernetesManifestOptions
 from kfp.dsl import base_component
 from kfp.dsl.types import type_utils
 
@@ -54,9 +53,6 @@ class Compiler:
         pipeline_name: Optional[str] = None,
         pipeline_parameters: Optional[Dict[str, Any]] = None,
         type_check: bool = True,
-        kubernetes_manifest_options: Optional[
-            'KubernetesManifestOptions'] = None,
-        kubernetes_manifest_format: bool = False,
     ) -> None:
         """Compiles the pipeline or component function into IR YAML.
 
@@ -66,8 +62,6 @@ class Compiler:
             pipeline_name: Name of the pipeline.
             pipeline_parameters: Map of parameter names to argument values.
             type_check: Whether to enable type checking of component interfaces during compilation.
-            kubernetes_manifest_options: KubernetesManifestOptions object for Kubernetes manifest output during pipeline compilation.
-            kubernetes_manifest_format: Output the compiled pipeline as a Kubernetes manifest.
         """
 
         with type_utils.TypeCheckManager(enable=type_check):
@@ -89,6 +83,4 @@ class Compiler:
                 pipeline_description=pipeline_func.description,
                 platform_spec=pipeline_func.platform_spec,
                 package_path=package_path,
-                kubernetes_manifest_options=kubernetes_manifest_options,
-                kubernetes_manifest_format=kubernetes_manifest_format,
             )

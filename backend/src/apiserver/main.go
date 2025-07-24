@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -47,8 +48,8 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
-	corev1 "k8s.io/api/core/v1"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -58,8 +59,6 @@ import (
 const (
 	executionTypeEnv = "ExecutionType"
 	launcherEnv      = "Launcher"
-	workspaceConfig  = "workspace"
-	workspaceSize    = "size"
 )
 
 var (
@@ -75,9 +74,31 @@ var (
 	usePipelinesKubernetesStorage = flag.Bool("pipelinesStoreKubernetes", false, "Store and run pipeline versions in Kubernetes")
 	disableWebhook                = flag.Bool("disableWebhook", false, "Set this if pipelinesStoreKubernetes is on but using a global webhook in a separate pod")
 	globalKubernetesWebhookMode   = flag.Bool("globalKubernetesWebhookMode", false, "Set this to run exclusively in Kubernetes Webhook mode")
+	tlsCertPath                   = flag.String("tlsCertPath", "", "Path to the public tls cert.")
+	tlsCertKeyPath                = flag.String("tlsCertKeyPath", "", "Path to the private tls key cert.")
 )
 
 type RegisterHttpHandlerFromEndpoint func(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) error
+
+func initCerts() (*tls.Config, error) {
+	if *tlsCertPath == "" && *tlsCertKeyPath == "" {
+		// User can choose not to provide certs
+		return nil, nil
+	} else if *tlsCertPath == "" {
+		return nil, fmt.Errorf("Missing tlsCertPath when specifying cert paths, both tlsCertPath and tlsCertKeyPath are required.")
+	} else if *tlsCertKeyPath == "" {
+		return nil, fmt.Errorf("Missing tlsCertKeyPath when specifying cert paths, both tlsCertPath and tlsCertKeyPath are required.")
+	}
+	serverCert, err := tls.LoadX509KeyPair(*tlsCertPath, *tlsCertKeyPath)
+	if err != nil {
+		return nil, err
+	}
+	config := &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+	}
+	glog.Info("TLS cert key/pair loaded.")
+	return config, err
+}
 
 func main() {
 	flag.Parse()
@@ -101,6 +122,11 @@ func main() {
 		GlobalKubernetesWebhookMode:  *globalKubernetesWebhookMode,
 		Context:                      backgroundCtx,
 		WaitGroup:                    &wg,
+	}
+
+	tlsConfig, err := initCerts()
+	if err != nil {
+		glog.Fatalf("Failed to parse Cert paths. Err: %v", err)
 	}
 
 	logLevel := *logLevelFlag
@@ -160,20 +186,11 @@ func main() {
 
 	}
 
-	var pvcSpec *corev1.PersistentVolumeClaimSpec
-	var defaultWorkspaceSize string
-	pvcSpec, defaultWorkspaceSize, err = getPVCSpec()
-	if err != nil {
-		glog.Fatalf("Failed to get Workspace PVC Spec: %v", err)
-	}
-
 	resourceManager := resource.NewResourceManager(
 		clientManager,
 		&resource.ResourceManagerOptions{
-			CollectMetrics:       *collectMetricsFlag,
-			CacheDisabled:        !common.GetBoolConfigWithDefault("CacheEnabled", true),
-			DefaultWorkspace:     pvcSpec,
-			DefaultWorkspaceSize: defaultWorkspaceSize,
+			CollectMetrics: *collectMetricsFlag,
+			CacheDisabled:  !common.GetBoolConfigWithDefault("CacheEnabled", true),
 		},
 	)
 	err = config.LoadSamples(resourceManager, *sampleConfigPath)
@@ -190,9 +207,9 @@ func main() {
 
 	wg.Add(1)
 	go reconcileSwfCrs(resourceManager, backgroundCtx, &wg)
-	go startRpcServer(resourceManager)
+	go startRpcServer(resourceManager, tlsConfig)
 	// This is blocking
-	startHttpProxy(resourceManager, *usePipelinesKubernetesStorage)
+	startHttpProxy(resourceManager, tlsConfig, *usePipelinesKubernetesStorage)
 	backgroundCancel()
 	wg.Wait()
 }
@@ -214,13 +231,25 @@ func grpcCustomMatcher(key string) (string, bool) {
 	return strings.ToLower(key), false
 }
 
-func startRpcServer(resourceManager *resource.ResourceManager) {
-	glog.Info("Starting RPC server")
+func startRpcServer(resourceManager *resource.ResourceManager, tlsConfig *tls.Config) {
+	var s *grpc.Server
+	if tlsConfig != nil {
+		glog.Info("Starting RPC server (TLS enabled)")
+		tlsCredentials := credentials.NewTLS(tlsConfig)
+		s = grpc.NewServer(
+			grpc.Creds(tlsCredentials),
+			grpc.UnaryInterceptor(apiServerInterceptor),
+			grpc.MaxRecvMsgSize(math.MaxInt32),
+		)
+	} else {
+		glog.Info("Starting RPC server")
+		s = grpc.NewServer(grpc.UnaryInterceptor(apiServerInterceptor), grpc.MaxRecvMsgSize(math.MaxInt32))
+	}
+
 	listener, err := net.Listen("tcp", *rpcPortFlag)
 	if err != nil {
 		glog.Fatalf("Failed to start RPC server: %v", err)
 	}
-	s := grpc.NewServer(grpc.UnaryInterceptor(apiServerInterceptor), grpc.MaxRecvMsgSize(math.MaxInt32))
 
 	sharedExperimentServer := server.NewExperimentServer(resourceManager, &server.ExperimentServerOptions{CollectMetrics: *collectMetricsFlag})
 	sharedPipelineServer := server.NewPipelineServer(
@@ -231,14 +260,14 @@ func startRpcServer(resourceManager *resource.ResourceManager) {
 	)
 	sharedJobServer := server.NewJobServer(resourceManager, &server.JobServerOptions{CollectMetrics: *collectMetricsFlag})
 	sharedRunServer := server.NewRunServer(resourceManager, &server.RunServerOptions{CollectMetrics: *collectMetricsFlag})
-	sharedReportServer := server.NewReportServer(resourceManager)
-
+	sharedArtifactServer := server.NewArtifactServer(resourceManager, &server.ArtifactServerOptions{CollectMetrics: *collectMetricsFlag})
 	apiv1beta1.RegisterExperimentServiceServer(s, sharedExperimentServer)
+	apiv2beta1.RegisterArtifactServiceServer(s, sharedArtifactServer)
 	apiv1beta1.RegisterPipelineServiceServer(s, sharedPipelineServer)
 	apiv1beta1.RegisterJobServiceServer(s, sharedJobServer)
 	apiv1beta1.RegisterRunServiceServer(s, sharedRunServer)
 	apiv1beta1.RegisterTaskServiceServer(s, server.NewTaskServer(resourceManager))
-	apiv1beta1.RegisterReportServiceServer(s, sharedReportServer)
+	apiv1beta1.RegisterReportServiceServer(s, server.NewReportServer(resourceManager))
 
 	apiv1beta1.RegisterVisualizationServiceServer(
 		s,
@@ -253,7 +282,7 @@ func startRpcServer(resourceManager *resource.ResourceManager) {
 	apiv2beta1.RegisterPipelineServiceServer(s, sharedPipelineServer)
 	apiv2beta1.RegisterRecurringRunServiceServer(s, sharedJobServer)
 	apiv2beta1.RegisterRunServiceServer(s, sharedRunServer)
-	apiv2beta1.RegisterReportServiceServer(s, sharedReportServer)
+	apiv2beta1.RegisterReportServiceServer(s, server.NewReportServer(resourceManager))
 
 	// Register reflection service on gRPC server.
 	reflection.Register(s)
@@ -263,7 +292,7 @@ func startRpcServer(resourceManager *resource.ResourceManager) {
 	glog.Info("RPC server started")
 }
 
-func startHttpProxy(resourceManager *resource.ResourceManager, usePipelinesKubernetesStorage bool) {
+func startHttpProxy(resourceManager *resource.ResourceManager, tlsConfig *tls.Config, usePipelinesKubernetesStorage bool) {
 	glog.Info("Starting Http Proxy")
 
 	ctx := context.Background()
@@ -280,21 +309,21 @@ func startHttpProxy(resourceManager *resource.ResourceManager, usePipelinesKuber
 
 	// Create gRPC HTTP MUX and register services for v1beta1 api.
 	runtimeMux := runtime.NewServeMux(runtime.WithIncomingHeaderMatcher(grpcCustomMatcher))
-	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterPipelineServiceHandlerFromEndpoint, "PipelineService", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterExperimentServiceHandlerFromEndpoint, "ExperimentService", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterJobServiceHandlerFromEndpoint, "JobService", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterRunServiceHandlerFromEndpoint, "RunService", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterTaskServiceHandlerFromEndpoint, "TaskService", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterReportServiceHandlerFromEndpoint, "ReportService", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterVisualizationServiceHandlerFromEndpoint, "Visualization", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterAuthServiceHandlerFromEndpoint, "AuthService", ctx, runtimeMux)
+	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterPipelineServiceHandlerFromEndpoint, "PipelineService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterExperimentServiceHandlerFromEndpoint, "ExperimentService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterJobServiceHandlerFromEndpoint, "JobService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterRunServiceHandlerFromEndpoint, "RunService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterTaskServiceHandlerFromEndpoint, "TaskService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterReportServiceHandlerFromEndpoint, "ReportService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterVisualizationServiceHandlerFromEndpoint, "Visualization", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterAuthServiceHandlerFromEndpoint, "AuthService", ctx, runtimeMux, tlsConfig)
 
 	// Create gRPC HTTP MUX and register services for v2beta1 api.
-	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterExperimentServiceHandlerFromEndpoint, "ExperimentService", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterPipelineServiceHandlerFromEndpoint, "PipelineService", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterRecurringRunServiceHandlerFromEndpoint, "RecurringRunService", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterRunServiceHandlerFromEndpoint, "RunService", ctx, runtimeMux)
-	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterReportServiceHandlerFromEndpoint, "ReportService", ctx, runtimeMux)
+	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterExperimentServiceHandlerFromEndpoint, "ExperimentService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterPipelineServiceHandlerFromEndpoint, "PipelineService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterRecurringRunServiceHandlerFromEndpoint, "RecurringRunService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterRunServiceHandlerFromEndpoint, "RunService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterArtifactServiceHandlerFromEndpoint, "ArtifactService", ctx, runtimeMux, tlsConfig)
 
 	// Create a top level mux to include both pipeline upload server and gRPC servers.
 	topMux := mux.NewRouter()
@@ -327,7 +356,19 @@ func startHttpProxy(resourceManager *resource.ResourceManager, usePipelinesKuber
 	// Register a handler for Prometheus to poll.
 	topMux.Handle("/metrics", promhttp.Handler())
 
-	http.ListenAndServe(*httpPortFlag, topMux)
+	if tlsConfig != nil {
+		glog.Info("Starting Https Proxy")
+		https := http.Server{
+			TLSConfig: tlsConfig,
+			Addr:      *httpPortFlag,
+			Handler:   topMux,
+		}
+		https.ListenAndServeTLS("", "")
+	} else {
+		glog.Info("Starting Http Proxy")
+		http.ListenAndServe(*httpPortFlag, topMux)
+	}
+
 	glog.Info("Http Proxy started")
 }
 
@@ -376,9 +417,19 @@ func startWebhook(client ctrlclient.Client, clientNoCahe ctrlclient.Client, wg *
 	return webhookServer, nil
 }
 
-func registerHttpHandlerFromEndpoint(handler RegisterHttpHandlerFromEndpoint, serviceName string, ctx context.Context, mux *runtime.ServeMux) {
+func registerHttpHandlerFromEndpoint(handler RegisterHttpHandlerFromEndpoint, serviceName string, ctx context.Context, mux *runtime.ServeMux, tlsConfig *tls.Config) {
 	endpoint := "localhost" + *rpcPortFlag
-	opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32))}
+	var opts []grpc.DialOption
+	if tlsConfig != nil {
+		// local client connections via http proxy to grpc should not require tls
+		tlsConfig.InsecureSkipVerify = true
+		opts = []grpc.DialOption{
+			grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
+		}
+	} else {
+		opts = []grpc.DialOption{grpc.WithInsecure(), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32))}
+	}
 
 	if err := handler(ctx, mux, endpoint, opts); err != nil {
 		glog.Fatalf("Failed to register %v handler: %v", serviceName, err)
@@ -409,23 +460,4 @@ func initConfig() {
 	})
 
 	proxy.InitializeConfigWithEnv()
-}
-
-// getPVCSpec retrieves the default workspace PersistentVolumeClaimSpec and size from the config.
-// These defaults are used for workspace PVCs when users do not specify their own configuration.
-func getPVCSpec() (*corev1.PersistentVolumeClaimSpec, string, error) {
-	workspaceConfig := viper.Sub(workspaceConfig)
-	if workspaceConfig == nil {
-		glog.Info("No workspace config found; proceeding without a default PVC spec")
-		return nil, "", nil
-	}
-	var pvcSpec corev1.PersistentVolumeClaimSpec
-	if err := workspaceConfig.UnmarshalKey("volumeclaimtemplatespec", &pvcSpec); err != nil {
-		return nil, "", fmt.Errorf("failed to unmarshal workspace.volumeclaimtemplatespec: %w", err)
-	}
-	if len(pvcSpec.AccessModes) == 0 || pvcSpec.StorageClassName == nil || *pvcSpec.StorageClassName == "" {
-		return nil, "", fmt.Errorf("invalid workspace.volumeclaimtemplatespec: must specify accessModes and storageClassName")
-	}
-	defaultSize := workspaceConfig.GetString(workspaceSize)
-	return &pvcSpec, defaultSize, nil
 }

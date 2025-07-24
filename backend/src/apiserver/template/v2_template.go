@@ -31,23 +31,21 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/v2/compiler/argocompiler"
 	"google.golang.org/protobuf/encoding/protojson"
 	goyaml "gopkg.in/yaml.v3"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
 
 type V2Spec struct {
-	spec             *pipelinespec.PipelineSpec
-	platformSpec     *pipelinespec.PlatformSpec
-	cacheDisabled    bool
-	defaultWorkspace *corev1.PersistentVolumeClaimSpec
+	spec          *pipelinespec.PipelineSpec
+	platformSpec  *pipelinespec.PlatformSpec
+	cacheDisabled bool
 }
 
 var _ Template = &V2Spec{}
 
 var Launcher = ""
 
-func NewGenericScheduledWorkflow(modelJob *model.Job) (*scheduledworkflow.ScheduledWorkflow, error) {
+func NewGenericScheduledWorkflow(modelJob *model.Job, ownerReferences []metav1.OwnerReference) (*scheduledworkflow.ScheduledWorkflow, error) {
 	swfGeneratedName, err := toSWFCRDResourceGeneratedName(modelJob.K8SName)
 	if err != nil {
 		return nil, util.Wrap(err, "Create job failed")
@@ -63,7 +61,10 @@ func NewGenericScheduledWorkflow(modelJob *model.Job) (*scheduledworkflow.Schedu
 			APIVersion: "kubeflow.org/v2beta1",
 			Kind:       "ScheduledWorkflow",
 		},
-		ObjectMeta: metav1.ObjectMeta{GenerateName: swfGeneratedName},
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName:    swfGeneratedName,
+			OwnerReferences: ownerReferences,
+		},
 		Spec: scheduledworkflow.ScheduledWorkflowSpec{
 			Enabled:           modelJob.Enabled,
 			MaxConcurrency:    &modelJob.MaxConcurrency,
@@ -87,7 +88,7 @@ func (t *V2Spec) PlatformSpec() *pipelinespec.PlatformSpec {
 }
 
 // Converts modelJob to ScheduledWorkflow.
-func (t *V2Spec) ScheduledWorkflow(modelJob *model.Job) (*scheduledworkflow.ScheduledWorkflow, error) {
+func (t *V2Spec) ScheduledWorkflow(modelJob *model.Job, ownerReferences []metav1.OwnerReference) (*scheduledworkflow.ScheduledWorkflow, error) {
 	job := &pipelinespec.PipelineJob{}
 
 	bytes, err := protojson.Marshal(t.spec)
@@ -120,11 +121,7 @@ func (t *V2Spec) ScheduledWorkflow(modelJob *model.Job) (*scheduledworkflow.Sche
 
 	var obj interface{}
 	if util.CurrentExecutionType() == util.ArgoWorkflow {
-		opts := &argocompiler.Options{
-			CacheDisabled:    t.cacheDisabled,
-			DefaultWorkspace: t.defaultWorkspace,
-		}
-		obj, err = argocompiler.Compile(job, kubernetesSpec, opts)
+		obj, err = argocompiler.Compile(job, kubernetesSpec, &argocompiler.Options{CacheDisabled: t.cacheDisabled})
 	}
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to compile job")
@@ -150,7 +147,7 @@ func (t *V2Spec) ScheduledWorkflow(modelJob *model.Job) (*scheduledworkflow.Sche
 		return nil, util.Wrap(err, "Converting runtime config's parameters to CDR parameters failed")
 	}
 
-	scheduledWorkflow, err := NewGenericScheduledWorkflow(modelJob)
+	scheduledWorkflow, err := NewGenericScheduledWorkflow(modelJob, ownerReferences)
 	if err != nil {
 		return nil, err
 	}
@@ -169,8 +166,8 @@ func (t *V2Spec) GetTemplateType() TemplateType {
 	return V2
 }
 
-func NewV2SpecTemplate(template []byte, cacheDisabled bool, defaultWorkspace *corev1.PersistentVolumeClaimSpec) (*V2Spec, error) {
-	v2Spec := &V2Spec{cacheDisabled: cacheDisabled, defaultWorkspace: defaultWorkspace}
+func NewV2SpecTemplate(template []byte, cacheDisabled bool) (*V2Spec, error) {
+	v2Spec := &V2Spec{cacheDisabled: cacheDisabled}
 	decoder := goyaml.NewDecoder(bytes.NewReader(template))
 	for {
 		var value map[string]interface{}
@@ -329,11 +326,7 @@ func (t *V2Spec) RunWorkflow(modelRun *model.Run, options RunWorkflowOptions) (u
 
 	var obj interface{}
 	if util.CurrentExecutionType() == util.ArgoWorkflow {
-		opts := &argocompiler.Options{
-			CacheDisabled:    options.CacheDisabled,
-			DefaultWorkspace: t.defaultWorkspace,
-		}
-		obj, err = argocompiler.Compile(job, kubernetesSpec, opts)
+		obj, err = argocompiler.Compile(job, kubernetesSpec, &argocompiler.Options{CacheDisabled: options.CacheDisabled})
 	}
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to compile job")

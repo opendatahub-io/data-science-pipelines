@@ -103,7 +103,6 @@ root:
               componentInputParameter: a
         taskInfo:
           name: add
-          taskName: add
       add-2:
         cachingOptions:
           enableCache: true
@@ -121,7 +120,6 @@ root:
                 producerTask: add
         taskInfo:
           name: add-2
-          taskName: add-2
       add-3:
         cachingOptions:
           enableCache: true
@@ -140,7 +138,6 @@ root:
                 producerTask: add-2
         taskInfo:
           name: add-3
-          taskName: add-3
   inputDefinitions:
     parameters:
       a:
@@ -152,4 +149,4 @@ root:
         isOptional: true
         parameterType: NUMBER_INTEGER
 schemaVersion: 2.1.0
-sdkVersion: kfp-2.13.0
+sdkVersion: kfp-2.7.0

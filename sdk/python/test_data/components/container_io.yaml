@@ -48,7 +48,6 @@ root:
               componentInputParameter: text
         taskInfo:
           name: container-io
-          taskName: container-io
   inputDefinitions:
     parameters:
       text:
@@ -58,4 +57,4 @@ root:
       output_path:
         parameterType: STRING
 schemaVersion: 2.1.0
-sdkVersion: kfp-2.13.0
+sdkVersion: kfp-2.7.0

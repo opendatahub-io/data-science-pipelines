@@ -37,7 +37,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	corev1 "k8s.io/api/core/v1"
 )
 
 // Methods are organized into two types: "prepare" and "verify".
@@ -273,7 +272,7 @@ func (s *UpgradeTests) PreparePipelines() {
 	time.Sleep(1 * time.Second)
 	sequentialPipeline, err := s.pipelineClient.Create(&pipelineParams.PipelineServiceCreatePipelineV1Params{
 		Body: &pipeline_model.APIPipeline{Name: "sequential", URL: &pipeline_model.APIURL{
-			PipelineURL: "https://raw.githubusercontent.com/kubeflow/pipelines/refs/heads/master/backend/test/v2/resources/sequential.yaml",
+			PipelineURL: "https://raw.githubusercontent.com/opendatahub-io/data-science-pipelines/refs/heads/master/backend/test/v2/resources/sequential.yaml",
 		}},
 	})
 	require.Nil(t, err)
@@ -287,10 +286,10 @@ func (s *UpgradeTests) PreparePipelines() {
 	assert.Equal(t, "zip-arguments-parameters", argumentUploadPipeline.Name)
 
 	/* ---------- Import pipeline tarball by URL ---------- */
-	pipelineURL := "https://github.com/kubeflow/pipelines/raw/refs/heads/master/backend/test/v2/resources/arguments.pipeline.zip"
+	pipelineURL := "https://github.com/opendatahub-io/data-science-pipelines/raw/refs/heads/master/backend/test/v2/resources/arguments.pipeline.zip"
 
 	if pullNumber := os.Getenv("PULL_NUMBER"); pullNumber != "" {
-		pipelineURL = fmt.Sprintf("https://raw.githubusercontent.com/kubeflow/pipelines/pull/%s/head/backend/test/v2/resources/arguments.pipeline.zip", pullNumber)
+		pipelineURL = fmt.Sprintf("https://raw.githubusercontent.com/opendatahub-io/data-science-pipelines/pull/%s/head/backend/test/v2/resources/arguments.pipeline.zip", pullNumber)
 	}
 
 	time.Sleep(1 * time.Second)
@@ -329,13 +328,7 @@ func (s *UpgradeTests) VerifyPipelines() {
 	require.Nil(t, err)
 	bytes, err := os.ReadFile("../resources/arguments-parameters.yaml")
 	require.Nil(t, err)
-	defaultPVC := &corev1.PersistentVolumeClaimSpec{
-		AccessModes: []corev1.PersistentVolumeAccessMode{
-			corev1.ReadWriteMany,
-		},
-		StorageClassName: util.StringPointer("my-storage"),
-	}
-	expected, err := pipelinetemplate.New(bytes, true, defaultPVC)
+	expected, err := pipelinetemplate.New(bytes, true)
 	require.Nil(t, err)
 	assert.Equal(t, expected, template)
 }

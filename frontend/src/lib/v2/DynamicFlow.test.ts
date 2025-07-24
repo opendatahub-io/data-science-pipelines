@@ -22,7 +22,7 @@ import {
   TASK_NAME_KEY,
   updateFlowElementsState,
 } from './DynamicFlow';
-import { convertFlowElements, getTaskKeyFromNodeKey, NodeTypeNames } from './StaticFlow';
+import { convertFlowElements, NodeTypeNames } from './StaticFlow';
 import fs from 'fs';
 import jsyaml from 'js-yaml';
 
@@ -156,9 +156,7 @@ describe('DynamicFlow', () => {
 
       const execution = new Execution();
       execution.setId(1);
-      execution
-        .getCustomPropertiesMap()
-        .set(TASK_NAME_KEY, new Value().setStringValue(getTaskKeyFromNodeKey(elem.id)));
+      execution.getCustomPropertiesMap().set(TASK_NAME_KEY, new Value().setStringValue(label));
       const nodeMlmdInfo = getNodeMlmdInfo(elem, [execution], [], []);
       expect(nodeMlmdInfo).toEqual({ execution });
     });

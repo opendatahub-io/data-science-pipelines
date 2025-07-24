@@ -25,7 +25,6 @@ from google.protobuf import struct_pb2
 import kfp
 from kfp import dsl
 from kfp.compiler import compiler_utils
-from kfp.compiler.compiler_utils import KubernetesManifestOptions
 from kfp.dsl import component_factory
 from kfp.dsl import for_loop
 from kfp.dsl import pipeline_channel
@@ -36,6 +35,7 @@ from kfp.dsl import placeholders
 from kfp.dsl import structures
 from kfp.dsl import tasks_group
 from kfp.dsl import utils
+from kfp.dsl.types import artifact_types
 from kfp.dsl.types import type_utils
 from kfp.pipeline_spec import pipeline_spec_pb2
 import yaml
@@ -117,7 +117,6 @@ def build_task_spec_for_task(
     pipeline_task_spec = pipeline_spec_pb2.PipelineTaskSpec()
     pipeline_task_spec.task_info.name = (
         task._task_spec.display_name or task.name)
-    pipeline_task_spec.task_info.task_name = task.name
     # Use task.name for component_ref.name because we may customize component
     # spec for individual tasks to work around the lack of optional inputs
     # support in IR.
@@ -2020,32 +2019,16 @@ def write_pipeline_spec_to_file(
     pipeline_description: Union[str, None],
     platform_spec: pipeline_spec_pb2.PlatformSpec,
     package_path: str,
-    kubernetes_manifest_options: Optional[KubernetesManifestOptions] = None,
-    kubernetes_manifest_format: bool = False,
 ) -> None:
     """Writes PipelineSpec into a YAML or JSON (deprecated) file.
 
     Args:
         pipeline_spec: The PipelineSpec.
         pipeline_description: Description from pipeline docstring.
-        platform_spec: The PlatformSpec.
         package_path: The path to which to write the PipelineSpec.
-        kubernetes_manifest_options: KubernetesManifestOptions object with manifest options.
-        kubernetes_manifest_format: Output the compiled pipeline as a Kubernetes manifest.
+        platform_spec: The PlatformSpec.
     """
-    if kubernetes_manifest_format:
-        opts = kubernetes_manifest_options or KubernetesManifestOptions()
-        opts.set_pipeline_spec(pipeline_spec)
-        _write_kubernetes_manifest_to_file(
-            package_path=package_path,
-            opts=opts,
-            pipeline_spec=pipeline_spec,
-            platform_spec=platform_spec,
-        )
-        return
-
     pipeline_spec_dict = json_format.MessageToDict(pipeline_spec)
-
     yaml_comments = extract_comments_from_pipeline_spec(pipeline_spec_dict,
                                                         pipeline_description)
     has_platform_specific_features = len(platform_spec.platforms) > 0
@@ -2078,74 +2061,13 @@ def write_pipeline_spec_to_file(
             f'The output path {package_path} should end with ".yaml".')
 
 
-def _write_kubernetes_manifest_to_file(
-    package_path: str,
-    opts: KubernetesManifestOptions,
-    pipeline_spec: pipeline_spec_pb2.PipelineSpec,
-    platform_spec: pipeline_spec_pb2.PlatformSpec,
-) -> None:
-    pipeline_name = opts.pipeline_name
-    pipeline_display_name = opts.pipeline_display_name
-    pipeline_version_display_name = opts.pipeline_version_display_name
-    pipeline_version_name = opts.pipeline_version_name
-    namespace = opts.namespace
-    include_pipeline_manifest = opts.include_pipeline_manifest
-
-    pipeline_spec_dict = json_format.MessageToDict(pipeline_spec)
-    platform_spec_dict = json_format.MessageToDict(platform_spec)
-
-    documents = []
-
-    # Pipeline manifest
-    if include_pipeline_manifest:
-        pipeline_metadata = {'name': pipeline_name}
-        if namespace:
-            pipeline_metadata['namespace'] = namespace
-        pipeline_manifest = {
-            'apiVersion': 'pipelines.kubeflow.org/v2beta1',
-            'kind': 'Pipeline',
-            'metadata': pipeline_metadata,
-            'spec': {
-                'displayName': pipeline_display_name,
-            },
-        }
-        documents.append(pipeline_manifest)
-
-    # PipelineVersion manifest
-    pipeline_version_metadata = {'name': pipeline_version_name}
-    if namespace:
-        pipeline_version_metadata['namespace'] = namespace
-    pipeline_version_manifest = {
-        'apiVersion': 'pipelines.kubeflow.org/v2beta1',
-        'kind': 'PipelineVersion',
-        'metadata': pipeline_version_metadata,
-        'spec': {
-            'displayName': pipeline_version_display_name,
-            'pipelineName': pipeline_name,
-            'pipelineSpec': pipeline_spec_dict,
-            'platformSpec': platform_spec_dict,
-        },
-    }
-    documents.append(pipeline_version_manifest)
-
-    with open(package_path, 'w') as yaml_file:
-        yaml.dump_all(
-            documents=documents,
-            stream=yaml_file,
-            sort_keys=True,
-        )
-
-
 def _merge_pipeline_config(pipelineConfig: pipeline_config.PipelineConfig,
                            platformSpec: pipeline_spec_pb2.PlatformSpec):
-    workspace = pipelineConfig.workspace
-    if workspace is None:
-        return platformSpec
-
-    json_format.ParseDict(
-        {'pipelineConfig': {
-            'workspace': workspace.get_workspace(),
-        }}, platformSpec.platforms['kubernetes'])
+    # TODO: add pipeline config options (ttl, semaphore, etc.) to the dict
+    # json_format.ParseDict(
+    #     {'pipelineConfig': {
+    #         '<some pipeline config option>': pipelineConfig.<get that value>,
+    #     }}, platformSpec.platforms['kubernetes'])
 
     return platformSpec
 

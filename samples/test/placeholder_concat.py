@@ -23,7 +23,7 @@ inputs:
 - {name: input_two, type: String}
 implementation:
   container:
-    image: ghcr.io/containerd/busybox
+    image: registry.k8s.io/busybox
     command:
     - sh
     - -ec

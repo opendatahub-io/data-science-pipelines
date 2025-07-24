@@ -5,7 +5,6 @@
 [![SDK Package version](https://img.shields.io/pypi/v/kfp?color=%2334D058&label=pypi%20package)](https://pypi.org/project/kfp)
 [![SDK Supported Python versions](https://img.shields.io/pypi/pyversions/kfp.svg?color=%2334D058)](https://pypi.org/project/kfp)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/9938/badge)](https://www.bestpractices.dev/projects/9938)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/kubeflow/pipelines)
 
 ## Overview of the Kubeflow pipelines service
 
@@ -35,11 +34,6 @@ See the Kubeflow [Pipelines API doc](https://www.kubeflow.org/docs/components/pi
 
 Consult the [Python SDK reference docs](https://kubeflow-pipelines.readthedocs.io/en/stable/) when writing pipelines using the Python SDK.
 
-## Deep Wiki
-Check out our AI Powered repo documentation on [DeepWiki](https://deepwiki.com/kubeflow/pipelines). 
-
-> :warning: Please note, this is AI generated and may not have completely accurate information.
-
 ## Contributing to Kubeflow Pipelines
 
 Before you start contributing to Kubeflow Pipelines, read the guidelines in [How to Contribute](./CONTRIBUTING.md). To learn how to build and deploy Kubeflow Pipelines from source code, read the [developer guide](./developer_guide.md).
@@ -66,7 +60,6 @@ Details about the KFP Architecture can be found at [Architecture.md](docs/Archit
 
 ## Blog posts
 
-* [From Raw Data to Model Serving: A Blueprint for the AI/ML Lifecycle with Kubeflow](https://blog.kubeflow.org/fraud-detection-e2e/) (By [Helber Belmiro](https://github.com/hbelmiro))
 * [Getting started with Kubeflow Pipelines](https://cloud.google.com/blog/products/ai-machine-learning/getting-started-kubeflow-pipelines) (By Amy Unruh)
 * How to create and deploy a Kubeflow Machine Learning Pipeline (By Lak Lakshmanan)
   * [Part 1: How to create and deploy a Kubeflow Machine Learning Pipeline](https://medium.com/data-science/how-to-create-and-deploy-a-kubeflow-machine-learning-pipeline-part-1-efea7a4b650f)

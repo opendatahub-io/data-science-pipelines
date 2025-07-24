@@ -41,13 +41,9 @@ import subdagio
 import two_step_pipeline_containerized
 import yaml
 import pipeline_with_retry
-import pipeline_with_input_status_state
-import nested_pipeline_opt_inputs_parent_level
-import nested_pipeline_opt_inputs_nil
-import nested_pipeline_opt_input_child_level
 
 _MINUTE = 60  # seconds
-_DEFAULT_TIMEOUT = 10 * _MINUTE
+_DEFAULT_TIMEOUT = 5 * _MINUTE
 SAMPLES_DIR = os.path.realpath(os.path.dirname(os.path.dirname(__file__)))
 PRE_REQ_DIR = os.path.join(SAMPLES_DIR, 'v2', 'pre-requisites')
 PREREQS = [os.path.join(PRE_REQ_DIR, 'test-secrets.yaml')]
@@ -176,10 +172,6 @@ class SampleTest(unittest.TestCase):
             TestCase(
                 pipeline_func=collected_parameters.collected_param_pipeline),
             TestCase(pipeline_func=pipeline_with_retry.retry_pipeline),
-            TestCase(pipeline_func=pipeline_with_input_status_state.status_state_pipeline),
-            TestCase(pipeline_func=nested_pipeline_opt_inputs_parent_level.nested_pipeline_opt_inputs_parent_level),
-            TestCase(pipeline_func=nested_pipeline_opt_input_child_level.nested_pipeline_opt_input_child_level),
-            TestCase(pipeline_func=nested_pipeline_opt_inputs_nil.nested_pipeline_opt_inputs_nil),
         ]
 
         with ThreadPoolExecutor() as executor:

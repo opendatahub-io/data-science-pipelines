@@ -26,11 +26,8 @@ else
 fi
 
 python3 -m pip install --upgrade pip
-# Installs kfp even if it is already installed from a prior command so that we
-# can test the latest changes.
-python3 -m pip install -I ${KFP_PACKAGE_PATH}
-# install the local kfp-pipeline-spec
-python3 -m pip install -I api/v2alpha1/python
+python3 -m pip install ${KFP_PACKAGE_PATH}
+
 # The -u flag makes python output unbuffered, so that we can see real time log.
 # Reference: https://stackoverflow.com/a/107717
 python3 -u ./samples/v2/sample_test.py

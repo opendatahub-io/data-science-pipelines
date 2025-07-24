@@ -15,10 +15,7 @@ package driver
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/kubeflow/pipelines/backend/src/apiserver/config/proxy"
 
@@ -271,6 +268,11 @@ func Test_initPodSpecPatch_acceleratorConfig(t *testing.T) {
 				tt.args.pipelineLogLevel,
 				tt.args.publishLogs,
 				"false",
+				false,
+				"unused-mlmd-server-address",
+				"unused-mlmd-server-port",
+				false,
+				"unused-ca-cert-path",
 			)
 			if tt.wantErr {
 				assert.Nil(t, podSpec)
@@ -380,6 +382,11 @@ func Test_initPodSpecPatch_resource_placeholders(t *testing.T) {
 		"1",
 		"false",
 		"false",
+		false,
+		"unused-mlmd-server-address",
+		"unused-mlmd-server-port",
+		false,
+		"unused-ca-cert-path",
 	)
 	assert.Nil(t, err)
 	assert.Len(t, podSpec.Containers, 1)
@@ -421,6 +428,11 @@ func Test_initPodSpecPatch_legacy_resources(t *testing.T) {
 		"1",
 		"false",
 		"false",
+		false,
+		"unused-mlmd-server-address",
+		"unused-mlmd-server-port",
+		false,
+		"unused-ca-cert-path",
 	)
 	assert.Nil(t, err)
 	assert.Len(t, podSpec.Containers, 1)
@@ -464,6 +476,11 @@ func Test_initPodSpecPatch_modelcar_input_artifact(t *testing.T) {
 		"1",
 		"false",
 		"false",
+		false,
+		"unused-mlmd-server-address",
+		"unused-mlmd-server-port",
+		false,
+		"unused-ca-cert-path",
 	)
 	assert.Nil(t, err)
 
@@ -503,6 +520,11 @@ func Test_initPodSpecPatch_publishLogs(t *testing.T) {
 		"1",
 		"true",
 		"false",
+		false,
+		"unused-mlmd-server-address",
+		"unused-mlmd-server-port",
+		false,
+		"unused-ca-cert-path",
 	)
 	assert.Nil(t, err)
 	cmd := podSpec.Containers[0].Command
@@ -624,6 +646,11 @@ func Test_initPodSpecPatch_resourceRequests(t *testing.T) {
 				tt.args.pipelineLogLevel,
 				tt.args.publishLogs,
 				"false",
+				false,
+				"unused-mlmd-server-address",
+				"unused-mlmd-server-port",
+				false,
+				"unused-ca-cert-path",
 			)
 			assert.Nil(t, err)
 			assert.NotEmpty(t, podSpec)
@@ -637,91 +664,4 @@ func Test_initPodSpecPatch_resourceRequests(t *testing.T) {
 			}
 		})
 	}
-}
-
-func Test_initPodSpecPatch_inputTaskFinalStatus(t *testing.T) {
-	proxy.InitializeConfigWithEmptyForTests()
-	containerSpec := &pipelinespec.PipelineDeploymentConfig_PipelineContainerSpec{
-		Image:   "python:3.9",
-		Command: []string{"sh", "-ec", "python3 -m kfp.components.executor_main"},
-		Args:    []string{"--executor-input", "{{$}}", "--function_to_execute", "exit-op"},
-	}
-	componentSpec := &pipelinespec.ComponentSpec{
-		Implementation: &pipelinespec.ComponentSpec_ExecutorLabel{ExecutorLabel: "exec-exit-op"},
-		InputDefinitions: &pipelinespec.ComponentInputsSpec{
-			Parameters: map[string]*pipelinespec.ComponentInputsSpec_ParameterSpec{
-				"status": {ParameterType: pipelinespec.ParameterType_TASK_FINAL_STATUS},
-			},
-		},
-	}
-	finalStatusStruct, err := structpb.NewStruct(map[string]interface{}{
-		"state":                   "test-state",
-		"pipelineTaskName":        "test-pipeline-task-name",
-		"pipelineJobResourceName": "test-job-resource-name",
-		"error":                   map[string]interface{}{},
-	})
-	executorInput := &pipelinespec.ExecutorInput{
-		Inputs: &pipelinespec.ExecutorInput_Inputs{
-			ParameterValues: map[string]*structpb.Value{
-				"status": {
-					Kind: &structpb.Value_StructValue{
-						StructValue: finalStatusStruct,
-					},
-				},
-			},
-		},
-	}
-
-	podSpec, err := initPodSpecPatch(
-		containerSpec,
-		componentSpec,
-		executorInput,
-		27,
-		"test",
-		"0254beba-0be4-4065-8d97-7dc5e3adf300",
-		"1",
-		"false",
-		"false",
-	)
-	require.Nil(t, err)
-
-	expectedExecutorInput := map[string]interface{}{
-		"inputs": map[string]interface{}{
-			"parameterValues": map[string]interface{}{
-				"status": map[string]interface{}{
-					"error":                   map[string]interface{}{},
-					"pipelineJobResourceName": "test-job-resource-name",
-					"pipelineTaskName":        "test-pipeline-task-name",
-					"state":                   "test-state",
-				},
-			},
-		},
-	}
-	expectedComponentSpec := map[string]interface{}{
-		"executorLabel": "exec-exit-op",
-		"inputDefinitions": map[string]interface{}{
-			"parameters": map[string]interface{}{
-				"status": map[string]interface{}{
-					"parameterType": "TASK_FINAL_STATUS",
-				},
-			},
-		},
-	}
-	actualExecutorInput := map[string]interface{}{}
-	actualComponentSpec := map[string]interface{}{}
-
-	for i, arg := range podSpec.Containers[0].Command {
-		if arg == "--executor_input" {
-			err := json.Unmarshal([]byte(podSpec.Containers[0].Command[i+1]), &actualExecutorInput)
-			fmt.Println(podSpec.Containers[0].Command[i+1])
-			require.Nil(t, err)
-		}
-		if arg == "--component_spec" {
-			err := json.Unmarshal([]byte(podSpec.Containers[0].Command[i+1]), &actualComponentSpec)
-			require.Nil(t, err)
-		}
-	}
-
-	assert.Equal(t, expectedExecutorInput, actualExecutorInput)
-	assert.Equal(t, expectedComponentSpec, actualComponentSpec)
 }

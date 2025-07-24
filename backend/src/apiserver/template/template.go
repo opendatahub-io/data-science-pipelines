@@ -32,7 +32,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 	goyaml "gopkg.in/yaml.v3"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -129,25 +128,24 @@ type Template interface {
 	// Get workflow
 	RunWorkflow(modelRun *model.Run, options RunWorkflowOptions) (util.ExecutionSpec, error)
 
-	ScheduledWorkflow(modelJob *model.Job) (*scheduledworkflow.ScheduledWorkflow, error)
+	ScheduledWorkflow(modelJob *model.Job, ownerReferences []metav1.OwnerReference) (*scheduledworkflow.ScheduledWorkflow, error)
 
 	IsCacheDisabled() bool
 }
 
 type RunWorkflowOptions struct {
-	RunId            string
-	RunAt            int64
-	CacheDisabled    bool
-	DefaultWorkspace *corev1.PersistentVolumeClaimSpec
+	RunId         string
+	RunAt         int64
+	CacheDisabled bool
 }
 
-func New(bytes []byte, cacheDisabled bool, defaultWorkspace *corev1.PersistentVolumeClaimSpec) (Template, error) {
+func New(bytes []byte, cacheDisabled bool) (Template, error) {
 	format := inferTemplateFormat(bytes)
 	switch format {
 	case V1:
 		return NewArgoTemplate(bytes)
 	case V2:
-		return NewV2SpecTemplate(bytes, cacheDisabled, defaultWorkspace)
+		return NewV2SpecTemplate(bytes, cacheDisabled)
 	default:
 		return nil, util.NewInvalidInputErrorWithDetails(ErrorInvalidPipelineSpec, "unknown template format")
 	}

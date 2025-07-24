@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
+
 	"github.com/cenkalti/backoff"
 	"github.com/go-sql-driver/mysql"
 	"github.com/golang/glog"
@@ -106,6 +108,7 @@ type ClientManager struct {
 	k8sCoreClient             client.KubernetesCoreInterface
 	subjectAccessReviewClient client.SubjectAccessReviewInterface
 	tokenReviewClient         client.TokenReviewInterface
+	metadataClient            metadata.ClientInterface
 	logArchive                archive.LogArchiveInterface
 	time                      util.TimeInterface
 	uuid                      util.UUIDGeneratorInterface
@@ -184,6 +187,10 @@ func (c *ClientManager) SubjectAccessReviewClient() client.SubjectAccessReviewIn
 
 func (c *ClientManager) TokenReviewClient() client.TokenReviewInterface {
 	return c.tokenReviewClient
+}
+
+func (c *ClientManager) MetadataClient() metadata.ClientInterface {
+	return c.metadataClient
 }
 
 func (c *ClientManager) LogArchive() archive.LogArchiveInterface {
@@ -284,9 +291,9 @@ func (c *ClientManager) init(options *Options) error {
 	c.resourceReferenceStore = storage.NewResourceReferenceStore(db, pipelineStoreForRef)
 	c.dBStatusStore = storage.NewDBStatusStore(db)
 	c.defaultExperimentStore = storage.NewDefaultExperimentStore(db)
-	glog.Info("Initializing Object store client...")
+	glog.Info("Initializing Minio client...")
 	c.objectStore = initMinioClient(options.Context, common.GetDurationConfig(initConnectionTimeout))
-	glog.Info("Object store client initialized successfully")
+	glog.Info("Minio client initialized successfully")
 	// Use default value of client QPS (5) & burst (10) defined in
 	// k8s.io/client-go/rest/config.go#RESTClientFor
 	clientParams := util.ClientParameters{
@@ -299,6 +306,13 @@ func (c *ClientManager) init(options *Options) error {
 	c.swfClient = client.NewScheduledWorkflowClientOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
 
 	c.k8sCoreClient = client.CreateKubernetesCoreOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
+
+	newClient, err := metadata.NewClient(common.GetMetadataGrpcServiceServiceHost(), common.GetMetadataGrpcServiceServicePort(), common.GetMetadataTLSEnabled(), common.GetCaCertPath())
+
+	if err != nil {
+		glog.Fatalf("Failed to create metadata client. Error: %v", err)
+	}
+	c.metadataClient = newClient
 
 	runStore := storage.NewRunStore(db, c.time)
 	c.runStore = runStore

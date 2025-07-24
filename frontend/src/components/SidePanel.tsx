@@ -57,20 +57,6 @@ interface SidePanelProps {
 }
 
 class SidePanel extends React.Component<SidePanelProps> {
-  public componentDidMount(): void {
-    document.addEventListener('keydown', this.handleKeyDown);
-  }
-
-  public componentWillUnmount(): void {
-    document.removeEventListener('keydown', this.handleKeyDown);
-  }
-
-  private handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape' && this.props.isOpen) {
-      this.props.onClose();
-    }
-  };
-
   public render(): JSX.Element {
     const { isBusy, isOpen, onClose, title, defaultWidth } = this.props;
     return (
