@@ -7,6 +7,6 @@ require (
 	google.golang.org/protobuf v1.36.6
 )
 
-require google.golang.org/genproto v0.0.0-20211026145609-4688e4c4e024 // indirect
+require google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
 
 replace github.com/kubeflow/pipelines/api => ../api
