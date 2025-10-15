@@ -141,11 +141,11 @@ func (s *ArtifactServer) ListArtifacts(ctx context.Context, r *apiv2beta1.ListAr
 		bucketConfig, namespace, err1 := s.resourceManager.GetArtifactSessionInfo(ctx, artifact)
 		artifactId := strconv.FormatInt(*artifact.Id, 10)
 		if err1 != nil || bucketConfig == nil {
-			return nil, util.NewInternalServerError(fmt.Errorf("failed to retrieve session info error: %s", err1), artifactId)
+			return nil, util.NewInternalServerError(fmt.Errorf("failed to retrieve session info error: %v", err1), artifactId)
 		}
 		artifactResp, err1 := s.generateResponseArtifact(ctx, artifact, bucketConfig, namespace, apiv2beta1.GetArtifactRequest_ARTIFACT_VIEW_UNSPECIFIED)
 		if err1 != nil {
-			return nil, util.NewInternalServerError(fmt.Errorf("encountered error parsing artifact: %s", err), artifactId)
+			return nil, util.NewInternalServerError(fmt.Errorf("encountered error parsing artifact: %v", err), artifactId)
 		}
 		artifactsResp = append(artifactsResp, artifactResp)
 	}
@@ -180,7 +180,7 @@ func (s *ArtifactServer) GetArtifact(ctx context.Context, r *apiv2beta1.GetArtif
 	artifact := artifacts[0]
 	sessionInfo, namespace, err := s.resourceManager.GetArtifactSessionInfo(ctx, artifact)
 	if err != nil || sessionInfo == nil {
-		return nil, util.NewInternalServerError(fmt.Errorf("failed to retrieve session info error: %s", err), r.ArtifactId)
+		return nil, util.NewInternalServerError(fmt.Errorf("failed to retrieve session info error: %v", err), r.ArtifactId)
 	}
 
 	err = s.canAccessArtifact(ctx, namespace, &authorizationv1.ResourceAttributes{Verb: common.RbacResourceVerbGet})
@@ -190,7 +190,7 @@ func (s *ArtifactServer) GetArtifact(ctx context.Context, r *apiv2beta1.GetArtif
 
 	artifactResp, err := s.generateResponseArtifact(ctx, artifact, sessionInfo, namespace, r.GetView())
 	if err != nil {
-		return nil, util.NewInternalServerError(fmt.Errorf("encountered error parsing artifact: %s", err), r.ArtifactId)
+		return nil, util.NewInternalServerError(fmt.Errorf("encountered error parsing artifact: %v", err), r.ArtifactId)
 	}
 
 	return artifactResp, nil
