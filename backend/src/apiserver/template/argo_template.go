@@ -17,8 +17,6 @@ package template
 import (
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	"github.com/argoproj/argo-workflows/v3/workflow/validate"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
@@ -101,7 +99,7 @@ func (t *Argo) IsCacheDisabled() bool {
 
 var _ Template = &Argo{}
 
-func (t *Argo) ScheduledWorkflow(modelJob *model.Job, ownerReferences []metav1.OwnerReference) (*scheduledworkflow.ScheduledWorkflow, error) {
+func (t *Argo) ScheduledWorkflow(modelJob *model.Job) (*scheduledworkflow.ScheduledWorkflow, error) {
 	workflow := util.NewWorkflow(t.wf.Workflow.DeepCopy())
 	// Overwrite namespace from the job object
 	if modelJob.Namespace != "" {
@@ -131,7 +129,7 @@ func (t *Argo) ScheduledWorkflow(modelJob *model.Job, ownerReferences []metav1.O
 		return nil, util.Wrap(err, "Failed to convert v1 parameters to CRD parameters")
 	}
 
-	scheduledWorkflow, err := NewGenericScheduledWorkflow(modelJob, ownerReferences)
+	scheduledWorkflow, err := NewGenericScheduledWorkflow(modelJob)
 	if err != nil {
 		return nil, err
 	}
