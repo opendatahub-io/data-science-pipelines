@@ -4064,7 +4064,7 @@ func TestCreateTask(t *testing.T) {
 	task := &model.Task{
 		Namespace:         "",
 		PipelineName:      "pipeline/my-pipeline",
-		RunID:             runDetail.UUID,
+		RunId:             runDetail.UUID,
 		MLMDExecutionID:   "1",
 		CreatedTimestamp:  1462875553,
 		FinishedTimestamp: 1462875663,
@@ -4074,7 +4074,7 @@ func TestCreateTask(t *testing.T) {
 	expectedTask := &model.Task{
 		UUID:              DefaultFakeUUID,
 		PipelineName:      "pipeline/my-pipeline",
-		RunID:             runDetail.UUID,
+		RunId:             runDetail.UUID,
 		MLMDExecutionID:   "1",
 		CreatedTimestamp:  1462875553,
 		FinishedTimestamp: 1462875663,

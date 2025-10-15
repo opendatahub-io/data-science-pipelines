@@ -802,14 +802,14 @@ func (r *ResourceManager) DeleteRun(ctx context.Context, runId string) error {
 
 // Creates a task entry.
 func (r *ResourceManager) CreateTask(t *model.Task) (*model.Task, error) {
-	run, err := r.GetRun(t.RunID)
+	run, err := r.GetRun(t.RunId)
 	if err != nil {
-		return nil, util.Wrapf(err, "Failed to create a task for run %v", t.RunID)
+		return nil, util.Wrapf(err, "Failed to create a task for run %v", t.RunId)
 	}
 	if run.ExperimentId == "" {
 		defaultExperimentId, err := r.GetDefaultExperimentId()
 		if err != nil {
-			return nil, util.Wrapf(err, "Failed to create a task in run %v. Specify experiment id for the run or check if the default experiment exists", t.RunID)
+			return nil, util.Wrapf(err, "Failed to create a task in run %v. Specify experiment id for the run or check if the default experiment exists", t.RunId)
 		}
 		run.ExperimentId = defaultExperimentId
 	}
@@ -818,22 +818,22 @@ func (r *ResourceManager) CreateTask(t *model.Task) (*model.Task, error) {
 	if t.Namespace == "" {
 		namespace, err := r.GetNamespaceFromExperimentId(run.ExperimentId)
 		if err != nil {
-			return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunID)
+			return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunId)
 		}
 		t.Namespace = namespace
 	}
 	if common.IsMultiUserMode() {
 		if t.Namespace == "" {
-			return nil, util.NewInternalServerError(util.NewInvalidInputError("Task cannot have an empty namespace in multi-user mode"), "Failed to create a task in run %v", t.RunID)
+			return nil, util.NewInternalServerError(util.NewInvalidInputError("Task cannot have an empty namespace in multi-user mode"), "Failed to create a task in run %v", t.RunId)
 		}
 	}
 	if err := r.CheckExperimentBelongsToNamespace(run.ExperimentId, t.Namespace); err != nil {
-		return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunID)
+		return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunId)
 	}
 
 	newTask, err := r.taskStore.CreateTask(t)
 	if err != nil {
-		return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunID)
+		return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunId)
 	}
 	return newTask, nil
 }
