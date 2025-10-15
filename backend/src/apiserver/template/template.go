@@ -137,7 +137,7 @@ type Template interface {
 }
 
 type RunWorkflowOptions struct {
-	RunId            string
+	RunID            string
 	RunAt            int64
 	CacheDisabled    bool
 	DefaultWorkspace *corev1.PersistentVolumeClaimSpec
