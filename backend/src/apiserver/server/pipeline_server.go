@@ -1043,16 +1043,16 @@ func (s *PipelineServerV1) GetPipelineVersionTemplate(ctx context.Context, reque
 // Checks if a user can access a pipeline version.
 // Adds namespace of the parent pipeline if version id is not empty,
 // API group, version, and resource type.
-func (s *BasePipelineServer) canAccessPipelineVersion(ctx context.Context, versionId string, resourceAttributes *authorizationv1.ResourceAttributes) error {
+func (s *BasePipelineServer) canAccessPipelineVersion(ctx context.Context, versionID string, resourceAttributes *authorizationv1.ResourceAttributes) error {
 	if !common.IsMultiUserMode() {
 		// Skip authorization if not multi-user mode.
 		return nil
 	}
 	pipelineId := ""
-	if versionId != "" {
-		pipelineVersion, err := s.resourceManager.GetPipelineVersion(versionId)
+	if versionID != "" {
+		pipelineVersion, err := s.resourceManager.GetPipelineVersion(versionID)
 		if err != nil {
-			return util.Wrapf(err, "Failed to access pipeline version %s. Check if it exists", versionId)
+			return util.Wrapf(err, "Failed to access pipeline version %s. Check if it exists", versionID)
 		}
 		pipelineId = pipelineVersion.PipelineId
 	}

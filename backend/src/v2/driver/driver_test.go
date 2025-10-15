@@ -778,7 +778,7 @@ func Test_initPodSpecPatch_inputTaskFinalStatus(t *testing.T) {
 			},
 		},
 	}
-	finalStatusStruct, err := structpb.NewStruct(map[string]interface{}{
+	finalStatusStruct, _ := structpb.NewStruct(map[string]interface{}{
 		"state":                   "test-state",
 		"pipelineTaskName":        "test-pipeline-task-name",
 		"pipelineJobResourceName": "test-job-resource-name",

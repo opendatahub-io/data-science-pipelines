@@ -275,7 +275,7 @@ func (s *UpgradeTests) PreparePipelines() {
 
 	/* ---------- Import pipeline YAML by URL ---------- */
 	pipelineURL := "https://raw.githubusercontent.com/opendatahub-io/data-science-pipelines/refs/heads/master/backend/test/v2/resources/sequential.yaml"
-	if pullNumber := os.Getenv("PULL_NUMBER"); pullNumber != "" {
+	if pullNumber := os.Getenv("PullNumber"); pullNumber != "" {
 		pipelineURL = fmt.Sprintf("https://raw.githubusercontent.com/opendatahub-io/data-science-pipelines/pull/%s/head/test_data/sdk_compiled_pipelines/valid/sequential_v1.yaml", pullNumber)
 	}
 	time.Sleep(1 * time.Second)
@@ -297,7 +297,7 @@ func (s *UpgradeTests) PreparePipelines() {
 	/* ---------- Import pipeline tarball by URL ---------- */
 	pipelineURL = "https://github.com/opendatahub-io/data-science-pipelines/raw/refs/heads/master/backend/test/v2/resources/arguments.pipeline.zip"
 
-	if pullNumber := os.Getenv("PULL_NUMBER"); pullNumber != "" {
+	if pullNumber := os.Getenv("PullNumber"); pullNumber != "" {
 		pipelineURL = fmt.Sprintf("https://raw.githubusercontent.com/opendatahub-io/data-science-pipelines/pull/%s/head/backend/test/v2/resources/arguments.pipeline.zip", pullNumber)
 	}
 
