@@ -214,10 +214,7 @@ func TestScheduledWorkflow(t *testing.T) {
 			APIVersion: "kubeflow.org/v2beta1",
 			Kind:       "ScheduledWorkflow",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName:    "name1",
-			OwnerReferences: []metav1.OwnerReference{},
-		},
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "name1"},
 		Spec: scheduledworkflow.ScheduledWorkflowSpec{
 			Enabled:        true,
 			MaxConcurrency: util.Int64Pointer(1),
