@@ -54,4 +54,4 @@ RUN microdnf makecache && \
 ENV NAMESPACE=""
 ENV LOG_LEVEL=info
 
-CMD ["/bin/sh", "-c", "/bin/controller --logtostderr=true --namespace=${NAMESPACE} --logLevel=${LOG_LEVEL}"]
+CMD /bin/controller --logtostderr=true --namespace=${NAMESPACE} --logLevel=${LOG_LEVEL}
