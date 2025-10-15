@@ -52,6 +52,7 @@ type ArtifactServerOptions struct {
 type ArtifactServer struct {
 	resourceManager *resource.ResourceManager
 	options         *ArtifactServerOptions
+	apiv2beta1.UnimplementedArtifactServiceServer
 }
 
 // Value constraints by MLMD:

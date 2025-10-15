@@ -278,7 +278,6 @@ func startRpcServer(resourceManager *resource.ResourceManager, tlsConfig *tls.Co
 	ArtifactServer := server.NewArtifactServer(resourceManager, &server.ArtifactServerOptions{CollectMetrics: *collectMetricsFlag})
 
 	apiv1beta1.RegisterExperimentServiceServer(s, ExperimentServerV1)
-	apiv2beta1.RegisterArtifactServiceServer(s, ArtifactServer)
 	apiv1beta1.RegisterPipelineServiceServer(s, PipelineServerV1)
 	apiv1beta1.RegisterJobServiceServer(s, JobServerV1)
 	apiv1beta1.RegisterRunServiceServer(s, RunServerV1)
@@ -295,6 +294,7 @@ func startRpcServer(resourceManager *resource.ResourceManager, tlsConfig *tls.Co
 	apiv1beta1.RegisterAuthServiceServer(s, server.NewAuthServer(resourceManager))
 
 	apiv2beta1.RegisterExperimentServiceServer(s, ExperimentServer)
+	apiv2beta1.RegisterArtifactServiceServer(s, ArtifactServer)
 	apiv2beta1.RegisterPipelineServiceServer(s, PipelineServer)
 	apiv2beta1.RegisterRecurringRunServiceServer(s, JobServer)
 	apiv2beta1.RegisterRunServiceServer(s, RunServer)
