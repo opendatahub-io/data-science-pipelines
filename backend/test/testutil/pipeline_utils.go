@@ -70,8 +70,10 @@ func UploadPipeline(pipelineUploadClient api_server.PipelineUploadInterface, pip
 		uploadParams.SetDisplayName(pipelineDisplayName)
 	}
 	logger.Log("Creating temp pipeline file with overridden SDK Version")
-	overriddenPipelineFileWithSDKVersion := ReplaceSDKInPipelineSpec(pipelineFilePath, false, nil)
+	overriddenPipelineFileWithSDKVersion := ReplaceSDKInPipelineSpec(pipelineFilePath)
 	tempPipelineFile := CreateTempFile(overriddenPipelineFileWithSDKVersion)
+	overridenBaseImageFile := ReplaceBaseImageInPipelineSpec(tempPipelineFile.Name())
+	tempPipelineFile = CreateTempFile(overridenBaseImageFile)
 	defer func() {
 		// Ensure the temporary file is removed when the function exits
 		if err := os.Remove(tempPipelineFile.Name()); err != nil {

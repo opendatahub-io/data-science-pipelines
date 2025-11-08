@@ -16,6 +16,11 @@
 package constants
 
 const (
+	// Smoke - quality gate tag for odh/rhoai testing
+	Smoke string = "smoke"
+	// Sanity - quality gate tag for odh/rhoai testing
+	Sanity string = "sanity"
+
 	// E2eEssential - For pipelines that are essential for regression testing
 	E2eEssential string = "E2EEssential"
 	// E2eFailed - For expectedly failing pipelines

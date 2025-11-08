@@ -41,6 +41,7 @@ var (
 	REPO_NAME   = flag.String("repoName", "kubeflow/pipelines", "The name of the repository")
 	PULL_NUMBER = flag.String("pullNumber", "", "The pull number")
 	BRANCH_NAME = flag.String("branchName", "master", "The branch name")
+	BaseImage   = flag.String("baseImage", "registry.redhat.io/ubi9/python-312@sha256:e80ff3673c95b91f0dafdbe97afb261eab8244d7fd8b47e20ffcbcfee27fb168", "The base image")
 )
 
 var DebugMode = flag.Bool("debugMode", false, "Whether to enable debug mode. Debug mode will log more diagnostics messages.")

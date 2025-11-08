@@ -24,11 +24,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/onsi/gomega"
-	v1 "k8s.io/api/core/v1"
-
 	"github.com/kubeflow/pipelines/backend/test/config"
 	"github.com/kubeflow/pipelines/backend/test/logger"
+	"github.com/onsi/gomega"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
@@ -104,7 +102,7 @@ func getPackagePath(subdir string) string {
 	return fmt.Sprintf("git+https://github.com/%s.git@%s#subdirectory=%s", repoName, *config.BRANCH_NAME, subdir)
 }
 
-func ReplaceSDKInPipelineSpec(pipelineFilePath string, cacheDisabled bool, defaultWorkspace *v1.PersistentVolumeClaimSpec) []byte {
+func ReplaceSDKInPipelineSpec(pipelineFilePath string) []byte {
 	pipelineFileBytes, err := os.ReadFile(pipelineFilePath)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to read pipeline file: "+pipelineFilePath)
 	pipelineFileString := string(pipelineFileBytes)
@@ -115,6 +113,21 @@ func ReplaceSDKInPipelineSpec(pipelineFilePath string, cacheDisabled bool, defau
 	// Replace all occurrences with the new package path
 	newPackagePath := getPackagePath("sdk/python")
 	modifiedPipelineSpec := kfpPattern.ReplaceAllString(pipelineFileString, newPackagePath)
+
+	return []byte(modifiedPipelineSpec)
+}
+
+func ReplaceBaseImageInPipelineSpec(pipelineFilePath string) []byte {
+	pipelineFileBytes, err := os.ReadFile(pipelineFilePath)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to read pipeline file: "+pipelineFilePath)
+	pipelineFileString := string(pipelineFileBytes)
+
+	// Define regex pattern to match image: python:3.9
+	imagePattern := regexp.MustCompile(`image: python:[0-9]+\.[0-9]+`)
+
+	// Replace all occurrences with the new package path
+	newBaseImage := fmt.Sprintf("image: %s", *config.BaseImage)
+	modifiedPipelineSpec := imagePattern.ReplaceAllString(pipelineFileString, newBaseImage)
 
 	return []byte(modifiedPipelineSpec)
 }
