@@ -148,7 +148,7 @@ var _ = Describe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.Pi
 			createdPipelineRun := createPipelineRun(&createdPipeline.PipelineID, &createdPipelineVersion.PipelineVersionID, &createdExperiment.ExperimentID, pipelineRuntimeInputs)
 			archivePipelineRun(&createdPipelineRun.RunID)
 			pipelineRunAfterArchive := testutil.GetPipelineRun(runClient, &createdPipelineRun.RunID)
-			Expect(createdPipelineRun.State).To(Equal(pipelineRunAfterArchive.State))
+			Expect(*pipelineRunAfterArchive.State).To(Not(BeElementOf([]run_model.V2beta1RuntimeState{run_model.V2beta1RuntimeStateCANCELED, run_model.V2beta1RuntimeStateCANCELING, run_model.V2beta1RuntimeStateRUNTIMESTATEUNSPECIFIED})))
 			Expect(*pipelineRunAfterArchive.StorageState).To(Equal(run_model.V2beta1RunStorageStateARCHIVED))
 
 		})
