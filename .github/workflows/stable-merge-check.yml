@@ -4,24 +4,31 @@ on:
   pull_request:
     branches:
       - stable
-      - master
     types: [opened, synchronize, reopened, edited]
   issue_comment:
-    types:
-      - created
+    types: [created]
 
 jobs:
   # Job to handle /integration-tests-ok command
   process-integration-command:
     runs-on: ubuntu-latest
     permissions:
+      issues: write
       pull-requests: write
-    if: github.event_name == 'pull_request'
+    if: contains(github.event.comment.body, '/integration-tests-ok') && github.event.issue.pull_request
     steps:
+      - name: Debug comment trigger
+        run: |
+          echo "🔍 Comment triggered workflow!"
+          echo "Comment body: ${{ github.event.comment.body }}"
+          echo "Comment author: ${{ github.event.comment.user.login }}"
+          echo "Author association: ${{ github.event.comment.author_association }}"
+          echo "Issue number: ${{ github.event.issue.number }}"
+          echo "Is PR: ${{ github.event.issue.pull_request != null }}"
+
       - name: Check if the author is a member or Owner
         id: check-condition
         run: |
-          echo ${{ github.event.comment.body }} 
           if [[ "${{ github.event.comment.author_association }}" == "MEMBER" || "${{ github.event.comment.author_association }}" == "OWNER" ]]; then
             echo "condition_met=true" >> $GITHUB_ENV
           else
@@ -95,7 +102,7 @@ jobs:
   integration-test-check:
     name: Integration Test Verification
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || contains(github.event.comment.body, '/integration-tests-ok')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
