@@ -116,6 +116,7 @@ def main():
     pr_body = pull_request.body or ""
 
     # If this is a synchronize event (new commits), remove any existing integration test checkbox
+    checkbox_was_removed = False
     if github_event_action == "synchronize":
         print("🔄 New commits detected - checking for existing integration test checkbox")
 
@@ -128,20 +129,26 @@ def main():
             try:
                 pull_request.edit(body=updated_body)
                 print("✅ Successfully removed integration test checkbox")
+                checkbox_was_removed = True
 
                 # Post a comment explaining the removal
                 removal_comment = """## 🔄 Integration Test Checkbox Removed
 
 New commits have been pushed to this PR. The integration test checkbox has been automatically removed to ensure tests are re-run with the latest changes.
 
-**Next Steps:**
+**⚠️ This workflow check will now FAIL until you complete the steps below:**
+
+**Next Steps to Pass This Check:**
 1. Re-run integration tests in OpenShift cluster with latest ODH nightly
-2. Add the integration test checkbox back to the PR description
-3. Check the checkbox only after confirming tests pass with the new commits
+2. Fetch nightly build information from **#odh-nightlies-notifications** Slack channel
+3. Add the integration test checkbox back to the PR description
+4. Check the checkbox only after confirming tests pass with the new commits
 
 ```markdown
 - [ ] Ran integration tests in an OpenShift cluster with latest ODH nightly
-```"""
+```
+
+Once you add and check the checkbox above, this workflow will automatically pass."""
 
                 pull_request.create_issue_comment(removal_comment)
                 print("✅ Posted checkbox removal notification")
@@ -150,6 +157,15 @@ New commits have been pushed to this PR. The integration test checkbox has been 
                 print(f"⚠️ Failed to remove checkbox from PR body: {e}")
         else:
             print("ℹ️ No existing integration test checkbox found")
+
+    # Get updated PR body if checkbox was removed
+    if checkbox_was_removed:
+        try:
+            # Refresh the PR to get the updated body
+            pull_request = repo.get_pull(pr_number)
+            pr_body = pull_request.body or ""
+        except Exception as e:
+            print(f"⚠️ Failed to refresh PR body: {e}")
 
     # Check for integration test checkbox
     has_checkbox = check_integration_test_checkbox(pr_body)
@@ -161,12 +177,22 @@ New commits have been pushed to this PR. The integration test checkbox has been 
     else:
         print("❌ Integration test verification required for main → stable merge")
 
-        # Post instruction comment
-        post_instruction_comment(pull_request)
+        if checkbox_was_removed:
+            print("\n🚫 WORKFLOW FAILED: Checkbox was automatically removed due to new commits")
+            print("📋 TO PASS THIS CHECK:")
+            print("   1. Re-run integration tests in OpenShift cluster with latest ODH nightly")
+            print("   2. Fetch nightly build info from #odh-nightlies-notifications Slack channel")
+            print("   3. Add this checkbox to your PR description:")
+            print("      - [ ] Ran integration tests in an OpenShift cluster with latest ODH nightly")
+            print("   4. Check the checkbox after tests pass")
+            print("   5. This workflow will automatically re-run and pass")
+        else:
+            # Post instruction comment for normal cases
+            post_instruction_comment(pull_request)
 
-        print("\n📋 Required: Add the following checkbox to your PR description and check it:")
-        print("- [ ] Ran integration tests in an OpenShift cluster with latest ODH nightly")
-        print("\n⚠️ Important: Only check this box after actually running the integration tests!")
+            print("\n📋 Required: Add the following checkbox to your PR description and check it:")
+            print("- [ ] Ran integration tests in an OpenShift cluster with latest ODH nightly")
+            print("\n⚠️ Important: Only check this box after actually running the integration tests!")
 
         sys.exit(1)
 
