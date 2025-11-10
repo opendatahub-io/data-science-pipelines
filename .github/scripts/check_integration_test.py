@@ -20,6 +20,27 @@ def check_integration_test_checkbox(pr_body):
     return bool(re.search(checkbox_pattern, pr_body, re.IGNORECASE))
 
 
+def has_unchecked_integration_test_checkbox(pr_body):
+    """Check if there's an unchecked integration test checkbox in the PR body."""
+    if not pr_body:
+        return False
+
+    # Pattern to match unchecked checkbox for integration tests
+    unchecked_pattern = r'- \[ \].*integration.*tests.*openshift.*cluster.*odh.*nightly'
+    return bool(re.search(unchecked_pattern, pr_body, re.IGNORECASE))
+
+
+def remove_integration_test_checkbox(pr_body):
+    """Remove any integration test checkbox (checked or unchecked) from PR body."""
+    if not pr_body:
+        return pr_body
+
+    # Pattern to match any integration test checkbox (checked or unchecked)
+    checkbox_pattern = r'- \[[x ]\].*integration.*tests.*openshift.*cluster.*odh.*nightly.*\n?'
+    updated_body = re.sub(checkbox_pattern, '', pr_body, flags=re.IGNORECASE)
+    return updated_body.strip()
+
+
 def post_instruction_comment(pull_request):
     """Post instruction comment if it doesn't already exist."""
     instruction_comment = """## 🚦 Integration Test Verification Required
@@ -66,6 +87,8 @@ def main():
     pr_number = os.getenv("PR_NUMBER")
     repo_owner = os.getenv("REPO_OWNER")
     repo_name = os.getenv("REPO_NAME")
+    github_event_name = os.getenv("GITHUB_EVENT_NAME")
+    github_event_action = os.getenv("GITHUB_EVENT_ACTION")
 
     if not all([token, pr_number, repo_owner, repo_name]):
         print("❌ Missing required environment variables")
@@ -78,6 +101,7 @@ def main():
         sys.exit(1)
 
     print(f"🔍 Checking PR #{pr_number} in {repo_owner}/{repo_name}")
+    print(f"📝 Event: {github_event_name}, Action: {github_event_action}")
 
     # Initialize GitHub client
     try:
@@ -90,6 +114,42 @@ def main():
 
     # Get PR body
     pr_body = pull_request.body or ""
+
+    # If this is a synchronize event (new commits), remove any existing integration test checkbox
+    if github_event_action == "synchronize":
+        print("🔄 New commits detected - checking for existing integration test checkbox")
+
+        if (check_integration_test_checkbox(pr_body) or
+            has_unchecked_integration_test_checkbox(pr_body)):
+
+            print("🗑️ Removing existing integration test checkbox due to new commits")
+            updated_body = remove_integration_test_checkbox(pr_body)
+
+            try:
+                pull_request.edit(body=updated_body)
+                print("✅ Successfully removed integration test checkbox")
+
+                # Post a comment explaining the removal
+                removal_comment = """## 🔄 Integration Test Checkbox Removed
+
+New commits have been pushed to this PR. The integration test checkbox has been automatically removed to ensure tests are re-run with the latest changes.
+
+**Next Steps:**
+1. Re-run integration tests in OpenShift cluster with latest ODH nightly
+2. Add the integration test checkbox back to the PR description
+3. Check the checkbox only after confirming tests pass with the new commits
+
+```markdown
+- [ ] Ran integration tests in an OpenShift cluster with latest ODH nightly
+```"""
+
+                pull_request.create_issue_comment(removal_comment)
+                print("✅ Posted checkbox removal notification")
+
+            except Exception as e:
+                print(f"⚠️ Failed to remove checkbox from PR body: {e}")
+        else:
+            print("ℹ️ No existing integration test checkbox found")
 
     # Check for integration test checkbox
     has_checkbox = check_integration_test_checkbox(pr_body)
