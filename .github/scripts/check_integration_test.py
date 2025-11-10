@@ -30,7 +30,7 @@ This pull request is merging **main** → **stable** and requires integration te
 Please add the following checkbox to your PR description and check it **only after** running the integration tests:
 
 ```markdown
-- [ ] Ran integration tests in an OpenShift cluster with latest ODH nightly (nightly build info fetched from slack channel #odh-nightlies-notifications)
+- [ ] Ran integration tests in an OpenShift cluster with latest ODH nightly
 ```
 
 ### 📝 Steps:
@@ -105,7 +105,7 @@ def main():
         post_instruction_comment(pull_request)
 
         print("\n📋 Required: Add the following checkbox to your PR description and check it:")
-        print("- [ ] Ran integration tests in an OpenShift cluster with latest ODH nightly (nightly build info fetched from slack channel #odh-nightlies-notifications)")
+        print("- [ ] Ran integration tests in an OpenShift cluster with latest ODH nightly")
         print("\n⚠️ Important: Only check this box after actually running the integration tests!")
 
         sys.exit(1)
