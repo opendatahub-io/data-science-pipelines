@@ -56,10 +56,29 @@ Please add the following checkbox to your PR description and check it **only aft
 
 ### 📝 Steps:
 1. Run integration tests in OpenShift cluster with latest ODH nightly
-2. Fetch nightly build information from **#odh-nightlies-notifications** Slack channel
-3. Edit this PR description to add the checkbox above
-4. Check the checkbox to confirm tests were completed
-5. This workflow check will automatically pass once the checkbox is detected
+    a. Fetch nightly ODH build information from **#odh-nightlies-notifications** slack channel
+    b. Follow the instructions on [this](https://spaces.redhat.com/spaces/RHODS/pages/512757017/02+-+Jira+testing+and+Verification) page to create a cluster and deploy latest ODH
+    c. Once the deployment is DONE and your cluster is available:
+        1. Login to openshift console
+        2. Go to Operator > Installed Operators > Open Data Hub Operator > Data Science Cluster > default-dsc
+        3. Open the yaml spec
+        4. Update the `aipipelines` with:
+            ```
+            aipipelines:
+                devFlags:
+                    manifests:
+                      - uri: https://github.com/opendatahub-io/data-science-pipelines-operator/tarball/main
+                        contextDir: config
+                        sourcePath: base
+                managementState: Managed
+            ```
+        5. Save and wait for DSPO to update
+        6. Deploy DSPA
+        7. Run [Iris Pipeline](https://github.com/red-hat-data-services/ods-ci/blob/master/ods_ci/tests/Resources/Files/pipeline-samples/v2/cache-disabled/iris_pipeline_compiled.yaml) [Flip Coin](https://github.com/red-hat-data-services/ods-ci/blob/master/ods_ci/tests/Resources/Files/pipeline-samples/v2/cache-disabled/flip_coin_compiled.yaml) pipelines
+        8. Make sure the pipeline runs Succeeds
+2. Edit this PR description to add the checkbox above
+3. Check the checkbox to confirm tests were completed
+4. This workflow check will automatically pass once the checkbox is detected
 
 ---
 *This requirement ensures production stability by verifying integration tests against the latest ODH nightly build.*"""
@@ -181,11 +200,10 @@ Once you add and check the checkbox above, this workflow will automatically pass
             print("\n🚫 WORKFLOW FAILED: Checkbox was automatically removed due to new commits")
             print("📋 TO PASS THIS CHECK:")
             print("   1. Re-run integration tests in OpenShift cluster with latest ODH nightly")
-            print("   2. Fetch nightly build info from #odh-nightlies-notifications Slack channel")
-            print("   3. Add this checkbox to your PR description:")
+            print("   2. Add this checkbox to your PR description:")
             print("      - [ ] Ran integration tests in an OpenShift cluster with latest ODH nightly")
-            print("   4. Check the checkbox after tests pass")
-            print("   5. This workflow will automatically re-run and pass")
+            print("   3. Check the checkbox after tests pass")
+            print("   4. This workflow will automatically re-run and pass")
         else:
             # Post instruction comment for normal cases
             post_instruction_comment(pull_request)
