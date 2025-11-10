@@ -114,11 +114,6 @@ def main():
         print(f"❌ Error accessing GitHub API: {e}")
         sys.exit(1)
 
-    # Check if this PR is to stable
-    if not pull_request.base.ref in ["stable"]:
-        print(f"ℹ️ Skipping check - not a PR against stable branch (base: {pull_request.base.ref}, head: {pull_request.head.ref})")
-        sys.exit(0)
-
     # If this is a synchronize event (new commits), remove the integration test label
     label_was_removed = False
     if github_event_action == "synchronize":
