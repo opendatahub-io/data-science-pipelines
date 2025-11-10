@@ -1,9 +1,6 @@
 package metadata
 
-const (
-	metadataGrpcServiceAddress = "metadata-grpc-service.kubeflow"
-	metadataGrpcServicePort    = "8080"
-)
+import "os"
 
 type ServerConfig struct {
 	Address string
@@ -11,8 +8,19 @@ type ServerConfig struct {
 }
 
 func DefaultConfig() *ServerConfig {
+	// The env vars exist when metadata-grpc-service Kubernetes service is
+	// in the same namespace as the current Pod.
+	// https://kubernetes.io/docs/concepts/services-networking/service/#environment-variables
+	hostEnv := os.Getenv("METADATA_GRPC_SERVICE_SERVICE_HOST")
+	portEnv := os.Getenv("METADATA_GRPC_SERVICE_SERVICE_PORT")
+	if hostEnv != "" && portEnv != "" {
+		return &ServerConfig{
+			Address: hostEnv,
+			Port:    portEnv,
+		}
+	}
 	return &ServerConfig{
-		Address: metadataGrpcServiceAddress,
-		Port:    metadataGrpcServicePort,
+		Address: "metadata-grpc-service.kubeflow",
+		Port:    "8080",
 	}
 }
