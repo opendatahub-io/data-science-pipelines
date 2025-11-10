@@ -56,26 +56,26 @@ Please add the following checkbox to your PR description and check it **only aft
 
 ### 📝 Steps:
 1. Run integration tests in OpenShift cluster with latest ODH nightly
-    a. Fetch nightly ODH build information from **#odh-nightlies-notifications** slack channel
-    b. Follow the instructions on [this](https://spaces.redhat.com/spaces/RHODS/pages/512757017/02+-+Jira+testing+and+Verification) page to create a cluster and deploy latest ODH
-    c. Once the deployment is DONE and your cluster is available:
-        1. Login to openshift console
-        2. Go to Operator > Installed Operators > Open Data Hub Operator > Data Science Cluster > default-dsc
-        3. Open the yaml spec
-        4. Update the `aipipelines` with:
-            ```
-            aipipelines:
+    1. Fetch nightly ODH build information from **#odh-nightlies-notifications** slack channel
+    2. Follow the instructions on [this](https://spaces.redhat.com/spaces/RHODS/pages/512757017/02+-+Jira+testing+and+Verification) page to create a cluster and deploy latest ODH
+    3. Once the deployment is DONE and your cluster is available:
+         * Login to openshift console
+         * Go to Operator > Installed Operators > Open Data Hub Operator > Data Science Cluster > default-dsc
+         * Open the yaml spec
+         * Update the `aipipelines` section with:
+         ```
+           aipipelines:
                 devFlags:
                     manifests:
                       - uri: https://github.com/opendatahub-io/data-science-pipelines-operator/tarball/main
                         contextDir: config
                         sourcePath: base
                 managementState: Managed
-            ```
-        5. Save and wait for DSPO to update
-        6. Deploy DSPA
-        7. Run [Iris Pipeline](https://github.com/red-hat-data-services/ods-ci/blob/master/ods_ci/tests/Resources/Files/pipeline-samples/v2/cache-disabled/iris_pipeline_compiled.yaml) [Flip Coin](https://github.com/red-hat-data-services/ods-ci/blob/master/ods_ci/tests/Resources/Files/pipeline-samples/v2/cache-disabled/flip_coin_compiled.yaml) pipelines
-        8. Make sure the pipeline runs Succeeds
+         ```        
+         * Save and wait for DSPO to update
+         * Deploy DSPA
+         * Run [Iris Pipeline](https://github.com/red-hat-data-services/ods-ci/blob/master/ods_ci/tests/Resources/Files/pipeline-samples/v2/cache-disabled/iris_pipeline_compiled.yaml), [Flip Coin](https://github.com/red-hat-data-services/ods-ci/blob/master/ods_ci/tests/Resources/Files/pipeline-samples/v2/cache-disabled/flip_coin_compiled.yaml) pipelines
+         * Make sure the pipeline runs Succeeds
 2. Edit this PR description to add the checkbox above
 3. Check the checkbox to confirm tests were completed
 4. This workflow check will automatically pass once the checkbox is detected
