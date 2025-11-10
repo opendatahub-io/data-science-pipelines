@@ -1,0 +1,36 @@
+name: Stable Merge Integration Test Check
+
+on:
+  pull_request:
+    branches:
+      - stable
+      - master
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  integration-test-check:
+    name: Integration Test Verification
+    runs-on: ubuntu-latest
+    if: github.head_ref == 'main' || github.head_ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install PyGithub
+
+      - name: Check integration test checkbox
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          python .github/scripts/check_integration_test.py
