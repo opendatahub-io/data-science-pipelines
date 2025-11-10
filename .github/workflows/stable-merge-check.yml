@@ -9,9 +9,6 @@ on:
   issue_comment:
     types: [created]
 
-env:
-  DEFAULT_BRANCH: master
-
 jobs:
   # Job to handle /integration-tests-ok command
   process-integration-command:
@@ -38,7 +35,7 @@ jobs:
           echo ${message}
           exit 1
 
-      - name: Check if PR targets stable/master
+      - name: Check if PR targets stable
         if: env.condition_met == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -55,7 +52,7 @@ jobs:
             echo "valid_target=true" >> $GITHUB_ENV
           else
             echo "valid_target=false" >> $GITHUB_ENV
-            echo "This command only works for main → stable/master PRs"
+            echo "This command only works for stable branch PRs"
           fi
 
       - name: Add integration-tests-verified label
