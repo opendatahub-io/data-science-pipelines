@@ -16,6 +16,7 @@ This document provides a comprehensive guide on how to interact with the Data Sc
 - [Error Handling](#error-handling)
 - [Best Practices](#best-practices)
 - [Examples](#examples)
+- [Additional Resources](#additional-resources)
 
 ## Overview
 
@@ -50,16 +51,16 @@ When deploying Data Science Pipelines on OpenShift, the API server is exposed vi
 ```bash
 # Set your namespace and DSP Custom Resource name
 DSP_NAMESPACE="your-namespace"
-DSP_CR_NAME="your-dspa-name"
+DSPA_NAME="your-dspa-name"
 
 # Retrieve the route hostname
-DSP_ROUTE=$(oc get routes -n ${DSP_NAMESPACE} ds-pipeline-${DSP_CR_NAME} --template={{.spec.host}})
+DSP_ROUTE=$(oc get routes -n ${DSP_NAMESPACE} ds-pipeline-${DSPA_NAME} --template={{.spec.host}})
 
 # The API URL will be https://${DSP_ROUTE}
 echo "DSP API URL: https://${DSP_ROUTE}"
 ```
 
-The route name follows the pattern `ds-pipeline-{DSP_CR_NAME}`, where `{DSP_CR_NAME}` is the `metadata.name` of your `DataSciencePipelinesApplication` Custom Resource.
+The route name follows the pattern `ds-pipeline-{DSPA_NAME}`, where `{DSPA_NAME}` is the `metadata.name` of your `DataSciencePipelinesApplication` Custom Resource.
 
 You can then use this URL when initializing the client:
 
@@ -69,7 +70,7 @@ import kfp
 from kfp import Client
 
 # Get the route from environment variable or retrieve it programmatically
-dsp_api_url = os.getenv('DSP_ROUTE', 'https://your-route-hostname')
+dsp_api_url = os.getenv('DSP_ROUTE', 'https://ds-pipeline-<dspa_name>.some.openshift.host.com')
 client = Client(host=dsp_api_url)
 ```
 
@@ -94,85 +95,48 @@ client = Client(host=api_url)
 
 ### Basic Client Configuration
 
+The simplest way to create a client is by providing the API server host URL.
+
 ```python
 import kfp
 from kfp import Client
 
-
-
 # For remote access with HTTPS
-client = Client(host='https://your-pipelines-host.com')
+client = Client(host='https://ds-pipeline-<dspa_name>.some.openshift.host.com')
 
 # With custom namespace (for multi-tenant deployments)
 client = Client(
-    host='https://your-pipelines-host.com',
+    host='https://ds-pipeline-<dspa_name>.some.openshift.host.com',
     namespace='your-namespace'
 )
 ```
 
 ### Client with Custom Configuration
 
+You can customize the client behavior by specifying additional parameters such as timeout and retry settings.
+
 ```python
 import kfp
 from kfp import Client
-from kfp.client import TokenFileCredentials
-
-# Using token-based authentication
-credentials = TokenFileCredentials(token_file='/path/to/token')
-client = Client(
-    host='https://your-pipelines-host.com',
-    credentials=credentials
-)
 
 # With custom timeout and retry settings
 client = Client(
-    host='https://your-pipelines-host.com',
-    timeout=300,  # 5 minutes timeout
-    retry_count=3
+    host='https://ds-pipeline-<dspa_name>.some.openshift.host.com',
+    namespace='your-namespace',  # Optional: specify namespace for multi-tenant deployments
+    timeout=300,  # Optional: request timeout in seconds (default: 300)
+    retry_count=3,  # Optional: number of retries for failed requests (default: 3)
+    verify_ssl=True,  # Optional: verify SSL certificates (default: True)
+    ssl_ca_cert='/path/to/ca-cert.pem'  # Optional: path to CA certificate file
 )
-```
-
-## Authentication
-
-### Token-Based Authentication
-
-```python
-from kfp.client import TokenCredentials
-
-# Using a bearer token
-token = "your-bearer-token"
-credentials = TokenCredentials(token=token)
-client = Client(
-    host='https://your-pipelines-host.com',
-    credentials=credentials
-)
-```
-
-### Service Account Authentication
-
-```python
-from kfp.client import ServiceAccountCredentials
-
-# Using service account credentials
-credentials = ServiceAccountCredentials(
-    service_account_file='/path/to/service-account.json'
-)
-client = Client(
-    host='https://your-pipelines-host.com',
-    credentials=credentials
-)
-```
-
-### OpenShift/Kubernetes Authentication
-
-```python
-# For OpenShift environments with built-in authentication
-client = Client()  # Uses default kubeconfig authentication
 ```
 
 ## Working with Pipelines
 
+Pipelines are the core building blocks of Data Science Pipelines. This section covers how to upload, list, retrieve, and delete pipelines using the REST API client.
+
 ### Uploading a Pipeline
+
+Upload pipelines from local files or remote URLs to make them available for execution.
 
 ```python
 # Upload from a local file
@@ -191,6 +155,8 @@ pipeline = client.upload_pipeline_from_url(
 
 ### Listing Pipelines
 
+Retrieve a list of pipelines with support for pagination and filtering.
+
 ```python
 # List all pipelines
 pipelines = client.list_pipelines()
@@ -208,6 +174,8 @@ pipelines = client.list_pipelines(filter='name="my-pipeline"')
 
 ### Getting Pipeline Details
 
+Retrieve detailed information about a specific pipeline by ID or name.
+
 ```python
 # Get pipeline by ID
 pipeline_id = "your-pipeline-id"
@@ -218,6 +186,8 @@ pipeline = client.get_pipeline_by_name('my-pipeline')
 ```
 
 ### Deleting a Pipeline
+
+Remove pipelines from the system by ID or by first retrieving the pipeline by name.
 
 ```python
 # Delete pipeline by ID
@@ -230,7 +200,11 @@ client.delete_pipeline(pipeline.pipeline_id)
 
 ## Working with Pipeline Versions
 
+Pipeline versions allow you to maintain multiple versions of the same pipeline, enabling version control and tracking of pipeline changes over time.
+
 ### Creating Pipeline Versions
+
+Create new versions of existing pipelines by uploading updated pipeline definitions from local files or remote URLs.
 
 ```python
 # Create a new version of an existing pipeline
@@ -250,6 +224,8 @@ version = client.upload_pipeline_version_from_url(
 
 ### Listing Pipeline Versions
 
+Retrieve all versions associated with a specific pipeline.
+
 ```python
 # List all versions of a pipeline
 versions = client.list_pipeline_versions(pipeline_id)
@@ -259,6 +235,8 @@ for version in versions.pipeline_versions:
 ```
 
 ### Getting Pipeline Version Details
+
+Retrieve detailed information about a specific pipeline version.
 
 ```python
 # Get specific version
@@ -270,7 +248,11 @@ version = client.get_pipeline_version(
 
 ## Working with Experiments
 
+Experiments provide a way to organize and group related pipeline runs, making it easier to track and compare results across multiple executions.
+
 ### Creating Experiments
+
+Create new experiments to organize your pipeline runs into logical groups.
 
 ```python
 # Create a new experiment
@@ -282,6 +264,8 @@ experiment = client.create_experiment(
 ```
 
 ### Listing Experiments
+
+Retrieve a list of experiments with support for pagination and sorting.
 
 ```python
 # List all experiments
@@ -299,6 +283,8 @@ experiments = client.list_experiments(
 
 ### Getting Experiment Details
 
+Retrieve detailed information about a specific experiment by ID or name.
+
 ```python
 # Get experiment by ID
 experiment = client.get_experiment(experiment_id)
@@ -309,7 +295,11 @@ experiment = client.get_experiment_by_name('my-experiment')
 
 ## Working with Runs
 
+Runs represent individual executions of pipelines. This section covers how to submit, monitor, list, and manage pipeline runs.
+
 ### Creating and Submitting Runs
+
+Submit pipeline runs with parameters, either from uploaded pipelines or directly from pipeline package files.
 
 ```python
 # Submit a run with parameters
@@ -344,6 +334,8 @@ run = client.create_run_from_pipeline_package(
 
 ### Monitoring Runs
 
+Track the progress and status of pipeline runs, including waiting for completion.
+
 ```python
 # Get run details
 run_detail = client.get_run(run.run_id)
@@ -358,6 +350,8 @@ print(f"Current status: {status}")
 ```
 
 ### Listing Runs
+
+Retrieve a list of runs with support for filtering, sorting, and pagination.
 
 ```python
 # List all runs
@@ -379,6 +373,8 @@ for run in runs.runs:
 
 ### Managing Run Lifecycle
 
+Control the lifecycle of runs by canceling, deleting, archiving, or unarchiving them.
+
 ```python
 # Cancel a running pipeline
 client.cancel_run(run.run_id)
@@ -395,7 +391,11 @@ client.unarchive_run(run.run_id)
 
 ## Working with Recurring Runs
 
+Recurring runs enable you to schedule pipelines to run automatically at specified intervals, making it easy to automate repetitive tasks.
+
 ### Creating Recurring Runs (Scheduled Pipelines)
+
+Create scheduled pipeline executions that run automatically based on time-based triggers.
 
 ```python
 from kfp.client.recurring_run import PeriodicSchedule
@@ -420,6 +420,8 @@ recurring_run = client.create_recurring_run(
 
 ### Managing Recurring Runs
 
+List, retrieve, enable, disable, and delete recurring runs.
+
 ```python
 # List recurring runs
 recurring_runs = client.list_recurring_runs()
@@ -438,6 +440,8 @@ client.delete_recurring_run(recurring_run_id)
 ## Error Handling
 
 ### Common Error Patterns
+
+Handle common API errors by catching ApiException and checking status codes to provide appropriate error handling and logging.
 
 ```python
 from kfp.client.exceptions import ApiException
@@ -470,6 +474,8 @@ def safe_pipeline_operation():
 ```
 
 ### Retry Logic
+
+Implement retry mechanisms with exponential backoff to handle transient failures and improve reliability of API calls.
 
 ```python
 import time
@@ -504,6 +510,8 @@ def submit_pipeline_with_retry():
 
 ### 1. Resource Management
 
+Use try-finally blocks or context managers to ensure proper cleanup of resources, even when errors occur.
+
 ```python
 # Always use try-finally or context managers for cleanup
 try:
@@ -516,6 +524,8 @@ finally:
 ```
 
 ### 2. Efficient Pagination
+
+Implement pagination to efficiently retrieve large datasets by iterating through pages using page tokens.
 
 ```python
 def get_all_pipelines(client):
@@ -541,6 +551,8 @@ def get_all_pipelines(client):
 
 ### 3. Parameter Validation
 
+Validate parameters before submitting pipeline runs to catch errors early and provide better error messages.
+
 ```python
 def validate_and_submit_run(client, pipeline_id, experiment_id, params):
     """Validate parameters before submitting a run."""
@@ -560,6 +572,8 @@ def validate_and_submit_run(client, pipeline_id, experiment_id, params):
 ```
 
 ### 4. Logging and Monitoring
+
+Implement comprehensive logging and monitoring to track pipeline execution progress and diagnose issues.
 
 ```python
 import logging
@@ -594,6 +608,8 @@ def monitored_pipeline_run(client, **kwargs):
 ## Examples
 
 ### Complete Workflow Example
+
+A complete end-to-end example demonstrating how to create an experiment, upload a pipeline, submit a run, and monitor its execution.
 
 ```python
 #!/usr/bin/env python3
@@ -672,6 +688,8 @@ if __name__ == '__main__':
 
 ### Batch Processing Example
 
+Process multiple pipelines in batch with comprehensive error handling to manage large-scale pipeline submissions.
+
 ```python
 def batch_process_pipelines(client, pipeline_configs):
     """
@@ -729,11 +747,20 @@ configs = [
 results = batch_process_pipelines(client, configs)
 ```
 
-## Conclusion
+## Additional Resources
 
-The Data Science Pipelines REST API, accessed through the Kubeflow Pipelines SDK, provides a powerful interface for programmatically managing machine learning workflows. By following the patterns and best practices outlined in this document, you can build robust, scalable pipeline automation systems.
+### SDK Documentation
 
-For more detailed API documentation, refer to the [Kubeflow Pipelines SDK documentation](https://kubeflow-pipelines.readthedocs.io/) and the API reference for your specific Data Science Pipelines version.
+The Kubeflow Pipelines SDK provides Python client libraries that simplify interaction with the Data Science Pipelines REST API. For more detailed information about using the Kubeflow Pipelines SDK, refer to the [Kubeflow Pipelines SDK documentation](https://kubeflow-pipelines.readthedocs.io/).
+
+### Full REST API Documentation
+
+For comprehensive details on the Kubeflow Pipelines REST API, including complete endpoint specifications, request/response schemas, and additional usage examples, refer to the official API reference:
+
+- [Kubeflow Pipelines API Reference](https://www.kubeflow.org/docs/components/pipelines/reference/api/kubeflow-pipeline-api-spec/)
+
+This documentation provides in-depth information about all available REST API endpoints and can help you explore advanced features and capabilities beyond what is covered in this guide.
+
 
 
 
