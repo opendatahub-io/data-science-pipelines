@@ -7,12 +7,12 @@ This document provides a comprehensive guide on how to interact with the Data Sc
 - [Overview](#overview)
 - [Prerequisites](#prerequisites)
 - [Client Setup](#client-setup)
-- [Authentication](#authentication)
-- [Working with Pipelines](#working-with-pipelines)
-- [Working with Pipeline Versions](#working-with-pipeline-versions)
-- [Working with Experiments](#working-with-experiments)
-- [Working with Runs](#working-with-runs)
-- [Working with Recurring Runs](#working-with-recurring-runs)
+- [Core Operations](#core-operations)
+  - [Working with Pipelines](#working-with-pipelines)
+  - [Working with Pipeline Versions](#working-with-pipeline-versions)
+  - [Working with Experiments](#working-with-experiments)
+  - [Working with Runs](#working-with-runs)
+  - [Working with Recurring Runs](#working-with-recurring-runs)
 - [Error Handling](#error-handling)
 - [Best Practices](#best-practices)
 - [Examples](#examples)
@@ -130,7 +130,11 @@ client = Client(
 )
 ```
 
-## Working with Pipelines
+## Core Operations
+
+This section covers the core operations for working with Data Science Pipelines, including managing pipelines, experiments, runs, and recurring runs.
+
+### Working with Pipelines
 
 Pipelines are the core building blocks of Data Science Pipelines. This section covers how to upload, list, retrieve, and delete pipelines using the REST API client.
 
@@ -198,7 +202,7 @@ pipeline = client.get_pipeline_by_name('my-pipeline')
 client.delete_pipeline(pipeline.pipeline_id)
 ```
 
-## Working with Pipeline Versions
+### Working with Pipeline Versions
 
 Pipeline versions allow you to maintain multiple versions of the same pipeline, enabling version control and tracking of pipeline changes over time.
 
@@ -246,7 +250,7 @@ version = client.get_pipeline_version(
 )
 ```
 
-## Working with Experiments
+### Working with Experiments
 
 Experiments provide a way to organize and group related pipeline runs, making it easier to track and compare results across multiple executions.
 
@@ -293,7 +297,7 @@ experiment = client.get_experiment(experiment_id)
 experiment = client.get_experiment_by_name('my-experiment')
 ```
 
-## Working with Runs
+### Working with Runs
 
 Runs represent individual executions of pipelines. This section covers how to submit, monitor, list, and manage pipeline runs.
 
@@ -389,7 +393,7 @@ client.archive_run(run.run_id)
 client.unarchive_run(run.run_id)
 ```
 
-## Working with Recurring Runs
+### Working with Recurring Runs
 
 Recurring runs enable you to schedule pipelines to run automatically at specified intervals, making it easy to automate repetitive tasks.
 
@@ -751,7 +755,11 @@ results = batch_process_pipelines(client, configs)
 
 ### SDK Documentation
 
-The Kubeflow Pipelines SDK provides Python client libraries that simplify interaction with the Data Science Pipelines REST API. For more detailed information about using the Kubeflow Pipelines SDK, refer to the [Kubeflow Pipelines SDK documentation](https://kubeflow-pipelines.readthedocs.io/).
+The Kubeflow Pipelines SDK provides Python client libraries that simplify interaction with the Data Science Pipelines REST API. For more detailed information about using the Kubeflow Pipelines SDK, refer to the official SDK documentation:
+
+- [Kubeflow Pipelines SDK documentation](https://kubeflow-pipelines.readthedocs.io/)
+
+This documentation provides comprehensive information about the SDK's client libraries, methods, and usage patterns to help you effectively interact with the Data Science Pipelines REST API.
 
 ### Full REST API Documentation
 
