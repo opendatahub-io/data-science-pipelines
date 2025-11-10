@@ -14,19 +14,9 @@ jobs:
   process-integration-command:
     runs-on: ubuntu-latest
     permissions:
-      issues: write
       pull-requests: write
-    if: contains(github.event.comment.body, '/integration-tests-ok') && github.event.issue.pull_request
+    if: contains(github.event.comment.body, '/ok-to-test')
     steps:
-      - name: Debug comment trigger
-        run: |
-          echo "🔍 Comment triggered workflow!"
-          echo "Comment body: ${{ github.event.comment.body }}"
-          echo "Comment author: ${{ github.event.comment.user.login }}"
-          echo "Author association: ${{ github.event.comment.author_association }}"
-          echo "Issue number: ${{ github.event.issue.number }}"
-          echo "Is PR: ${{ github.event.issue.pull_request != null }}"
-
       - name: Check if the author is a member or Owner
         id: check-condition
         run: |
