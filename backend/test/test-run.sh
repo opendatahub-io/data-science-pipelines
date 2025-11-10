@@ -47,4 +47,4 @@ oc port-forward -n $NAMESPACE deployment/ds-pipeline-$DSPA_NAME "8888:8888" &
 
 # Run Tests
 cd $TEST_DIRECTORY
-go run github.com/onsi/ginkgo/v2/ginkgo -r -v --cover -p --keep-going "$@" -- -namespace=$NAMESPACE -apiScheme=https -disableTlsCheck=true -serviceAccountName=pipeline-runner-$DSPA_NAME
+go run github.com/onsi/ginkgo/v2/ginkgo -r -v --cover -p --keep-going "$@" -- -namespace=$NAMESPACE -apiScheme=https -disableTlsCheck=true -serviceAccountName=pipeline-runner-$DSPA_NAME -repoName="opendatahub-io/data-science-pipelines"

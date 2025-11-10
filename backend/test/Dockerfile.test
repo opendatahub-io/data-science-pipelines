@@ -17,7 +17,7 @@ FROM golang:1.24-bookworm AS builder
 # Update package repo and install required libraries
 RUN apt-get update && apt-get install -y cmake clang musl-dev openssl
 
-ENV KUBECONFIG=/dspa/.kube/config
+ENV KUBECONFIG=/dspa/backend/test/.kube/config
 
 # Declare working directory
 WORKDIR /dspa

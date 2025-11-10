@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kubeflow/pipelines/backend/api/v2beta1/go_http_client/experiment_model"
@@ -146,7 +147,7 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		pipelineFiles := []string{
 			"essential/iris_pipeline_compiled.yaml",
 			"critical/flip_coin.yaml",
-			"critical/two_step_pipeline_containerized.yaml",
+			"critical/pipeline_with_artifact_upload_download.yaml",
 		}
 		for _, pipelineFile := range pipelineFiles {
 			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
@@ -161,9 +162,9 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 			"essential/component_with_pip_index_urls.yaml",
 			"essential/lightweight_python_functions_pipeline.yaml",
 			"essential/pipeline_in_pipeline.yaml",
-			"critical/pipeline_with_artifact_upload_download.yaml",
 			"critical/pipeline_with_secret_as_env.yaml",
 			"critical/pipeline_with_input_status_state.yaml",
+			"critical/notebook_component_simple.yaml",
 		}
 		for _, pipelineFile := range pipelineFiles {
 			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
@@ -239,6 +240,9 @@ func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testCon
 	pipelineRuntimeInputs := testutil.GetPipelineRunTimeInputs(pipelineFilePath)
 	createdRunID := e2e_utils.CreatePipelineRunAndWaitForItToFinish(runClient, testContext, uploadedPipeline.PipelineID, uploadedPipeline.DisplayName, &uploadedPipelineVersion.PipelineVersionID, experimentID, pipelineRuntimeInputs, maxPipelineWaitTime)
 	logger.Log("Deserializing expected compiled workflow file '%s' for the pipeline", pipelineFile)
+	if strings.Contains(pipelineFile, "/") {
+		pipelineFile = strings.Split(pipelineFile, "/")[1]
+	}
 	compiledWorkflow := workflowutils.UnmarshallWorkflowYAML(filepath.Join(testutil.GetCompiledWorkflowsFilesDir(), pipelineFile))
 	e2e_utils.ValidateComponentStatuses(runClient, k8Client, testContext, createdRunID, compiledWorkflow)
 
