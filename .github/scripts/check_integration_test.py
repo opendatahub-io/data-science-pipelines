@@ -84,12 +84,12 @@ Please add the following checkbox to your PR description and check it **only aft
 *This requirement ensures production stability by verifying integration tests against the latest ODH nightly build.*"""
 
     # Check if instruction comment already exists
-    comments = pull_request.get_issue_comments()
-    for comment in comments:
-        if ("Integration Test Verification Required" in comment.body and
-            comment.user.type == "Bot"):
-            print("ℹ️ Instruction comment already exists")
-            return
+    # comments = pull_request.get_issue_comments()
+    # for comment in comments:
+    #     if ("Integration Test Verification Required" in comment.body and
+    #         comment.user.type == "Bot"):
+    #         print("ℹ️ Instruction comment already exists")
+    #         return
 
     # Post new comment
     try:
