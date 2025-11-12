@@ -54,7 +54,7 @@ DSP_NAMESPACE="your-namespace"
 DSPA_NAME="your-dspa-name"
 
 # Retrieve the route hostname
-DSP_ROUTE=$(oc get routes -n ${DSP_NAMESPACE} ds-pipeline-${DSPA_NAME} --template={{.spec.host}})
+DSP_ROUTE=$(oc get route -n ${DSP_NAMESPACE} ds-pipeline-${DSPA_NAME} --template={{.spec.host}})
 
 # The API URL will be https://${DSP_ROUTE}
 echo "DSP API URL: https://${DSP_ROUTE}"
@@ -140,7 +140,7 @@ Pipelines are the core building blocks of Data Science Pipelines. This section c
 
 ### Uploading a Pipeline
 
-Upload pipelines from local files or remote URLs to make them available for execution.
+Upload pipelines from local files to make them available for execution.
 
 ```python
 # Upload from a local file
@@ -150,11 +150,13 @@ pipeline = client.upload_pipeline(
     description='My sample pipeline'
 )
 
-# Upload from a URL
-pipeline = client.upload_pipeline_from_url(
-    pipeline_url='https://github.com/example/pipeline.yaml',
-    pipeline_name='remote-pipeline'
-)
+# Note: To upload from a URL, first download the file locally, then use upload_pipeline
+# import urllib.request
+# urllib.request.urlretrieve('https://github.com/example/pipeline.yaml', 'pipeline.yaml')
+# pipeline = client.upload_pipeline(
+#     pipeline_package_path='pipeline.yaml',
+#     pipeline_name='remote-pipeline'
+# )
 ```
 
 ### Listing Pipelines
@@ -172,8 +174,16 @@ for pipeline in pipelines.pipelines:
 # List with pagination
 pipelines = client.list_pipelines(page_size=10, page_token=None)
 
-# List with filtering
-pipelines = client.list_pipelines(filter='name="my-pipeline"')
+# List with filtering (using JSON-serialized Filter proto)
+import json
+pipeline_filter = json.dumps({
+    "predicates": [{
+        "operation": "EQUALS",
+        "key": "display_name",
+        "stringValue": "my-pipeline",
+    }]
+})
+pipelines = client.list_pipelines(filter=pipeline_filter)
 ```
 
 ### Getting Pipeline Details
@@ -185,8 +195,10 @@ Retrieve detailed information about a specific pipeline by ID or name.
 pipeline_id = "your-pipeline-id"
 pipeline = client.get_pipeline(pipeline_id)
 
-# Get pipeline by name
-pipeline = client.get_pipeline_by_name('my-pipeline')
+# Get pipeline by name (first get the ID, then get the pipeline)
+pipeline_id = client.get_pipeline_id('my-pipeline')
+if pipeline_id:
+    pipeline = client.get_pipeline(pipeline_id)
 ```
 
 ### Deleting a Pipeline
@@ -197,9 +209,10 @@ Remove pipelines from the system by ID or by first retrieving the pipeline by na
 # Delete pipeline by ID
 client.delete_pipeline(pipeline_id)
 
-# Delete pipeline by name
-pipeline = client.get_pipeline_by_name('my-pipeline')
-client.delete_pipeline(pipeline.pipeline_id)
+# Delete pipeline by name (first get the ID, then delete)
+pipeline_id = client.get_pipeline_id('my-pipeline')
+if pipeline_id:
+    client.delete_pipeline(pipeline_id)
 ```
 
 ### Working with Pipeline Versions
@@ -208,7 +221,7 @@ Pipeline versions allow you to maintain multiple versions of the same pipeline, 
 
 ### Creating Pipeline Versions
 
-Create new versions of existing pipelines by uploading updated pipeline definitions from local files or remote URLs.
+Create new versions of existing pipelines by uploading updated pipeline definitions from local files.
 
 ```python
 # Create a new version of an existing pipeline
@@ -218,12 +231,14 @@ version = client.upload_pipeline_version(
     pipeline_id=pipeline_id
 )
 
-# Create version from URL
-version = client.upload_pipeline_version_from_url(
-    pipeline_url='https://github.com/example/pipeline-v2.yaml',
-    pipeline_version_name='v2.1',
-    pipeline_id=pipeline_id
-)
+# Note: To upload a pipeline version from a URL, first download the file locally, then use upload_pipeline_version
+# import urllib.request
+# urllib.request.urlretrieve('https://github.com/example/pipeline-v2.yaml', 'pipeline-v2.yaml')
+# version = client.upload_pipeline_version(
+#     pipeline_package_path='pipeline-v2.yaml',
+#     pipeline_version_name='v2.1',
+#     pipeline_id=pipeline_id
+# )
 ```
 
 ### Listing Pipeline Versions
@@ -246,7 +261,7 @@ Retrieve detailed information about a specific pipeline version.
 # Get specific version
 version = client.get_pipeline_version(
     pipeline_id=pipeline_id,
-    version_id=version_id
+    pipeline_version_id=version_id
 )
 ```
 
@@ -294,7 +309,7 @@ Retrieve detailed information about a specific experiment by ID or name.
 experiment = client.get_experiment(experiment_id)
 
 # Get experiment by name
-experiment = client.get_experiment_by_name('my-experiment')
+experiment = client.get_experiment(experiment_name='my-experiment')
 ```
 
 ### Working with Runs
@@ -343,13 +358,14 @@ Track the progress and status of pipeline runs, including waiting for completion
 ```python
 # Get run details
 run_detail = client.get_run(run.run_id)
-print(f"Run status: {run_detail.run.status}")
+print(f"Run status: {run_detail.state}")
 
 # Wait for run completion
 client.wait_for_run_completion(run.run_id, timeout=3600)  # 1 hour timeout
 
-# Get run status
-status = client.get_run_status(run.run_id)
+# Get run status (access state from run details)
+run_detail = client.get_run(run.run_id)
+status = run_detail.state
 print(f"Current status: {status}")
 ```
 
@@ -364,15 +380,23 @@ runs = client.list_runs()
 # List runs for a specific experiment
 runs = client.list_runs(experiment_id=experiment.experiment_id)
 
-# List runs with filtering
+# List runs with filtering (using JSON-serialized Filter proto)
+import json
+run_filter = json.dumps({
+    "predicates": [{
+        "operation": "EQUALS",
+        "key": "state",
+        "stringValue": "RUNNING",
+    }]
+})
 runs = client.list_runs(
-    filter='status="Running"',
+    filter=run_filter,
     sort_by='created_at desc',
     page_size=50
 )
 
 for run in runs.runs:
-    print(f"Run: {run.display_name} - Status: {run.status}")
+    print(f"Run: {run.display_name} - Status: {run.state}")
 ```
 
 ### Managing Run Lifecycle
@@ -381,7 +405,7 @@ Control the lifecycle of runs by canceling, deleting, archiving, or unarchiving 
 
 ```python
 # Cancel a running pipeline
-client.cancel_run(run.run_id)
+client.terminate_run(run.run_id)
 
 # Delete a run
 client.delete_run(run.run_id)
@@ -402,22 +426,17 @@ Recurring runs enable you to schedule pipelines to run automatically at specifie
 Create scheduled pipeline executions that run automatically based on time-based triggers.
 
 ```python
-from kfp.client.recurring_run import PeriodicSchedule
 import datetime
 
 # Create a daily recurring run
-schedule = PeriodicSchedule(
-    start_time=datetime.datetime.now(),
-    end_time=datetime.datetime.now() + datetime.timedelta(days=30),
-    interval_second=24*60*60  # Daily
-)
-
 recurring_run = client.create_recurring_run(
     experiment_id=experiment.experiment_id,
     job_name='daily-pipeline',
     pipeline_id=pipeline_id,
     params={'date': '{{workflow.creationTimestamp}}'},
-    trigger=schedule,
+    start_time=datetime.datetime.now().isoformat(),
+    end_time=(datetime.datetime.now() + datetime.timedelta(days=30)).isoformat(),
+    interval_second=24*60*60,  # Daily
     max_concurrency=1
 )
 ```
@@ -448,7 +467,7 @@ client.delete_recurring_run(recurring_run_id)
 Handle common API errors by catching ApiException and checking status codes to provide appropriate error handling and logging.
 
 ```python
-from kfp.client.exceptions import ApiException
+from kfp_server_api.rest import ApiException
 import logging
 
 def safe_pipeline_operation():
@@ -597,11 +616,11 @@ def monitored_pipeline_run(client, **kwargs):
     # Monitor progress
     while True:
         run_detail = client.get_run(run.run_id)
-        status = run_detail.run.status
+        status = run_detail.state
         
         logger.info(f"Run {run.run_id} status: {status}")
         
-        if status in ['Succeeded', 'Failed', 'Cancelled']:
+        if status.lower() in ['succeeded', 'failed', 'skipped', 'error']:
             break
             
         time.sleep(30)  # Check every 30 seconds
@@ -638,7 +657,7 @@ def main():
         # 1. Create or get experiment
         experiment_name = 'rest-api-example'
         try:
-            experiment = client.get_experiment_by_name(experiment_name)
+            experiment = client.get_experiment(experiment_name=experiment_name)
             logger.info(f"Using existing experiment: {experiment.experiment_id}")
         except:
             experiment = client.create_experiment(
@@ -674,10 +693,10 @@ def main():
         
         # 5. Get final results
         run_detail = client.get_run(run.run_id)
-        final_status = run_detail.run.status
+        final_status = run_detail.state
         logger.info(f"Run completed with status: {final_status}")
         
-        if final_status == 'Succeeded':
+        if final_status.lower() == 'succeeded':
             logger.info("Pipeline executed successfully!")
         else:
             logger.error(f"Pipeline failed with status: {final_status}")
