@@ -2,16 +2,24 @@ apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
   creationTimestamp: null
-  generateName: sequential-
+  generateName: pipeline-with-task-final-status-yaml-
 spec:
   arguments:
     parameters:
-    - name: components-eaac86761cafbf4600ca777dc7022d3e2c469dd34f22ba18fcd4b75a384b615d
-      value: '{"executorLabel":"exec-echo","inputDefinitions":{"parameters":{"message":{"parameterType":"STRING"}}}}'
-    - name: implementations-eaac86761cafbf4600ca777dc7022d3e2c469dd34f22ba18fcd4b75a384b615d
-      value: '{"args":["echo {{$.inputs.parameters[''message'']}}"],"command":["sh","-c"],"image":"library/bash"}'
+    - name: components-48a65aacc5bbfe3e0a81daee325e41054d2e795536213128cb2aacdf8a821cfc
+      value: '{"executorLabel":"exec-print-op","inputDefinitions":{"parameters":{"message":{"parameterType":"STRING"}}}}'
+    - name: implementations-48a65aacc5bbfe3e0a81daee325e41054d2e795536213128cb2aacdf8a821cfc
+      value: '{"command":["echo","{{$.inputs.parameters[''message'']}}"],"image":"registry.access.redhat.com/ubi9/python-311:latest"}'
+    - name: components-comp-exit-handler-1
+      value: '{"dag":{"tasks":{"print-op":{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-print-op"},"inputs":{"parameters":{"message":{"componentInputParameter":"pipelinechannel--message"}}},"taskInfo":{"name":"print-op"}}}},"inputDefinitions":{"parameters":{"pipelinechannel--message":{"parameterType":"STRING"}}}}'
+    - name: components-ca9bbff26ebc8b52f79d26ae7d76be215f81fb1b1f479268d38dc436e21081e6
+      value: '{"executorLabel":"exec-exit-op","inputDefinitions":{"parameters":{"status":{"isOptional":true,"parameterType":"TASK_FINAL_STATUS"},"user_input":{"parameterType":"STRING"}}}}'
+    - name: implementations-ca9bbff26ebc8b52f79d26ae7d76be215f81fb1b1f479268d38dc436e21081e6
+      value: '{"command":["echo","user input:","{{$.inputs.parameters[''user_input'']}}","pipeline
+        status:","{{$.inputs.parameters[''status'']}}"],"image":"registry.access.redhat.com/ubi9/python-311:latest"}'
     - name: components-root
-      value: '{"dag":{"tasks":{"echo":{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-echo"},"inputs":{"parameters":{"message":{"componentInputParameter":"param1"}}},"taskInfo":{"name":"echo"}},"echo-2":{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-echo-2"},"inputs":{"parameters":{"message":{"componentInputParameter":"param2"}}},"taskInfo":{"name":"echo-2"}}}},"inputDefinitions":{"parameters":{"param1":{"parameterType":"STRING"},"param2":{"parameterType":"STRING"}}}}'
+      value: '{"dag":{"tasks":{"exit-handler-1":{"componentRef":{"name":"comp-exit-handler-1"},"inputs":{"parameters":{"pipelinechannel--message":{"componentInputParameter":"message"}}},"taskInfo":{"name":"my-pipeline"}},"exit-op":{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-exit-op"},"dependentTasks":["exit-handler-1"],"inputs":{"parameters":{"status":{"taskFinalStatus":{"producerTask":"exit-handler-1"}},"user_input":{"componentInputParameter":"message"}}},"taskInfo":{"name":"exit-op"},"triggerPolicy":{"strategy":"ALL_UPSTREAM_TASKS_COMPLETED"}}}},"inputDefinitions":{"parameters":{"message":{"defaultValue":"Hello
+        World!","isOptional":true,"parameterType":"STRING"}}}}'
   entrypoint: entrypoint
   podMetadata:
     annotations:
@@ -25,7 +33,7 @@ spec:
       - --type
       - CONTAINER
       - --pipeline_name
-      - sequential
+      - pipeline-with-task-final-status-yaml
       - --run_id
       - '{{workflow.uid}}'
       - --run_name
@@ -196,63 +204,71 @@ spec:
       - arguments:
           parameters:
           - name: component
-            value: '{{workflow.parameters.components-eaac86761cafbf4600ca777dc7022d3e2c469dd34f22ba18fcd4b75a384b615d}}'
+            value: '{{workflow.parameters.components-48a65aacc5bbfe3e0a81daee325e41054d2e795536213128cb2aacdf8a821cfc}}'
           - name: task
-            value: '{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-echo"},"inputs":{"parameters":{"message":{"componentInputParameter":"param1"}}},"taskInfo":{"name":"echo"}}'
+            value: '{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-print-op"},"inputs":{"parameters":{"message":{"componentInputParameter":"pipelinechannel--message"}}},"taskInfo":{"name":"print-op"}}'
           - name: container
-            value: '{{workflow.parameters.implementations-eaac86761cafbf4600ca777dc7022d3e2c469dd34f22ba18fcd4b75a384b615d}}'
+            value: '{{workflow.parameters.implementations-48a65aacc5bbfe3e0a81daee325e41054d2e795536213128cb2aacdf8a821cfc}}'
           - name: task-name
-            value: echo
+            value: print-op
           - name: parent-dag-id
             value: '{{inputs.parameters.parent-dag-id}}'
-        name: echo-driver
+        name: print-op-driver
         template: system-container-driver
       - arguments:
           parameters:
           - name: pod-spec-patch
-            value: '{{tasks.echo-driver.outputs.parameters.pod-spec-patch}}'
+            value: '{{tasks.print-op-driver.outputs.parameters.pod-spec-patch}}'
           - default: "false"
             name: cached-decision
-            value: '{{tasks.echo-driver.outputs.parameters.cached-decision}}'
-        depends: echo-driver.Succeeded
-        name: echo
-        template: system-container-executor
-      - arguments:
-          parameters:
-          - name: component
-            value: '{{workflow.parameters.components-eaac86761cafbf4600ca777dc7022d3e2c469dd34f22ba18fcd4b75a384b615d}}'
-          - name: task
-            value: '{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-echo-2"},"inputs":{"parameters":{"message":{"componentInputParameter":"param2"}}},"taskInfo":{"name":"echo-2"}}'
-          - name: container
-            value: '{{workflow.parameters.implementations-eaac86761cafbf4600ca777dc7022d3e2c469dd34f22ba18fcd4b75a384b615d}}'
-          - name: task-name
-            value: echo-2
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
-        name: echo-2-driver
-        template: system-container-driver
-      - arguments:
-          parameters:
-          - name: pod-spec-patch
-            value: '{{tasks.echo-2-driver.outputs.parameters.pod-spec-patch}}'
-          - default: "false"
-            name: cached-decision
-            value: '{{tasks.echo-2-driver.outputs.parameters.cached-decision}}'
-        depends: echo-2-driver.Succeeded
-        name: echo-2
+            value: '{{tasks.print-op-driver.outputs.parameters.cached-decision}}'
+        depends: print-op-driver.Succeeded
+        name: print-op
         template: system-container-executor
     inputs:
       parameters:
       - name: parent-dag-id
     metadata: {}
-    name: root
+    name: comp-exit-handler-1
+    outputs: {}
+  - dag:
+      tasks:
+      - arguments:
+          parameters:
+          - name: component
+            value: '{{workflow.parameters.components-ca9bbff26ebc8b52f79d26ae7d76be215f81fb1b1f479268d38dc436e21081e6}}'
+          - name: task
+            value: '{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-exit-op"},"dependentTasks":["exit-handler-1"],"inputs":{"parameters":{"status":{"taskFinalStatus":{"producerTask":"exit-handler-1"}},"user_input":{"componentInputParameter":"message"}}},"taskInfo":{"name":"exit-op"},"triggerPolicy":{"strategy":"ALL_UPSTREAM_TASKS_COMPLETED"}}'
+          - name: container
+            value: '{{workflow.parameters.implementations-ca9bbff26ebc8b52f79d26ae7d76be215f81fb1b1f479268d38dc436e21081e6}}'
+          - name: task-name
+            value: exit-op
+          - name: parent-dag-id
+            value: '{{inputs.parameters.parent-dag-id}}'
+        name: exit-op-driver
+        template: system-container-driver
+      - arguments:
+          parameters:
+          - name: pod-spec-patch
+            value: '{{tasks.exit-op-driver.outputs.parameters.pod-spec-patch}}'
+          - default: "false"
+            name: cached-decision
+            value: '{{tasks.exit-op-driver.outputs.parameters.cached-decision}}'
+        depends: exit-op-driver.Succeeded
+        name: exit-op
+        template: system-container-executor
+    inputs:
+      parameters:
+      - name: parent-dag-id
+    metadata: {}
+    name: exit-hook-root-exit-op
     outputs: {}
   - container:
       args:
       - --type
       - '{{inputs.parameters.driver-type}}'
       - --pipeline_name
-      - sequential
+      - pipeline-with-task-final-status-yaml
       - --run_id
       - '{{workflow.uid}}'
       - --run_name
@@ -333,9 +349,45 @@ spec:
       - arguments:
           parameters:
           - name: component
+            value: '{{workflow.parameters.components-comp-exit-handler-1}}'
+          - name: parent-dag-id
+            value: '{{inputs.parameters.parent-dag-id}}'
+          - name: task
+            value: '{"componentRef":{"name":"comp-exit-handler-1"},"inputs":{"parameters":{"pipelinechannel--message":{"componentInputParameter":"message"}}},"taskInfo":{"name":"my-pipeline"}}'
+          - name: task-name
+            value: exit-handler-1
+        name: exit-handler-1-driver
+        template: system-dag-driver
+      - arguments:
+          parameters:
+          - name: parent-dag-id
+            value: '{{tasks.exit-handler-1-driver.outputs.parameters.execution-id}}'
+          - name: condition
+            value: '{{tasks.exit-handler-1-driver.outputs.parameters.condition}}'
+        depends: exit-handler-1-driver.Succeeded
+        hooks:
+          exit:
+            arguments:
+              parameters:
+              - name: parent-dag-id
+                value: '{{inputs.parameters.parent-dag-id}}'
+            template: exit-hook-root-exit-op
+        name: exit-handler-1
+        template: comp-exit-handler-1
+    inputs:
+      parameters:
+      - name: parent-dag-id
+    metadata: {}
+    name: root
+    outputs: {}
+  - dag:
+      tasks:
+      - arguments:
+          parameters:
+          - name: component
             value: '{{workflow.parameters.components-root}}'
           - name: runtime-config
-            value: '{}'
+            value: '{"parameterValues":{"message":"Hello World!"}}'
           - name: driver-type
             value: ROOT_DAG
         name: root-driver
