@@ -17,7 +17,7 @@ import fetch from 'node-fetch';
 import { GkeMetadataConfigs } from '../configs';
 
 const disabledHandler: Handler = async (_, res) => {
-  res.status(500).send('GKE metadata endpoints are disabled.');
+  res.status(300).send('GKE metadata endpoints are disabled.');
 };
 
 export const getClusterNameHandler = (options: GkeMetadataConfigs) => {

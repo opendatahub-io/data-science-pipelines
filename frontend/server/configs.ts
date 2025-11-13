@@ -29,25 +29,27 @@ export enum Deployments {
 /** converts string to bool */
 const asBool = (value: string) => ['true', '1'].includes(value.toLowerCase());
 
-function parseArgs(argv: string[]) {
+function parseArgs(argv: string[], env: ProcessEnv) {
   if (argv.length < 3) {
     const msg = `\
   Usage: node server.js <static-dir> [port].
          You can specify the API server address using the
          ML_PIPELINE_SERVICE_HOST and ML_PIPELINE_SERVICE_PORT
-         env vars.`;
+         env vars.
+         You can specify the frontend server port using the
+         FRONTEND_SERVER_PORT env var.`;
     throw new Error(msg);
   }
 
   const staticDir = path.resolve(argv[2]);
-  const port = parseInt(argv[3] || '3000', 10);
+  const port = parseInt(env.FRONTEND_SERVER_PORT || argv[3] || '3000', 10);
   return { staticDir, port };
 }
 
 export type ProcessEnv = NodeJS.ProcessEnv | { [key: string]: string };
 
 export function loadConfigs(argv: string[], env: ProcessEnv): UIConfigs {
-  const { staticDir, port } = parseArgs(argv);
+  const { staticDir, port } = parseArgs(argv, env);
   /** All configurable environment variables can be found here. */
   const {
     /** minio client use these to retrieve minio objects/artifacts */
