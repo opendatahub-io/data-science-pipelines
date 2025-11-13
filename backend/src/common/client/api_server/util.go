@@ -71,10 +71,10 @@ func NewHTTPRuntime(clientConfig clientcmd.ClientConfig, debug bool, tlsCfg *tls
 		host := parsedUrl.Host
 		if parsedUrl.Scheme != "" {
 			scheme = append(scheme, parsedUrl.Scheme)
-		}
-		if testconfig.ApiScheme != nil {
+		} else {
 			scheme = append(scheme, *testconfig.ApiScheme)
 		}
+		print(scheme)
 		if *testconfig.DisableTLSCheck {
 			tr := &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -88,9 +88,6 @@ func NewHTTPRuntime(clientConfig clientcmd.ClientConfig, debug bool, tlsCfg *tls
 				TLSClientConfig: tlsCfg,
 			}
 			httpClient = &http.Client{Transport: tr}
-		} else {
-			scheme = []string{"http"}
-			httpClient = &http.Client{}
 		}
 		runtimeClient = httptransport.NewWithClient(host, "", scheme, httpClient)
 		if debug {
