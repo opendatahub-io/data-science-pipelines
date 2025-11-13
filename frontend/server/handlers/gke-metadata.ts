@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { Handler } from 'express';
-import * as k8sHelper from '../k8s-helper';
 import fetch from 'node-fetch';
 import { GkeMetadataConfigs } from '../configs';
 
-const disabledHandler: Handler = async (_, res) => {
-  res.status(300).send('GKE metadata endpoints are disabled.');
+const disabledHandler: Handler = async (_: any, res: any) => {
+  res.status(200).send('');
 };
 
 export const getClusterNameHandler = (options: GkeMetadataConfigs) => {
@@ -27,7 +26,7 @@ export const getClusterNameHandler = (options: GkeMetadataConfigs) => {
   return clusterNameHandler;
 };
 
-const clusterNameHandler: Handler = async (_, res) => {
+const clusterNameHandler: Handler = async (_: any, res: any) => {
   const response = await fetch(
     'http://metadata/computeMetadata/v1/instance/attributes/cluster-name',
     { headers: { 'Metadata-Flavor': 'Google' } },
@@ -46,7 +45,7 @@ export const getProjectIdHandler = (options: GkeMetadataConfigs) => {
   return projectIdHandler;
 };
 
-const projectIdHandler: Handler = async (_, res) => {
+const projectIdHandler: Handler = async (_: any, res: any) => {
   const response = await fetch('http://metadata/computeMetadata/v1/project/project-id', {
     headers: { 'Metadata-Flavor': 'Google' },
   });

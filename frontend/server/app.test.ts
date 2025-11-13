@@ -214,7 +214,7 @@ describe('UIServer apis', () => {
         const request = requests(app.start());
         request
           .get('/system/cluster-name')
-          .expect(500, 'GKE metadata endpoints are disabled.', done);
+          .expect(200, '', done);
       });
     });
 
@@ -245,7 +245,7 @@ describe('UIServer apis', () => {
         app = new UIServer(loadConfigs(argv, { DISABLE_GKE_METADATA: 'true' }));
 
         const request = requests(app.start());
-        request.get('/system/project-id').expect(500, 'GKE metadata endpoints are disabled.', done);
+        request.get('/system/project-id').expect(200, '', done);
       });
     });
   });
@@ -412,7 +412,7 @@ describe('UIServer apis', () => {
     beforeEach(() => {
       const kfpApiPort = 3001;
       kfpApiServer = express()
-        .all('/*', (_, res) => {
+        .all('/*', (_: any, res: any) => {
           res.status(200).send('KFP API is working');
         })
         .listen(kfpApiPort);
