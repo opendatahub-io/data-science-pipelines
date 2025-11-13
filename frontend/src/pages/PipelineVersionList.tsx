@@ -150,7 +150,7 @@ class PipelineVersionList extends React.PureComponent<
 
     if (this.props.pipelineId) {
       try {
-        response = await Apis.pipelineServiceApiV2.listPipelineVersions(
+        response = await Apis.pipelineServiceApiV2.pipelineServiceListPipelineVersions(
           this.props.pipelineId,
           request.pageToken,
           request.pageSize,

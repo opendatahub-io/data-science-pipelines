@@ -144,7 +144,7 @@ class RecurringRunsManager extends React.Component<RecurringRunListProps, Recurr
     let runs: V2beta1RecurringRun[] = [];
     let nextPageToken = '';
     try {
-      const response = await Apis.recurringRunServiceApi.listRecurringRuns(
+      const response = await Apis.recurringRunServiceApi.recurringRunServiceListRecurringRuns(
         request.pageToken,
         request.pageSize,
         request.sortBy,
@@ -171,8 +171,8 @@ class RecurringRunsManager extends React.Component<RecurringRunListProps, Recurr
   protected async _setEnabledState(id: string, enabled: boolean): Promise<void> {
     try {
       await (enabled
-        ? Apis.recurringRunServiceApi.enableRecurringRun(id)
-        : Apis.recurringRunServiceApi.disableRecurringRun(id));
+        ? Apis.recurringRunServiceApi.recurringRunServiceEnableRecurringRun(id)
+        : Apis.recurringRunServiceApi.recurringRunServiceDisableRecurringRun(id));
     } catch (err) {
       const errorMessage = await errorToMessage(err);
       this.props.updateDialog({

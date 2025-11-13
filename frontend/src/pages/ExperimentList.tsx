@@ -195,7 +195,7 @@ export class ExperimentList extends Page<{ namespace?: string }, ExperimentListS
         },
       ]);
       request.filter = encodeURIComponent(JSON.stringify(filter));
-      response = await Apis.experimentServiceApiV2.listExperiments(
+      response = await Apis.experimentServiceApiV2.experimentServiceListExperiments(
         request.pageToken,
         request.pageSize,
         request.sortBy,
@@ -215,7 +215,7 @@ export class ExperimentList extends Page<{ namespace?: string }, ExperimentListS
       displayExperiments.map(async experiment => {
         // TODO: should we aggregate errors here? What if they fail for different reasons?
         try {
-          const listRunsResponse = await Apis.runServiceApiV2.listRuns(
+          const listRunsResponse = await Apis.runServiceApiV2.runServiceListRuns(
             undefined,
             experiment.experiment_id,
             undefined /* pageToken */,

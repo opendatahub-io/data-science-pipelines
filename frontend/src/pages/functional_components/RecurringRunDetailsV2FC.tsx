@@ -53,7 +53,7 @@ export function RecurringRunDetailsV2FC(props: PageProps) {
   } = useQuery<V2beta1RecurringRun, Error>(
     ['recurringRun', recurringRunId],
     async () => {
-      return await Apis.recurringRunServiceApi.getRecurringRun(recurringRunId);
+      return await Apis.recurringRunServiceApi.recurringRunServiceGetRecurringRun(recurringRunId);
     },
     { enabled: !!recurringRunId, staleTime: 0, cacheTime: 0 },
   );
@@ -62,7 +62,7 @@ export function RecurringRunDetailsV2FC(props: PageProps) {
   const { data: experiment, error: getExperimentError } = useQuery<V2beta1Experiment, Error>(
     ['experiment'],
     async () => {
-      return await Apis.experimentServiceApiV2.getExperiment(experimentId);
+      return await Apis.experimentServiceApiV2.experimentServiceGetExperiment(experimentId);
     },
     { enabled: !!experimentId, staleTime: 0 },
   );

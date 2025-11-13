@@ -249,7 +249,7 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
 
 async function getExperiment(experimentId: string | null): Promise<V2beta1Experiment> {
   if (experimentId) {
-    return Apis.experimentServiceApiV2.getExperiment(experimentId);
+    return Apis.experimentServiceApiV2.experimentServiceGetExperiment(experimentId);
   }
   return Promise.resolve({});
 }

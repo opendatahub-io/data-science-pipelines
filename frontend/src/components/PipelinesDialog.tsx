@@ -63,7 +63,7 @@ const PipelinesDialog: React.FC<PipelinesDialogProps> = (props): JSX.Element | n
             args.push('NAMESPACE');
             args.push(props.namespace);
           }
-          const response = await Apis.pipelineServiceApi.listPipelines(...args);
+          const response = await Apis.pipelineServiceApi.pipelineServiceListPipelinesV1(...args);
           return {
             nextPageToken: response.next_page_token || '',
             resources: response.pipelines || [],
@@ -73,7 +73,7 @@ const PipelinesDialog: React.FC<PipelinesDialogProps> = (props): JSX.Element | n
         emptyMessage='No pipelines found. Upload a pipeline and then try again.'
         initialSortColumn={PipelineSortKeys.CREATED_AT}
         selectionChanged={async (selectedId: string) => {
-          const selectedPipeline = await Apis.pipelineServiceApi.getPipeline(selectedId);
+          const selectedPipeline = await Apis.pipelineServiceApi.pipelineServiceGetPipelineV1(selectedId);
           setUnconfirmedSelectedPipeline(selectedPipeline);
         }}
       />

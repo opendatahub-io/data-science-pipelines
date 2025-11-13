@@ -43,7 +43,7 @@ export const getAuthorizeFn = (
       // Resources and verb are string enums, they are used as string here, that
       // requires a force type conversion. If we generated client should accept
       // enums instead.
-      await authService.authorize(namespace, resources as any, verb as any, {
+      await authService.authServiceAuthorizeV1(namespace, resources as any, verb as any, {
         // Pass authentication header.
         headers: {
           [authConfigs.kubeflowUserIdHeader]: req.headers[authConfigs.kubeflowUserIdHeader],

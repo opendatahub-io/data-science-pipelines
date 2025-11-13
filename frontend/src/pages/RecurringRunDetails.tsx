@@ -141,7 +141,7 @@ class RecurringRunDetails extends Page<{}, RecurringRunConfigState> {
 
     let run: ApiJob;
     try {
-      run = await Apis.jobServiceApi.getJob(runId);
+      run = await Apis.jobServiceApi.jobServiceGetJob(runId);
     } catch (err) {
       const errorMessage = await errorToMessage(err);
       await this.showPageError(
@@ -155,7 +155,7 @@ class RecurringRunDetails extends Page<{}, RecurringRunConfigState> {
     let experiment: ApiExperiment | undefined;
     if (relatedExperimentId) {
       try {
-        experiment = await Apis.experimentServiceApi.getExperiment(relatedExperimentId);
+        experiment = await Apis.experimentServiceApi.experimentServiceGetExperimentV1(relatedExperimentId);
       } catch (err) {
         const errorMessage = await errorToMessage(err);
         await this.showPageError(

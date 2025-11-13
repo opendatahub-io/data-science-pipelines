@@ -33,7 +33,7 @@ export default function RunDetailsRouter(props: RunDetailsProps) {
   const { isSuccess: getV2RunSuccess, isFetching: runIsFetching, data: v2Run } = useQuery<
     V2beta1Run,
     Error
-  >(['v2_run_detail', { id: runId }], () => Apis.runServiceApiV2.getRun(runId), {});
+  >(['v2_run_detail', { id: runId }], () => Apis.runServiceApiV2.runServiceGetRun(runId), {});
 
   if (getV2RunSuccess && v2Run && v2Run.pipeline_spec) {
     pipelineManifest = JsYaml.safeDump(v2Run.pipeline_spec);
@@ -51,7 +51,7 @@ export default function RunDetailsRouter(props: RunDetailsProps) {
       if (!pipelineId || !pipelineVersionId) {
         return '';
       }
-      const pipelineVersion = await Apis.pipelineServiceApiV2.getPipelineVersion(
+      const pipelineVersion = await Apis.pipelineServiceApiV2.pipelineServiceGetPipelineVersion(
         pipelineId,
         pipelineVersionId,
       );

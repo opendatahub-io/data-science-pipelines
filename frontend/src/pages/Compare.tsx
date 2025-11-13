@@ -48,7 +48,7 @@ export default function Compare(props: PageProps) {
   // Retrieves run details, set page version on success.
   const { isLoading, isError, error, data } = useQuery<ApiRunDetail[], Error>(
     ['run_details', { ids: runIds }],
-    () => Promise.all(runIds.map(async id => await Apis.runServiceApi.getRun(id))),
+    () => Promise.all(runIds.map(async id => await Apis.runServiceApi.runServiceGetRunV1(id))),
     {
       staleTime: Infinity,
     },

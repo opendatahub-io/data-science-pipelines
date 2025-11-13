@@ -332,7 +332,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
                 title='Choose a pipeline version'
                 filterLabel='Filter pipeline versions'
                 listApi={async (...args) => {
-                  const response = await Apis.pipelineServiceApi.listPipelineVersions(
+                  const response = await Apis.pipelineServiceApi.pipelineServiceListPipelineVersionsV1(
                     'PIPELINE',
                     this.state.pipeline ? this.state.pipeline!.id! : '',
                     args[1] /* page size */,
@@ -349,7 +349,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
                 emptyMessage='No pipeline versions found. Select or upload a pipeline then try again.'
                 initialSortColumn={PipelineVersionSortKeys.CREATED_AT}
                 selectionChanged={async (selectedId: string) => {
-                  const selectedPipelineVersion = await Apis.pipelineServiceApi.getPipelineVersion(
+                  const selectedPipelineVersion = await Apis.pipelineServiceApi.pipelineServiceGetPipelineVersionV1(
                     selectedId,
                   );
                   this.setStateSafe({
@@ -421,7 +421,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
                       string_value: ApiExperimentStorageState.ARCHIVED.toString(),
                     },
                   ]);
-                  const response = await Apis.experimentServiceApi.listExperiment(
+                  const response = await Apis.experimentServiceApi.experimentServiceListExperimentsV1(
                     page_token,
                     page_size,
                     sort_by,
@@ -438,7 +438,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
                 emptyMessage='No experiments found. Create an experiment and then try again.'
                 initialSortColumn={ExperimentSortKeys.CREATED_AT}
                 selectionChanged={async (selectedId: string) => {
-                  const selectedExperiment = await Apis.experimentServiceApi.getExperiment(
+                  const selectedExperiment = await Apis.experimentServiceApi.experimentServiceGetExperimentV1(
                     selectedId,
                   );
                   this.setStateSafe({ unconfirmedSelectedExperiment: selectedExperiment });
@@ -652,7 +652,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
     if (originalRunId) {
       // If we are cloning a run, fetch the original
       try {
-        const originalRun = await Apis.runServiceApi.getRun(originalRunId);
+        const originalRun = await Apis.runServiceApi.runServiceGetRunV1(originalRunId);
         await this._prepareFormFromClone(originalRun.run, originalRun.pipeline_runtime);
         // If the querystring did not contain an experiment ID, try to get one from the run.
         if (!experimentId) {
@@ -665,7 +665,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
     } else if (originalRecurringRunId) {
       // If we are cloning a recurring run, fetch the original
       try {
-        const originalJob = await Apis.jobServiceApi.getJob(originalRecurringRunId);
+        const originalJob = await Apis.jobServiceApi.jobServiceGetJob(originalRecurringRunId);
         await this._prepareFormFromClone(originalJob);
         this.setStateSafe({
           trigger: originalJob.trigger,
@@ -692,7 +692,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
         this.props.existingPipelineId || urlParser.get(QUERY_PARAMS.pipelineId);
       if (possiblePipelineId) {
         try {
-          const pipeline = await Apis.pipelineServiceApi.getPipeline(possiblePipelineId);
+          const pipeline = await Apis.pipelineServiceApi.pipelineServiceGetPipelineV1(possiblePipelineId);
           const pipelineName = (pipeline && pipeline.name) || '';
           this.setStateSafe({
             parameters: pipeline.parameters || [],
@@ -706,7 +706,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
             (pipeline.default_version && pipeline.default_version.id);
           if (possiblePipelineVersionId) {
             try {
-              const pipelineVersion = await Apis.pipelineServiceApi.getPipelineVersion(
+              const pipelineVersion = await Apis.pipelineServiceApi.pipelineServiceGetPipelineVersionV1(
                 possiblePipelineVersionId,
               );
               this.setStateSafe({
@@ -749,7 +749,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
     const breadcrumbs = [{ displayName: 'Experiments', href: RoutePage.EXPERIMENTS }];
     if (experimentId) {
       try {
-        experiment = await Apis.experimentServiceApi.getExperiment(experimentId);
+        experiment = await Apis.experimentServiceApi.experimentServiceGetExperimentV1(experimentId);
         experimentName = experiment.name || '';
         breadcrumbs.push({
           displayName: experimentName!,
@@ -828,7 +828,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
       // Get the default version of selected pipeline to auto-fill the version
       // input field.
       if (pipeline.default_version) {
-        pipelineVersion = await Apis.pipelineServiceApi.getPipelineVersion(
+        pipelineVersion = await Apis.pipelineServiceApi.pipelineServiceGetPipelineVersionV1(
           pipeline.default_version.id!,
         );
         parameters = pipelineVersion.parameters || [];
@@ -952,7 +952,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
               file!,
               isPrivatePipeline ? this.props.namespace : undefined,
             )
-          : await Apis.pipelineServiceApi.createPipeline({ name, url: { pipeline_url: url } });
+          : await Apis.pipelineServiceApi.pipelineServiceCreatePipelineV1({ name, url: { pipeline_url: url } });
       this.setStateSafe(
         {
           pipeline: uploadedPipeline,
@@ -980,7 +980,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
     let runWithEmbeddedPipeline: ApiRunDetail;
 
     try {
-      runWithEmbeddedPipeline = await Apis.runServiceApi.getRun(embeddedRunId);
+      runWithEmbeddedPipeline = await Apis.runServiceApi.runServiceGetRunV1(embeddedRunId);
       embeddedPipelineSpec = RunUtils.getWorkflowManifest(runWithEmbeddedPipeline.run);
     } catch (err) {
       await this.showPageError(
@@ -1047,11 +1047,11 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
     if (referencePipelineVersionId) {
       try {
         // TODO(jingzhang36): optimize this part to make only one api call.
-        pipelineVersion = await Apis.pipelineServiceApi.getPipelineVersion(
+        pipelineVersion = await Apis.pipelineServiceApi.pipelineServiceGetPipelineVersionV1(
           referencePipelineVersionId,
         );
         pipelineVersionName = pipelineVersion && pipelineVersion.name ? pipelineVersion.name : '';
-        pipeline = await Apis.pipelineServiceApi.getPipeline(
+        pipeline = await Apis.pipelineServiceApi.pipelineServiceGetPipelineV1(
           RunUtils.getPipelineIdFromApiPipelineVersion(pipelineVersion)!,
         );
         name = pipeline.name || '';
@@ -1065,7 +1065,7 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
       }
     } else if (referencePipelineId) {
       try {
-        pipeline = await Apis.pipelineServiceApi.getPipeline(referencePipelineId);
+        pipeline = await Apis.pipelineServiceApi.pipelineServiceGetPipelineV1(referencePipelineId);
         name = pipeline.name || '';
       } catch (err) {
         await this.showPageError(
@@ -1183,8 +1183,8 @@ export class NewRun extends Page<NewRunProps, NewRunState> {
       // tests for this and other similar situations.
       try {
         this.state.isRecurringRun
-          ? await Apis.jobServiceApi.createJob(newRun)
-          : await Apis.runServiceApi.createRun(newRun);
+          ? await Apis.jobServiceApi.jobServiceCreateJob(newRun)
+          : await Apis.runServiceApi.runServiceCreateRunV1(newRun);
       } catch (err) {
         const errorMessage = await errorToMessage(err);
         this.showErrorDialog('Run creation failed', errorMessage);

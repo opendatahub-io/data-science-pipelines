@@ -231,7 +231,7 @@ class CompareV1 extends Page<{}, CompareState> {
     await Promise.all(
       runIds.map(async id => {
         try {
-          const run = await Apis.runServiceApi.getRun(id);
+          const run = await Apis.runServiceApi.runServiceGetRunV1(id);
           runs.push(run);
           workflowObjects.push(JSON.parse(run.pipeline_runtime!.workflow_manifest || '{}'));
         } catch (err) {

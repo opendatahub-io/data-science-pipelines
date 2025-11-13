@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import path from 'path';
-import express from 'express';
-import { Application, static as StaticHandler } from 'express';
+import express, { Application } from 'express';
+import { static as StaticHandler } from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
 import { UIConfigs } from './configs';
@@ -38,7 +38,7 @@ import { HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS } from './consts';
 
 function getRegisterHandler(app: Application, basePath: string) {
   return (
-    func: (name: string | string[], handler: express.Handler) => express.Application,
+    func: (name: string | string[], handler: express.Handler) => Application,
     route: string | string[],
     handler: express.Handler,
   ) => {
@@ -101,7 +101,7 @@ function createUIServer(options: UIConfigs) {
   const registerHandler = getRegisterHandler(app, basePath);
 
   /** log to stdout */
-  app.use((req, res, next) => {
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.info(req.method + ' ' + req.originalUrl);
     next();
   });
@@ -267,7 +267,7 @@ function createUIServer(options: UIConfigs) {
       `/${apiVersion2Prefix}/workflows`,
       `/${apiVersion2Prefix}/scheduledworkflows`,
     ],
-    (req, res) => {
+    (req: express.Request, res: express.Response) => {
       res.status(403).send(`${req.originalUrl} endpoint is not meant for external usage.`);
     },
   );

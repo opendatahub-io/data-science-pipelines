@@ -283,7 +283,7 @@ export class ExperimentDetails extends Page<{}, ExperimentDetailsState> {
     const experimentId = this.props.match.params[RouteParams.experimentId];
 
     try {
-      const experiment = await Apis.experimentServiceApiV2.getExperiment(experimentId);
+      const experiment = await Apis.experimentServiceApiV2.experimentServiceGetExperiment(experimentId);
       const pageTitle =
         experiment.display_name || this.props.match.params[RouteParams.experimentId];
 
@@ -323,7 +323,7 @@ export class ExperimentDetails extends Page<{}, ExperimentDetailsState> {
       // Fetch this experiment's jobs
       try {
         // TODO: get ALL jobs in the experiment
-        const recurringRuns = await Apis.recurringRunServiceApi.listRecurringRuns(
+        const recurringRuns = await Apis.recurringRunServiceApi.recurringRunServiceListRecurringRuns(
           undefined,
           100,
           '',

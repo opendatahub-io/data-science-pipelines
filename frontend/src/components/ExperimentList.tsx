@@ -153,7 +153,7 @@ export class ExperimentList extends React.PureComponent<ExperimentListProps, Exp
 
     try {
       let response: V2beta1ListExperimentsResponse;
-      response = await Apis.experimentServiceApiV2.listExperiments(
+      response = await Apis.experimentServiceApiV2.experimentServiceListExperiments(
         request.pageToken,
         request.pageSize,
         request.sortBy,

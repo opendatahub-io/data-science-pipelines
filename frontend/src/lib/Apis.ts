@@ -83,7 +83,7 @@ export class Apis {
     visualizationData: ApiVisualization,
     namespace?: string,
   ): Promise<HTMLViewerConfig> {
-    const visualization = await Apis.visualizationServiceApi.createVisualization(
+    const visualization = await Apis.visualizationServiceApi.visualizationServiceCreateVisualizationV1(
       namespace || '',
       visualizationData,
     );

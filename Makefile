@@ -26,6 +26,7 @@ check-diff:
 		echo "Please regenerate using: make regenerate-all"; \
 		echo "Changes found in the following files:"; \
 		git status; \
+		echo ""; \
 		echo "Diff of changes:"; \
 		git diff; \
 		exit 1; \

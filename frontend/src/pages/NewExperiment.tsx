@@ -156,7 +156,7 @@ export class NewExperiment extends Page<{ namespace?: string }, NewExperimentSta
 
     this.setState({ isbeingCreated: true }, async () => {
       try {
-        const response = await Apis.experimentServiceApiV2.createExperiment(newExperiment);
+        const response = await Apis.experimentServiceApiV2.experimentServiceCreateExperiment(newExperiment);
         let searchString = '';
         if (this.state.pipelineId) {
           const latestVersion = await getLatestVersion(this.state.pipelineId);

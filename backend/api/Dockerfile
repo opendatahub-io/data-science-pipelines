@@ -40,6 +40,9 @@ ENV GOOGLEAPIS_COMMIT=68d5196a529174df97c28c70622ffc1c3721815f
 ENV PROTOC_GEN_GO_GRPC=v1.5.1
 ENV PROTOBUF_GO=v1.36.6
 
+# Used for generating swagger code for UI
+ENV SWAGGER_CODEGEN_VERSION=2.4.7
+
 # Install protoc.
 RUN apt-get update -y && apt-get install -y jq sed unzip
 RUN curl -L -o protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip
@@ -78,6 +81,13 @@ RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRP
 # Needed for buildling python packages requiring protoc
 RUN apt-get update && apt-get install -y python3-pip
 RUN apt-get -y upgrade python3-pip && pip3 install --upgrade setuptools wheel --break-system-packages
+
+# Install Java for swagger-codegen-cli (used for frontend TypeScript client generation)
+RUN apt-get install -y default-jre
+
+# Download swagger-codegen-cli for TypeScript client generation
+RUN curl -L -o /usr/bin/swagger-codegen-cli.jar \
+    https://repo1.maven.org/maven2/io/swagger/swagger-codegen-cli/${SWAGGER_CODEGEN_VERSION}/swagger-codegen-cli-${SWAGGER_CODEGEN_VERSION}.jar
 
 # WORKAROUND: https://github.com/docker-library/golang/issues/225#issuecomment-403170792
 ENV XDG_CACHE_HOME=/tmp/.cache

@@ -46,7 +46,7 @@ function NewRunSwitcher(props: PageProps) {
       if (!existingRunId) {
         throw new Error('Run ID is missing');
       }
-      return Apis.runServiceApiV2.getRun(existingRunId);
+      return Apis.runServiceApiV2.runServiceGetRun(existingRunId);
     },
     { enabled: !!existingRunId, staleTime: Infinity },
   );
@@ -62,7 +62,7 @@ function NewRunSwitcher(props: PageProps) {
       if (!originalRecurringRunId) {
         throw new Error('Recurring Run ID is missing');
       }
-      return Apis.recurringRunServiceApi.getRecurringRun(originalRecurringRunId);
+      return Apis.recurringRunServiceApi.recurringRunServiceGetRecurringRun(originalRecurringRunId);
     },
     { enabled: !!originalRecurringRunId, staleTime: Infinity },
   );
@@ -94,7 +94,7 @@ function NewRunSwitcher(props: PageProps) {
       if (!pipelineIdFromPipeline) {
         throw new Error('Pipeline ID is missing');
       }
-      return Apis.pipelineServiceApiV2.getPipeline(pipelineIdFromPipeline);
+      return Apis.pipelineServiceApiV2.pipelineServiceGetPipeline(pipelineIdFromPipeline);
     },
     { enabled: !!pipelineIdFromPipeline, staleTime: Infinity, cacheTime: 0 },
   );
@@ -111,7 +111,7 @@ function NewRunSwitcher(props: PageProps) {
       if (!(pipelineId && pipelineVersionId)) {
         throw new Error('Pipeline id or pipeline Version ID is missing');
       }
-      return Apis.pipelineServiceApiV2.getPipelineVersion(pipelineId, pipelineVersionId);
+      return Apis.pipelineServiceApiV2.pipelineServiceGetPipelineVersion(pipelineId, pipelineVersionId);
     },
     { enabled: !!pipelineId && !!pipelineVersionId, staleTime: Infinity, cacheTime: 0 },
   );
@@ -127,12 +127,12 @@ function NewRunSwitcher(props: PageProps) {
 
       let v1TemplateResponse;
       if (pipelineVersionId) {
-        v1TemplateResponse = await Apis.pipelineServiceApi.getPipelineVersionTemplate(
+        v1TemplateResponse = await Apis.pipelineServiceApi.pipelineServiceGetPipelineVersionTemplate(
           pipelineVersionId,
         );
         return v1TemplateResponse.template || '';
       } else {
-        v1TemplateResponse = await Apis.pipelineServiceApi.getTemplate(pipelineId);
+        v1TemplateResponse = await Apis.pipelineServiceApi.pipelineServiceGetTemplate(pipelineId);
       }
       return v1TemplateResponse.template || '';
     },
@@ -146,7 +146,7 @@ function NewRunSwitcher(props: PageProps) {
       if (!experimentId) {
         throw new Error('Experiment ID is missing');
       }
-      return Apis.experimentServiceApiV2.getExperiment(experimentId);
+      return Apis.experimentServiceApiV2.experimentServiceGetExperiment(experimentId);
     },
     { enabled: !!experimentId, staleTime: Infinity },
   );

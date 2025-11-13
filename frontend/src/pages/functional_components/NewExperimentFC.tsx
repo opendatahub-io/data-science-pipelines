@@ -115,7 +115,7 @@ export function NewExperimentFC(props: NewExperimentFCProps) {
   }, [errMsgFromApi, updateDialog]);
 
   const newExperimentMutation = useMutation((experiment: V2beta1Experiment) => {
-    return Apis.experimentServiceApiV2.createExperiment(experiment);
+    return Apis.experimentServiceApiV2.experimentServiceCreateExperiment(experiment);
   });
 
   const createExperiment = () => {

@@ -260,7 +260,7 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
     const pipelineVersionId = existingObj.pipeline_version_reference?.pipeline_version_id;
     let templateStrFromOrigin: string | undefined;
     if (pipelineId && pipelineVersionId) {
-      const pipelineVersion = await Apis.pipelineServiceApiV2.getPipelineVersion(
+      const pipelineVersion = await Apis.pipelineServiceApiV2.pipelineServiceGetPipelineVersion(
         pipelineId,
         pipelineVersionId,
       );
@@ -285,7 +285,7 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
     // Get specific version if version id is provided
     if (versionId) {
       try {
-        selectedVersion = await Apis.pipelineServiceApiV2.getPipelineVersion(pipelineId, versionId);
+        selectedVersion = await Apis.pipelineServiceApiV2.pipelineServiceGetPipelineVersion(pipelineId, versionId);
       } catch (err) {
         this.setStateSafe({ graphIsLoading: false });
         await this.showPageError('Cannot retrieve pipeline version.', err);
@@ -296,7 +296,7 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
       // Get the latest version if no version id
       let listVersionsResponse: V2beta1ListPipelineVersionsResponse;
       try {
-        listVersionsResponse = await Apis.pipelineServiceApiV2.listPipelineVersions(
+        listVersionsResponse = await Apis.pipelineServiceApiV2.pipelineServiceListPipelineVersions(
           pipelineId,
           undefined,
           1, // Only need the latest one
@@ -349,13 +349,13 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
         // (ApiParameter can be only retrieve in the response of v1 getJob() api)
         // Experiment ID and pipeline version id are preserved.
         if (origin.isRecurring) {
-          origin.v1RecurringRun = await Apis.jobServiceApi.getJob(origin.recurringRunId!);
-          origin.v2RecurringRun = await Apis.recurringRunServiceApi.getRecurringRun(
+          origin.v1RecurringRun = await Apis.jobServiceApi.jobServiceGetJob(origin.recurringRunId!);
+          origin.v2RecurringRun = await Apis.recurringRunServiceApi.recurringRunServiceGetRecurringRun(
             origin.recurringRunId!,
           );
         } else {
-          origin.v1Run = await Apis.runServiceApi.getRun(origin.runId!);
-          origin.v2Run = await Apis.runServiceApiV2.getRun(origin.runId!);
+          origin.v1Run = await Apis.runServiceApi.runServiceGetRunV1(origin.runId!);
+          origin.v2Run = await Apis.runServiceApiV2.runServiceGetRun(origin.runId!);
         }
 
         // If v2 run or recurring is existing, get template string from it
@@ -420,7 +420,7 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
           : origin.v2Run?.experiment_id;
         let experiment: V2beta1Experiment | undefined;
         if (relatedExperimentId) {
-          experiment = await Apis.experimentServiceApiV2.getExperiment(relatedExperimentId);
+          experiment = await Apis.experimentServiceApiV2.experimentServiceGetExperiment(relatedExperimentId);
         }
 
         // Build the breadcrumbs, by adding experiment and run names
@@ -465,8 +465,8 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
       const versionId = this.props.match.params[RouteParams.pipelineVersionId];
 
       try {
-        v1Pipeline = await Apis.pipelineServiceApi.getPipeline(pipelineId);
-        v2Pipeline = await Apis.pipelineServiceApiV2.getPipeline(pipelineId);
+        v1Pipeline = await Apis.pipelineServiceApi.pipelineServiceGetPipelineV1(pipelineId);
+        v2Pipeline = await Apis.pipelineServiceApiV2.pipelineServiceGetPipeline(pipelineId);
       } catch (err) {
         this.setStateSafe({ graphIsLoading: false });
         await this.showPageError('Cannot retrieve pipeline details.', err);
@@ -477,7 +477,7 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
       try {
         // TODO(rjbauer): it's possible we might not have a version, even default
         if (versionId) {
-          v1Version = await Apis.pipelineServiceApi.getPipelineVersion(versionId);
+          v1Version = await Apis.pipelineServiceApi.pipelineServiceGetPipelineVersionV1(versionId);
         }
       } catch (err) {
         this.setStateSafe({ graphIsLoading: false });
@@ -507,7 +507,7 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
           // the page size value should be?
           v1Versions =
             (
-              await Apis.pipelineServiceApi.listPipelineVersions(
+              await Apis.pipelineServiceApi.pipelineServiceListPipelineVersionsV1(
                 'PIPELINE',
                 pipelineId,
                 50,
@@ -518,7 +518,7 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
 
           v2Versions =
             (
-              await Apis.pipelineServiceApiV2.listPipelineVersions(
+              await Apis.pipelineServiceApiV2.pipelineServiceListPipelineVersions(
                 pipelineId,
                 undefined,
                 50,
@@ -628,12 +628,12 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
     // Handle v1 pipelines created by v1 API (no pipeline_spec field)
     let v1TemplateResponse: ApiGetTemplateResponse;
     if (pipelineVersion?.pipeline_version_id) {
-      v1TemplateResponse = await Apis.pipelineServiceApi.getPipelineVersionTemplate(
+      v1TemplateResponse = await Apis.pipelineServiceApi.pipelineServiceGetPipelineVersionTemplate(
         pipelineVersion.pipeline_version_id,
       );
       return v1TemplateResponse.template || '';
     } else if (pipelineVersion?.pipeline_id) {
-      v1TemplateResponse = await Apis.pipelineServiceApi.getTemplate(pipelineVersion.pipeline_id);
+      v1TemplateResponse = await Apis.pipelineServiceApi.pipelineServiceGetTemplate(pipelineVersion.pipeline_id);
       return v1TemplateResponse.template || '';
     } else {
       logger.error('No template string is found');

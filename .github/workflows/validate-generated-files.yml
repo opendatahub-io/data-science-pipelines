@@ -18,6 +18,10 @@ on:
       - 'backend/src/crd/kubernetes/**/*.go'
       - 'manifests/kustomize/base/crds/*.yaml'
       - 'sdk/**/*.py'
+      - 'frontend/src/apis/**'
+      - 'frontend/src/apisv2beta1/**'
+      - 'frontend/server/src/generated/**'
+      - 'frontend/scripts/generate-swagger-clients.sh'
       - '!**/*.md'
       - '!**/OWNERS'
       - 'VERSION'
@@ -80,6 +84,10 @@ jobs:
         env:
           API_VERSION: v1beta1
         run: make generate-kfp-server-api-package
+
+      - name: Generate frontend TypeScript API clients
+        working-directory: ./frontend
+        run: make generate-swagger-clients
 
       - name: Check for Changes
         run: make check-diff

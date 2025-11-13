@@ -223,16 +223,29 @@ guide [here](https://prettier.io/docs/en/ignore.html). (Most likely you don't ne
 ## Api client code generation
 
 If you made any changes to protos (see backend/README), you'll need to
-regenerate the Typescript client library from swagger. We use
-swagger-codegen-cli@2.4.7, which you can get
-[here](https://repo1.maven.org/maven2/io/swagger/swagger-codegen-cli/2.4.7/).
-Make sure to add the jar file to $PATH with the name swagger-codegen-cli.jar, then run `npm run apis` for
-v1 api or `npm run apis:v2beta1` for v2 api.
+regenerate the Typescript client library from swagger.
+
+### Containerized approach (recommended)
+
+The recommended way is to use the containerized code generation, which eliminates the need to install Java and swagger-codegen-cli.jar locally:
+
+```bash
+cd frontend
+make generate-swagger-clients
 ```
-// add jar file to $PATH
-JAR_PATH=<folder-path-to-jar-file>
-export PATH="$JAR_PATH:$PATH"
-```
+
+This uses the same `kfp-api-generator` container image that the backend uses for Go client generation.
+
+After code generation, you should run `npm run format` to format the output and avoid creating a large PR.
+
+### Legacy approach (local installation)
+
+Alternatively, you can use the legacy approach with locally installed swagger-codegen-cli@2.4.7:
+
+1. Download swagger-codegen-cli.jar from [here](https://repo1.maven.org/maven2/io/swagger/swagger-codegen-cli/2.4.7/swagger-codegen-cli-2.4.7.jar)
+2. Save it to the `frontend/` directory as `swagger-codegen-cli.jar`
+3. Run `npm run swagger-codegen` to generate all API clients for both v1beta1 and v2beta1
+
 After code generation, you should run `npm run format` to format the output and avoid creating a large PR.
 
 ## MLMD components

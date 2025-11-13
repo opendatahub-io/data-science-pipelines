@@ -295,7 +295,7 @@ function CompareV2(props: CompareV2Props) {
     refetch,
   } = useQuery<V2beta1Run[], Error>(
     ['v2_run_details', { ids: runIds }],
-    () => Promise.all(runIds.map(async id => await Apis.runServiceApiV2.getRun(id))),
+    () => Promise.all(runIds.map(async id => await Apis.runServiceApiV2.runServiceGetRun(id))),
     {
       staleTime: Infinity,
     },

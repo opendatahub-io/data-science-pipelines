@@ -101,7 +101,7 @@ export class GettingStarted extends Page<{}, { links: string[] }> {
     const ids = await Promise.all(
       DEMO_PIPELINES.map(name =>
         Apis.pipelineServiceApiV2
-          .listPipelines(undefined, undefined, 10, undefined, createAndEncodeFilter(name))
+          .pipelineServiceListPipelines(undefined, undefined, 10, undefined, createAndEncodeFilter(name))
           .then(pipelineList => {
             const pipelines = pipelineList.pipelines;
             if (pipelines?.length !== 1) {

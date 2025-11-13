@@ -140,7 +140,7 @@ function getPipelineDetailsUrl(
 
 export async function getLatestVersion(pipelineId: string) {
   try {
-    const listVersionsResponse = await Apis.pipelineServiceApiV2.listPipelineVersions(
+    const listVersionsResponse = await Apis.pipelineServiceApiV2.pipelineServiceListPipelineVersions(
       pipelineId,
       undefined,
       1, // Only need the latest one
@@ -349,10 +349,10 @@ function NewRunV2(props: NewRunV2Props) {
 
   // Defines the behavior when user clicks `Start` button.
   const newRunMutation = useMutation((run: V2beta1Run) => {
-    return Apis.runServiceApiV2.createRun(run);
+    return Apis.runServiceApiV2.runServiceCreateRun(run);
   });
   const newRecurringRunMutation = useMutation((recurringRun: V2beta1RecurringRun) => {
-    return Apis.recurringRunServiceApi.createRecurringRun(recurringRun);
+    return Apis.recurringRunServiceApi.recurringRunServiceCreateRecurringRun(recurringRun);
   });
 
   const startRun = () => {
@@ -882,7 +882,7 @@ function PipelineVersionSelector(props: PipelineVersionSelectorProps) {
               sort_by?: string,
               filter?: string,
             ) => {
-              const response = await Apis.pipelineServiceApiV2.listPipelineVersions(
+              const response = await Apis.pipelineServiceApiV2.pipelineServiceListPipelineVersions(
                 props.pipeline ? props.pipeline.pipeline_id! : '',
                 page_token,
                 page_size,
@@ -899,7 +899,7 @@ function PipelineVersionSelector(props: PipelineVersionSelectorProps) {
             emptyMessage='No pipeline versions found. Select or upload a pipeline then try again.'
             initialSortColumn={PipelineVersionSortKeys.CREATED_AT}
             selectionChanged={async (selectedVersionId: string) => {
-              const selectedPipelineVersion = await Apis.pipelineServiceApiV2.getPipelineVersion(
+              const selectedPipelineVersion = await Apis.pipelineServiceApiV2.pipelineServiceGetPipelineVersion(
                 props.pipeline?.pipeline_id!,
                 selectedVersionId,
               );
@@ -1011,7 +1011,7 @@ function ExperimentSelector(props: ExperimentSelectorProps) {
                       string_value: V2beta1ExperimentStorageState.ARCHIVED.toString(),
                     },
                   ]);
-                  const response = await Apis.experimentServiceApiV2.listExperiments(
+                  const response = await Apis.experimentServiceApiV2.experimentServiceListExperiments(
                     page_token,
                     page_size,
                     sort_by,
@@ -1027,7 +1027,7 @@ function ExperimentSelector(props: ExperimentSelectorProps) {
                 emptyMessage='No experiments found. Create an experiment and then try again.'
                 initialSortColumn={ExperimentSortKeys.CREATED_AT}
                 selectionChanged={async (selectedExperimentId: string) => {
-                  const selectedExperiment = await Apis.experimentServiceApiV2.getExperiment(
+                  const selectedExperiment = await Apis.experimentServiceApiV2.experimentServiceGetExperiment(
                     selectedExperimentId,
                   );
                   setPendingExperiment(selectedExperiment);

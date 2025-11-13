@@ -516,7 +516,7 @@ export class NewPipelineVersion extends Page<NewPipelineVersionProps, NewPipelin
     const urlParser = new URLParser(this.props);
     const pipelineId = urlParser.get(QUERY_PARAMS.pipelineId);
     if (pipelineId) {
-      const pipelineResponse = await Apis.pipelineServiceApiV2.getPipeline(pipelineId);
+      const pipelineResponse = await Apis.pipelineServiceApiV2.pipelineServiceGetPipeline(pipelineId);
       this.setState({
         pipelineId,
         pipelineName: pipelineResponse.display_name,
@@ -617,7 +617,7 @@ export class NewPipelineVersion extends Page<NewPipelineVersionProps, NewPipelin
             this.state.file!,
             namespace,
           );
-          const listVersionsResponse = await Apis.pipelineServiceApiV2.listPipelineVersions(
+          const listVersionsResponse = await Apis.pipelineServiceApiV2.pipelineServiceListPipelineVersions(
             pipelineResponse.pipeline_id!,
             undefined,
             1, // Only need the latest one
@@ -635,7 +635,7 @@ export class NewPipelineVersion extends Page<NewPipelineVersionProps, NewPipelin
             name: this.state.pipelineName,
             namespace,
           };
-          const createPipelineResponse = await Apis.pipelineServiceApiV2.createPipeline(
+          const createPipelineResponse = await Apis.pipelineServiceApiV2.pipelineServiceCreatePipeline(
             newPipeline,
           );
           this.setState({ pipelineId: createPipelineResponse.pipeline_id });
@@ -689,7 +689,7 @@ export class NewPipelineVersion extends Page<NewPipelineVersionProps, NewPipelin
         description: this.state.pipelineVersionDescription,
         package_url: { pipeline_url: this.state.packageUrl },
       };
-      return Apis.pipelineServiceApiV2.createPipelineVersion(this.state.pipelineId!, newPipeline);
+      return Apis.pipelineServiceApiV2.pipelineServiceCreatePipelineVersion(this.state.pipelineId!, newPipeline);
     }
   }
 

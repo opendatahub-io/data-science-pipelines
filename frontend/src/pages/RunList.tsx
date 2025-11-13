@@ -377,7 +377,7 @@ class RunList extends React.PureComponent<RunListProps, RunListState> {
       }
 
       try {
-        const response = await Apis.runServiceApiV2.listRuns(
+        const response = await Apis.runServiceApiV2.runServiceListRuns(
           this.props.namespaceMask,
           this.props.experimentIdMask,
           request.pageToken,
@@ -411,10 +411,10 @@ class RunList extends React.PureComponent<RunListProps, RunListState> {
     try {
       if (!this.props.namespaceMask) {
         // Single-user mode.
-        experimentsResponse = await Apis.experimentServiceApiV2.listExperiments();
+        experimentsResponse = await Apis.experimentServiceApiV2.experimentServiceListExperiments();
       } else {
         // Multi-user mode.
-        experimentsResponse = await Apis.experimentServiceApiV2.listExperiments(
+        experimentsResponse = await Apis.experimentServiceApiV2.experimentServiceListExperiments(
           undefined,
           undefined,
           undefined,
@@ -472,7 +472,7 @@ class RunList extends React.PureComponent<RunListProps, RunListState> {
       displayRuns.map(async displayRun => {
         let getRunResponse: V2beta1Run;
         try {
-          getRunResponse = await Apis.runServiceApiV2.getRun(displayRun.run!.run_id!);
+          getRunResponse = await Apis.runServiceApiV2.runServiceGetRun(displayRun.run!.run_id!);
           displayRun.run = getRunResponse;
         } catch (err) {
           displayRun.error = await errorToMessage(err);
@@ -493,7 +493,7 @@ class RunList extends React.PureComponent<RunListProps, RunListState> {
     const pipelineVersionId = displayRun.run.pipeline_version_reference?.pipeline_version_id;
     if (pipelineId && pipelineVersionId) {
       try {
-        const pipelineVersion = await Apis.pipelineServiceApiV2.getPipelineVersion(
+        const pipelineVersion = await Apis.pipelineServiceApiV2.pipelineServiceGetPipelineVersion(
           pipelineId,
           pipelineVersionId,
         );

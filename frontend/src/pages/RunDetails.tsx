@@ -753,13 +753,13 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
     }
 
     try {
-      const runDetail = await Apis.runServiceApi.getRun(runId);
+      const runDetail = await Apis.runServiceApi.runServiceGetRunV1(runId);
 
       const relatedExperimentId = RunUtils.getFirstExperimentReferenceId(runDetail.run);
       let experiment: ApiExperiment | undefined;
       let namespace: string | undefined;
       if (relatedExperimentId) {
-        experiment = await Apis.experimentServiceApi.getExperiment(relatedExperimentId);
+        experiment = await Apis.experimentServiceApi.experimentServiceGetExperimentV1(relatedExperimentId);
         namespace = RunUtils.getNamespaceReferenceName(experiment);
       }
 

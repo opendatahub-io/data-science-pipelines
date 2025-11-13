@@ -240,7 +240,7 @@ class RecurringRunList extends React.PureComponent<RecurringRunListProps, Recurr
       await this._getAndSetRecurringRuns(displayRecurringRuns);
     } else {
       try {
-        const response = await Apis.recurringRunServiceApi.listRecurringRuns(
+        const response = await Apis.recurringRunServiceApi.recurringRunServiceListRecurringRuns(
           request.pageToken,
           request.pageSize,
           request.sortBy,
@@ -275,10 +275,10 @@ class RecurringRunList extends React.PureComponent<RecurringRunListProps, Recurr
     try {
       if (!this.props.namespaceMask) {
         // Single-user mode.
-        experimentsResponse = await Apis.experimentServiceApiV2.listExperiments();
+        experimentsResponse = await Apis.experimentServiceApiV2.experimentServiceListExperiments();
       } else {
         // Multi-user mode.
-        experimentsResponse = await Apis.experimentServiceApiV2.listExperiments(
+        experimentsResponse = await Apis.experimentServiceApiV2.experimentServiceListExperiments(
           undefined,
           undefined,
           undefined,
@@ -328,7 +328,7 @@ class RecurringRunList extends React.PureComponent<RecurringRunListProps, Recurr
       displayRecurringRuns.map(async displayRecurringRun => {
         let getRecurringRunResponse: V2beta1RecurringRun;
         try {
-          getRecurringRunResponse = await Apis.recurringRunServiceApi.getRecurringRun(
+          getRecurringRunResponse = await Apis.recurringRunServiceApi.recurringRunServiceGetRecurringRun(
             displayRecurringRun.recurringRun!.recurring_run_id!,
           );
           displayRecurringRun.recurringRun = getRecurringRunResponse!;

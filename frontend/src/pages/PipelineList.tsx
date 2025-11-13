@@ -166,7 +166,7 @@ class PipelineList extends Page<{ namespace?: string }, PipelineListState> {
     let response: V2beta1ListPipelinesResponse | null = null;
     let displayPipelines: DisplayPipeline[];
     try {
-      response = await Apis.pipelineServiceApiV2.listPipelines(
+      response = await Apis.pipelineServiceApiV2.pipelineServiceListPipelines(
         this.props.namespace,
         request.pageToken,
         request.pageSize,

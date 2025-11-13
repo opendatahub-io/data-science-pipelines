@@ -431,7 +431,7 @@ export default class Buttons {
       selectedIds,
       'Retry this run?',
       useCurrent,
-      id => Apis.runServiceApiV2.retryRun(id),
+      id => Apis.runServiceApiV2.runServiceRetryRun(id),
       callback,
       'Retry',
       'run',
@@ -452,7 +452,7 @@ export default class Buttons {
         `be stopped if it's running when it's archived. Use the Restore action to restore the ` +
         `run${s(selectedIds)} to ${selectedIds.length === 1 ? 'its' : 'their'} original location.`,
       useCurrent,
-      id => Apis.runServiceApiV2.archiveRun(id),
+      id => Apis.runServiceApiV2.runServiceArchiveRun(id),
       callback,
       'Archive',
       'run',
@@ -470,7 +470,7 @@ export default class Buttons {
         selectedIds.length === 1 ? 'this run to its' : 'these runs to their'
       } original location?`,
       useCurrent,
-      id => Apis.runServiceApiV2.unarchiveRun(id),
+      id => Apis.runServiceApiV2.runServiceUnarchiveRun(id),
       callback,
       'Restore',
       'run',
@@ -494,7 +494,7 @@ export default class Buttons {
         selectedIds,
       )}.`,
       useCurrent,
-      id => Apis.experimentServiceApiV2.unarchiveExperiment(id),
+      id => Apis.experimentServiceApiV2.experimentServiceUnarchiveExperiment(id),
       callback,
       'Restore',
       'experiment',
@@ -512,7 +512,7 @@ export default class Buttons {
         selectedIds.length === 1 ? 'this Pipeline' : 'these Pipelines'
       }? This action cannot be undone.`,
       useCurrentResource,
-      id => Apis.pipelineServiceApi.deletePipeline(id),
+      id => Apis.pipelineServiceApi.pipelineServiceDeletePipelineV1(id),
       callback,
       'Delete',
       'pipeline',
@@ -533,7 +533,7 @@ export default class Buttons {
       }? This action cannot be undone.`,
       useCurrentResource,
       vid =>
-        Apis.pipelineServiceApiV2.deletePipelineVersion(
+        Apis.pipelineServiceApiV2.pipelineServiceDeletePipelineVersion(
           selectedPipelineAndVersionIds.get(vid)!,
           vid,
         ),
@@ -552,7 +552,7 @@ export default class Buttons {
       [id],
       'Do you want to delete this recurring run config? This action cannot be undone.',
       useCurrentResource,
-      recurringRunId => Apis.recurringRunServiceApi.deleteRecurringRun(recurringRunId),
+      recurringRunId => Apis.recurringRunServiceApi.recurringRunServiceDeleteRecurringRun(recurringRunId),
       callback,
       'Delete',
       'recurring run config',
@@ -569,7 +569,7 @@ export default class Buttons {
       'Do you want to terminate this run? This action cannot be undone. This will terminate any' +
         ' running pods, but they will not be deleted.',
       useCurrentResource,
-      id => Apis.runServiceApiV2.terminateRun(id),
+      id => Apis.runServiceApiV2.runServiceTerminateRun(id),
       callback,
       'Terminate',
       'run',
@@ -585,7 +585,7 @@ export default class Buttons {
       ids,
       'Do you want to delete the selected runs? This action cannot be undone.',
       useCurrentResource,
-      id => Apis.runServiceApi.deleteRun(id),
+      id => Apis.runServiceApi.runServiceDeleteRunV1(id),
       callback,
       'Delete',
       'run',
@@ -738,8 +738,8 @@ export default class Buttons {
       this._props.updateToolbar({ actions: toolbarActions });
       try {
         await (enabled
-          ? Apis.recurringRunServiceApi.enableRecurringRun(id)
-          : Apis.recurringRunServiceApi.disableRecurringRun(id));
+          ? Apis.recurringRunServiceApi.recurringRunServiceEnableRecurringRun(id)
+          : Apis.recurringRunServiceApi.recurringRunServiceDisableRecurringRun(id));
         this._refresh();
       } catch (err) {
         const errorMessage = await errorToMessage(err);
@@ -825,7 +825,7 @@ export default class Buttons {
       await Promise.all(
         selectedIds.map(async pipelineId => {
           try {
-            const response = await Apis.pipelineServiceApiV2.listPipelineVersions(
+            const response = await Apis.pipelineServiceApiV2.pipelineServiceListPipelineVersions(
               pipelineId,
               undefined,
               1,
@@ -963,7 +963,7 @@ export default class Buttons {
     await Promise.all(
       selectedIds.map(async id => {
         try {
-          await Apis.pipelineServiceApiV2.deletePipeline(id, cascade);
+          await Apis.pipelineServiceApiV2.pipelineServiceDeletePipeline(id, cascade);
         } catch (err) {
           unsuccessfulIds.push(id);
           succeededfulIds.delete(id);
@@ -998,7 +998,7 @@ export default class Buttons {
         toBeDeletedVersionIds[pipelineId].map(async versionId => {
           try {
             unsuccessfulVersionIds[pipelineId] = [];
-            await Apis.pipelineServiceApiV2.deletePipelineVersion(pipelineId, versionId);
+            await Apis.pipelineServiceApiV2.pipelineServiceDeletePipelineVersion(pipelineId, versionId);
           } catch (err) {
             unsuccessfulVersionIds[pipelineId].push(versionId);
             const errorMessage = await errorToMessage(err);
@@ -1072,7 +1072,7 @@ export default class Buttons {
         selectedIds,
       )} to ${selectedIds.length === 1 ? 'its' : 'their'} original location.`,
       useCurrent,
-      id => Apis.experimentServiceApiV2.archiveExperiment(id),
+      id => Apis.experimentServiceApiV2.experimentServiceArchiveExperiment(id),
       callback,
       'Archive',
       'experiment',
