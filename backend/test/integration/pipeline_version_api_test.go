@@ -151,7 +151,7 @@ func (s *PipelineVersionApiTest) TestArgoSpec() {
 		Version: &pipeline_model.APIPipelineVersion{
 			Name: "sequential",
 			PackageURL: &pipeline_model.APIURL{
-				PipelineURL: "https://raw.githubusercontent.com/kubeflow/pipelines/refs/heads/master/backend/test/v2/resources/sequential.yaml",
+				PipelineURL: fmt.Sprintf("https://raw.githubusercontent.com/%s/refs/heads/master/backend/test/v2/resources/sequential.yaml", s.repoName),
 			},
 			ResourceReferences: []*pipeline_model.APIResourceReference{
 				{
