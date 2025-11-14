@@ -16,6 +16,7 @@ package api_server_v2
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"os"
 
@@ -49,10 +50,10 @@ type PipelineUploadClient struct {
 	authInfoWriter runtime.ClientAuthInfoWriter
 }
 
-func NewPipelineUploadClient(clientConfig clientcmd.ClientConfig, debug bool) (
+func NewPipelineUploadClient(clientConfig clientcmd.ClientConfig, debug bool, tlsCfg *tls.Config) (
 	PipelineUploadInterface, error,
 ) {
-	runtime, err := api_server.NewHTTPRuntime(clientConfig, debug)
+	runtime, err := api_server.NewHTTPRuntime(clientConfig, debug, tlsCfg)
 	if err != nil {
 		return nil, fmt.Errorf("Error occurred when creating pipeline upload client: %w", err)
 	}
@@ -65,10 +66,10 @@ func NewPipelineUploadClient(clientConfig clientcmd.ClientConfig, debug bool) (
 	}, nil
 }
 
-func NewKubeflowInClusterPipelineUploadClient(namespace string, debug bool) (
+func NewKubeflowInClusterPipelineUploadClient(namespace string, debug bool, tlsCfg *tls.Config) (
 	PipelineUploadInterface, error,
 ) {
-	runtime := api_server.NewKubeflowInClusterHTTPRuntime(namespace, debug)
+	runtime := api_server.NewKubeflowInClusterHTTPRuntime(namespace, debug, tlsCfg)
 
 	apiClient := apiclient.New(runtime, strfmt.Default)
 
@@ -76,6 +77,23 @@ func NewKubeflowInClusterPipelineUploadClient(namespace string, debug bool) (
 	return &PipelineUploadClient{
 		apiClient:      apiClient,
 		authInfoWriter: api_server.SATokenVolumeProjectionAuth,
+	}, nil
+}
+
+func NewMultiUserPipelineUploadClient(clientConfig clientcmd.ClientConfig, userToken string, debug bool, tlsCfg *tls.Config) (
+	PipelineUploadInterface, error,
+) {
+	runtime, err := api_server.NewHTTPRuntime(clientConfig, debug, tlsCfg)
+	if err != nil {
+		return nil, fmt.Errorf("error occurred when creating pipeline upload client: %w", err)
+	}
+
+	apiClient := apiclient.New(runtime, strfmt.Default)
+
+	// Creating upload client
+	return &PipelineUploadClient{
+		apiClient:      apiClient,
+		authInfoWriter: api_server.TokenToAuthInfo(userToken),
 	}, nil
 }
 
@@ -111,7 +129,7 @@ func (c *PipelineUploadClient) Upload(parameters *params.UploadPipelineParams) (
 
 		return nil, util.NewUserError(err,
 			fmt.Sprintf("Failed to upload pipeline. Params: '%v'", parameters),
-			fmt.Sprintf("Failed to upload pipeline"))
+			"Failed to upload pipeline")
 	}
 
 	return response.Payload, nil
@@ -146,7 +164,7 @@ func (c *PipelineUploadClient) UploadPipelineVersion(filePath string, parameters
 
 		return nil, util.NewUserError(err,
 			fmt.Sprintf("Failed to upload pipeline version. Params: '%v'", parameters),
-			fmt.Sprintf("Failed to upload pipeline version"))
+			"Failed to upload pipeline version")
 	}
 
 	return response.Payload, nil
