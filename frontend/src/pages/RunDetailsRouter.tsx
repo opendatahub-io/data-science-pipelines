@@ -30,11 +30,18 @@ export default function RunDetailsRouter(props: RunDetailsProps) {
   let pipelineManifest: string | undefined;
 
   // Retrieves v2 run detail.
-  const { isSuccess: getV2RunSuccess, isFetching: runIsFetching, data: v2Run } = useQuery<
-    V2beta1Run,
-    Error
-  >(['v2_run_detail', { id: runId }], () => Apis.runServiceApiV2.runServiceGetRun(runId), {});
-
+    const {
+        isSuccess: getV2RunSuccess,
+        isFetching: runIsFetching,
+        data: v2Run,
+    } = useQuery<V2beta1Run, Error>({
+        queryKey: ['v2_run_detail', {id: runId}],
+        queryFn: () => Apis.runServiceApiV2.runServiceGetRun(
+            runId,
+            undefined,
+            'FULL'
+    ),
+  });
   if (getV2RunSuccess && v2Run && v2Run.pipeline_spec) {
     pipelineManifest = JsYaml.safeDump(v2Run.pipeline_spec);
   }
