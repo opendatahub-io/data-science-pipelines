@@ -238,25 +238,6 @@ This uses the same `kfp-api-generator` container image that the backend uses for
 
 After code generation, you should run `npm run format` to format the output and avoid creating a large PR.
 
-### Legacy approach (local installation)
-
-Alternatively, you can use the legacy approach with locally installed swagger-codegen-cli@2.4.7:
-
-1. Download swagger-codegen-cli.jar from [here](https://repo1.maven.org/maven2/io/swagger/swagger-codegen-cli/2.4.7/swagger-codegen-cli-2.4.7.jar)
-2. Save it to the `frontend/` directory as `swagger-codegen-cli.jar`
-3. Run `npm run swagger-codegen` to generate all API clients for both v1beta1 and v2beta1
-
-After code generation, you should run `npm run format` to format the output and avoid creating a large PR.
-
-## MLMD components
-
-* `src/mlmd` - components for visualizing data from an `ml-metadata` store. For more information see the
-  [google/ml-metadata](https://github.com/google/ml-metadata) repository.
-
-This module previously lived in [kubeflow/frontend](https://github.com/kubeflow/frontend) repository. It contains tsx files for visualizing MLMD components.
-
-MLMD protos lives in `pipelines/third_party/ml-metadata/ml_metadata/`, and the generated JS files live in `pipelines/frontend/src/third_party/mlmd`.
-
 ### Building generated metadata Protocol Buffers
 
 * `build:protos` - for compiling Protocol Buffer definitions

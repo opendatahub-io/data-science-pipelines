@@ -41,3 +41,6 @@ storybook-static
 
 # yarn.lock for license tool
 yarn.lock
+
+.env
+server/.env

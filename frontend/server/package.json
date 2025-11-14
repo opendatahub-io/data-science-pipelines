@@ -62,7 +62,6 @@
     "lint": "tslint -c tslint.json -p tsconfig.json",
     "start": "ts-node server.ts ../build",
     "start:dev": "ts-node-dev --respawn --transpile-only server.ts ../build",
-    "start:debug": "ts-node --inspect server.ts ../build",
     "test": "jest --runInBand",
     "test:coverage": "npm test -- --coverage",
     "test:ci": "npm run format:check && npm run lint && npm run test:coverage"

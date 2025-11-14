@@ -14,6 +14,12 @@
 import * as path from 'path';
 import { loadJSON } from './utils';
 import { loadArtifactsProxyConfig, ArtifactsProxyConfig } from './handlers/artifacts';
+
+import * as dotenv from 'dotenv';
+
+// Load .env file before anything else
+dotenv.config();
+
 export const BASEPATH = '/pipeline';
 export const apiVersion1 = 'v1beta1';
 export const apiVersion1Prefix = `apis/${apiVersion1}`;
