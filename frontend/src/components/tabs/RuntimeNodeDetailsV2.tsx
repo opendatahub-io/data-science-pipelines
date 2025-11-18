@@ -54,6 +54,7 @@ import InputOutputTab, {
 import { convertYamlToPlatformSpec, convertYamlToV2PipelineSpec } from 'src/lib/v2/WorkflowUtils';
 import { PlatformDeploymentConfig } from 'src/generated/pipeline_spec/pipeline_spec';
 import { getComponentSpec } from 'src/lib/v2/NodeUtils';
+import {V2beta1PipelineTaskDetail} from "../../apisv2beta1/run";
 
 export const LOGS_DETAILS = 'logs_details';
 export const LOGS_BANNER_MESSAGE = 'logs_banner_message';
@@ -82,7 +83,7 @@ interface RuntimeNodeDetailsV2Props {
   pipelineJobString?: string;
   runId?: string;
   element?: FlowElement<FlowElementDataBase> | null;
-  elementMlmdInfo?: NodeMlmdInfo | null;
+  elementTaskInfo?: V2beta1PipelineTaskDetail | null;
   namespace: string | undefined;
 }
 
@@ -92,7 +93,7 @@ export function RuntimeNodeDetailsV2({
   pipelineJobString,
   runId,
   element,
-  elementMlmdInfo,
+  elementTaskInfo,
   namespace,
 }: RuntimeNodeDetailsV2Props) {
   if (!element) {
@@ -106,7 +107,7 @@ export function RuntimeNodeDetailsV2({
           pipelineJobString={pipelineJobString}
           runId={runId}
           element={element}
-          execution={elementMlmdInfo?.execution}
+          execution={undefined} // TODO(HumairAK)
           layers={layers}
           namespace={namespace}
         ></TaskNodeDetail>
@@ -114,8 +115,8 @@ export function RuntimeNodeDetailsV2({
     } else if (NodeTypeNames.ARTIFACT === element.type) {
       return (
         <ArtifactNodeDetail
-          execution={elementMlmdInfo?.execution}
-          linkedArtifact={elementMlmdInfo?.linkedArtifact}
+          execution={undefined} // TODO(HumairAK)
+          linkedArtifact={undefined} // TODO(HumairAK)
           namespace={namespace}
         />
       );
@@ -123,7 +124,7 @@ export function RuntimeNodeDetailsV2({
       return (
         <SubDAGNodeDetail
           element={element}
-          execution={elementMlmdInfo?.execution}
+          execution={undefined} // TODO(HumairAK)
           layers={layers}
           onLayerChange={onLayerChange}
           namespace={namespace}

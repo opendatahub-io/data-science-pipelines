@@ -17,7 +17,7 @@ import { MouseEvent as ReactMouseEvent, useEffect, useState } from 'react';
 import { FlowElement } from 'react-flow-renderer';
 import { useQuery } from 'react-query';
 import { V2beta1Experiment } from 'src/apisv2beta1/experiment';
-import { V2beta1Run, V2beta1RuntimeState, V2beta1RunStorageState } from 'src/apisv2beta1/run';
+import {V2beta1Run, V2beta1RuntimeState, V2beta1RunStorageState, V2beta1PipelineTaskDetail} from 'src/apisv2beta1/run';
 import MD2Tabs from 'src/atoms/MD2Tabs';
 import DetailsTable from 'src/components/DetailsTable';
 import { FlowElementDataBase } from 'src/components/graph/Constants';
@@ -31,19 +31,15 @@ import { Apis } from 'src/lib/Apis';
 import Buttons, { ButtonKeys } from 'src/lib/Buttons';
 import { KeyValue } from 'src/lib/StaticGraphParser';
 import { hasFinishedV2, statusProtoMap } from 'src/lib/StatusUtils';
-import { formatDateString, getRunDurationV2 } from 'src/lib/Utils';
+import {formatDateString, getRunDurationV2, logger} from 'src/lib/Utils';
 import {
-  convertSubDagToRuntimeFlowElements,
-  getNodeMlmdInfo,
-  updateFlowElementsState,
+    convertSubDagToRuntimeFlowElements,
+    getNodeTaskInfo,
+    updateFlowElementsState,
 } from 'src/lib/v2/DynamicFlow';
 import { convertFlowElements } from 'src/lib/v2/StaticFlow';
 import * as WorkflowUtils from 'src/lib/v2/WorkflowUtils';
 import {
-  getArtifactsFromContext,
-  getEventsByExecutions,
-  getExecutionsFromContext,
-  getKfpV2RunContext,
   LinkedArtifact,
 } from 'src/mlmd/MlmdUtils';
 import { Artifact, Event, Execution } from 'src/third_party/mlmd';
@@ -52,16 +48,7 @@ import { RunDetailsProps } from './RunDetails';
 import { statusToIcon } from './StatusV2';
 import DagCanvas from './v2/DagCanvas';
 import { Edge, Node } from 'react-flow-renderer/dist/types';
-
-const QUERY_STALE_TIME = 10000; // 10000 milliseconds == 10 seconds.
-const QUERY_REFETCH_INTERNAL = 10000; // 10000 milliseconds == 10 seconds.
 const TAB_NAMES = ['Graph', 'Detail', 'Pipeline Spec'];
-
-interface MlmdPackage {
-  executions: Execution[];
-  artifacts: Artifact[];
-  events: Event[];
-}
 
 export interface NodeMlmdInfo {
   execution?: Execution;
@@ -86,7 +73,7 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
   const [layers, setLayers] = useState(['root']);
   const [selectedTab, setSelectedTab] = useState(0);
   const [selectedNode, setSelectedNode] = useState<FlowElement<FlowElementDataBase> | null>(null);
-  const [selectedNodeMlmdInfo, setSelectedNodeMlmdInfo] = useState<NodeMlmdInfo | null>(null);
+  const [selectedNodeTaskInfo, setSelectedNodeTaskInfo] = useState<V2beta1PipelineTaskDetail | null>(null);
   const [, forceUpdate] = useState();
   const [runFinished, setRunFinished] = useState(false);
 
@@ -98,54 +85,36 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
     return 'unknown';
   };
 
-  // Retrieves MLMD states from the MLMD store.
-  const { isSuccess, data } = useQuery<MlmdPackage, Error>(
-    ['mlmd_package', { id: runId }],
-    async () => {
-      const context = await getKfpV2RunContext(runId);
-      const executions = await getExecutionsFromContext(context);
-      const artifacts = await getArtifactsFromContext(context);
-      const events = await getEventsByExecutions(executions);
-
-      return { executions, artifacts, events };
-    },
-    {
-      staleTime: QUERY_STALE_TIME,
-      refetchInterval: QUERY_REFETCH_INTERNAL,
-      onError: error =>
-        props.updateBanner({
-          message: 'Cannot get MLMD objects from Metadata store.',
-          additionalInfo: error.message,
-          mode: 'error',
-        }),
-      onSuccess: () => props.updateBanner({}),
-    },
-  );
 
   const layerChange = (layers: string[]) => {
     setSelectedNode(null);
     setLayers(layers);
     setFlowElements(
-      convertSubDagToRuntimeFlowElements(pipelineSpec, layers, data ? data.executions : []),
+      convertSubDagToRuntimeFlowElements(pipelineSpec, layers, run),
     ); // render elements in the sub-layer.
   };
 
   let dynamicFlowElements = flowElements;
-  if (isSuccess && data) {
-    dynamicFlowElements = updateFlowElementsState(
-      layers,
-      flowElements,
-      data.executions,
-      data.events,
-      data.artifacts,
-    );
+  if (run) {
+    let scopePathToTasksMap = new Map<string, V2beta1PipelineTaskDetail>();
+    if (run.tasks && run.tasks.length > 0) {
+      for (const task of run.tasks) {
+        if (task.scope_path === undefined || task.scope_path === null || task.scope_path.length <= 0) {
+          logger.warn("scope_path is undefined, null, or empty for task: ", task);
+        } else {
+          const scopeKey = task.scope_path.join(".")
+          scopePathToTasksMap.set(scopeKey, task);
+        }
+      }
+    }
+    dynamicFlowElements = updateFlowElementsState(layers, flowElements, scopePathToTasksMap);
   }
 
   const onElementSelection = (event: ReactMouseEvent, element: Node | Edge) => {
     setSelectedNode(element);
-    if (data) {
-      setSelectedNodeMlmdInfo(
-        getNodeMlmdInfo(element, data.executions, data.events, data.artifacts),
+    if (run) {
+      setSelectedNodeTaskInfo(
+          getNodeTaskInfo(element, run),
       );
     }
   };
@@ -211,7 +180,7 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
                   pipelineJobString={pipelineJobStr}
                   runId={runId}
                   element={selectedNode}
-                  elementMlmdInfo={selectedNodeMlmdInfo}
+                  elementTaskInfo={selectedNodeTaskInfo}
                   namespace={namespace}
                 ></RuntimeNodeDetailsV2>
               </SidePanel>

@@ -14,102 +14,79 @@
  * limitations under the License.
  */
 
-import { ComponentMeta, ComponentStory } from '@storybook/react';
+import {ComponentMeta, ComponentStory} from '@storybook/react';
 import React from 'react';
-import ReactFlow, {
-  Background,
-  Controls,
-  MiniMap,
-  OnLoadParams,
-  ReactFlowProvider,
-} from 'react-flow-renderer';
+import ReactFlow, {Background, Controls, MiniMap, OnLoadParams, ReactFlowProvider,} from 'react-flow-renderer';
 import 'src/build/tailwind.output.css';
 import {
   ArtifactFlowElementData,
-  ExecutionFlowElementData,
+  ArtifactIconState,
   FlowElementDataBase,
+  TaskFlowElementData,
 } from 'src/components/graph/Constants';
-import { NodeTypeNames, NODE_TYPES } from 'src/lib/v2/StaticFlow';
-import { Artifact, Execution } from 'src/third_party/mlmd';
+import {NODE_TYPES, NodeTypeNames} from 'src/lib/v2/StaticFlow';
+import {PipelineTaskDetailTaskState} from "../../apisv2beta1/run";
 
 const elements = [
   {
     id: '2',
     type: NodeTypeNames.EXECUTION,
     position: { x: 100, y: 100 },
-    data: { label: 'Default execution node' } as ExecutionFlowElementData,
+    data: { label: 'Default task node' } as TaskFlowElementData,
   },
   {
     id: '3',
     type: NodeTypeNames.EXECUTION,
     position: { x: 100, y: 200 },
     data: {
-      label: 'UNKNOWN execution node',
-      state: Execution.State.UNKNOWN,
-    } as ExecutionFlowElementData,
-  },
-  {
-    id: '4',
-    type: NodeTypeNames.EXECUTION,
-    position: { x: 100, y: 300 },
-    data: {
-      label: 'NEW execution node',
-      state: Execution.State.NEW,
-    } as ExecutionFlowElementData,
+      label: 'UNKNOWN task node',
+      state: PipelineTaskDetailTaskState.RUNTIMESTATEUNSPECIFIED,
+    } as TaskFlowElementData,
   },
   {
     id: '5',
     type: NodeTypeNames.EXECUTION,
     position: { x: 100, y: 400 },
     data: {
-      label: 'RUNNING execution node',
-      state: Execution.State.RUNNING,
-    } as ExecutionFlowElementData,
+      label: 'RUNNING task node',
+      state: PipelineTaskDetailTaskState.RUNNING,
+    } as TaskFlowElementData,
   },
   {
     id: '6',
     type: NodeTypeNames.EXECUTION,
     position: { x: 100, y: 500 },
     data: {
-      label: 'COMPLETE execution node',
-      state: Execution.State.COMPLETE,
-    } as ExecutionFlowElementData,
+      label: 'COMPLETE task node',
+      state: PipelineTaskDetailTaskState.SUCCEEDED,
+    } as TaskFlowElementData,
   },
   {
     id: '7',
     type: NodeTypeNames.EXECUTION,
     position: { x: 100, y: 600 },
     data: {
-      label: 'CACHED execution node',
-      state: Execution.State.CACHED,
-    } as ExecutionFlowElementData,
-  },
-  {
-    id: '8',
-    type: NodeTypeNames.EXECUTION,
-    position: { x: 100, y: 700 },
-    data: {
-      label: 'CANCELED execution node',
-      state: Execution.State.CANCELED,
-    } as ExecutionFlowElementData,
+      label: 'CACHED task node',
+      state: PipelineTaskDetailTaskState.CACHED,
+    } as TaskFlowElementData,
   },
   {
     id: '9',
     type: NodeTypeNames.EXECUTION,
     position: { x: 100, y: 800 },
     data: {
-      label: 'FAILED execution node',
-      state: Execution.State.FAILED,
-    } as ExecutionFlowElementData,
+      label: 'FAILED task node',
+      state: PipelineTaskDetailTaskState.FAILED,
+    } as TaskFlowElementData,
   },
   {
     id: '9',
     type: NodeTypeNames.EXECUTION,
     position: { x: 100, y: 900 },
     data: {
-      label: 'invalid execution node',
-      state: 8 as Execution.State,
-    } as ExecutionFlowElementData,
+      label: 'invalid task node',
+      state: 8 as PipelineTaskDetailTaskState,
+    } as TaskFlowElementData,
   },
   {
     id: '101',
@@ -117,7 +94,7 @@ const elements = [
     position: { x: 400, y: 100 },
     data: {
       label: 'DEFAULT artifact node',
-      state: Artifact.State.UNKNOWN,
+      state: ArtifactIconState.UNKNOWN,
     } as ArtifactFlowElementData,
   },
   {
@@ -126,7 +103,7 @@ const elements = [
     position: { x: 400, y: 200 },
     data: {
       label: 'LIVE artifact node',
-      state: Artifact.State.LIVE,
+      state: ArtifactIconState.LIVE,
     } as ArtifactFlowElementData,
   },
   {

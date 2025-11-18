@@ -489,6 +489,7 @@ message PipelineTaskDetail {
       string artifact_key = 3;
       IOProducer producer = 4;
     }
+
     // For Loops parameters are filled with resolved
     // parameterIterator.items
     repeated IOParameter parameters = 1;

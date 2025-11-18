@@ -18,7 +18,7 @@ import FolderIcon from '@material-ui/icons/Folder';
 import React from 'react';
 import { Handle, Position } from 'react-flow-renderer';
 import { Artifact } from 'src/third_party/mlmd';
-import { ArtifactFlowElementData } from './Constants';
+import {ArtifactFlowElementData, ArtifactIconState} from './Constants';
 
 interface ArtifactNodeProps {
   id: string;
@@ -63,12 +63,12 @@ function ArtifactNode({ id, data }: ArtifactNodeProps) {
 
 export default ArtifactNode;
 
-function getIcon(state: Artifact.State | undefined) {
+function getIcon(state: ArtifactIconState | undefined) {
   if (state === undefined) {
     return getIconWrapper(<FolderIcon className='text-mui-grey-300-dark' />);
   }
   switch (state) {
-    case Artifact.State.LIVE:
+    case ArtifactIconState.LIVE:
       return getIconWrapper(<FolderIcon className='text-mui-yellow-800' />);
     default:
       return getIconWrapper(<FolderIcon className='text-mui-grey-300-dark' />);

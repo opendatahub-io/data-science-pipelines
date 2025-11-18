@@ -62,8 +62,8 @@ export type PipelineFlowElement = FlowElement<FlowElementDataBase>;
  * @returns Graph visualization as Reactflow elements (nodes and edges)
  */
 export function convertFlowElements(spec: PipelineSpec): Elements {
-  // Find all tasks      --> nodes
-  // Find all depdencies --> edges
+  // Find all tasks --> nodes
+  // Find all dependencies --> edges
   const root = spec.root;
   if (!root) {
     throw new Error('root not found in pipeline spec.');
@@ -212,7 +212,7 @@ function addArtifactNodes(
     for (let artifactKey in artifacts) {
       const node: Node<FlowElementDataBase> = {
         id: getArtifactNodeKey(taskKey, artifactKey),
-        data: { label: artifactKey },
+        data: { label: artifactKey, task: taskKey },
         position: { x: 300, y: 200 },
         type: NodeTypeNames.ARTIFACT,
       };
@@ -456,7 +456,7 @@ function getComponent(
   return { componentRefName, componentSpec };
 }
 
-const TASK_NODE_KEY_PREFIX = 'task.';
+export const TASK_NODE_KEY_PREFIX = 'task.';
 export function getTaskNodeKey(taskKey: string) {
   return TASK_NODE_KEY_PREFIX + taskKey;
 }

@@ -25,12 +25,13 @@ import { Handle, Position } from 'react-flow-renderer';
 import StopCircle from 'src/icons/StopCircle';
 import { Execution } from 'src/third_party/mlmd';
 import { classes } from 'typestyle';
-import { ExecutionFlowElementData } from './Constants';
+import { TaskFlowElementData } from './Constants';
 import MoreHorizIcon from '@material-ui/icons/MoreHoriz';
+import {PipelineTaskDetailTaskState} from "../../apisv2beta1/run";
 
 export interface ExecutionNodeProps {
   id: string;
-  data: ExecutionFlowElementData;
+  data: TaskFlowElementData;
   // selected: boolean;
   // status: ExecutionNodeStatus;
 }
@@ -80,50 +81,39 @@ function ExecutionNode({ id, data }: ExecutionNodeProps) {
 }
 export default ExecutionNode;
 
-export function getExecutionIcon(state: Execution.State | undefined) {
+export function getExecutionIcon(state: PipelineTaskDetailTaskState | undefined) {
   if (state === undefined) {
     return <ListAltIcon className='text-mui-grey-500' />;
   }
   return <ListAltIcon className='text-mui-blue-600' />;
 }
 
-export function getIcon(state: Execution.State | undefined) {
+export function getIcon(state: PipelineTaskDetailTaskState | undefined) {
   if (state === undefined) {
     return null;
   }
   switch (state) {
-    case Execution.State.UNKNOWN:
+    case PipelineTaskDetailTaskState.RUNTIMESTATEUNSPECIFIED:
       return getStateIconWrapper(
         <MoreHorizIcon className='text-mui-grey-600' />,
         'bg-mui-grey-200',
       );
-
-    case Execution.State.NEW:
-      return getStateIconWrapper(
-        <PowerSettingsNewIcon className='text-mui-blue-600' />,
-        'bg-mui-blue-50',
-      );
-    case Execution.State.RUNNING:
+    case PipelineTaskDetailTaskState.RUNNING:
       return getStateIconWrapper(<RefreshIcon className='text-mui-green-600' />, 'bg-mui-green-50');
-    case Execution.State.CACHED:
+    case PipelineTaskDetailTaskState.CACHED:
       return getStateIconWrapper(
         <CloudDownloadIcon className='text-mui-green-600' />,
         'bg-mui-green-50',
       );
-    case Execution.State.FAILED:
+    case PipelineTaskDetailTaskState.FAILED:
       return getStateIconWrapper(<ErrorIcon className='text-mui-red-600' />, 'bg-mui-red-50');
-    case Execution.State.CANCELED:
-      return getStateIconWrapper(
-        <StopCircle colorClass={'text-mui-grey-600'} />,
-        'bg-mui-grey-200',
-      );
-    case Execution.State.COMPLETE:
+    case PipelineTaskDetailTaskState.SUCCEEDED:
       return getStateIconWrapper(
         <CheckCircleIcon className='text-mui-green-600 bla' />,
         'bg-mui-green-50',
       );
     default:
-      console.error('Unknown exeuction state: ' + state);
+      console.error('Unknown task state: ' + state);
       return getStateIconWrapper(<RemoveCircleOutlineIcon className='text-white' />, 'bg-black');
   }
 }
@@ -140,11 +130,3 @@ function getStateIconWrapper(element: ReactElement, backgroundClasses: string) {
     </div>
   );
 }
-
-// The following code can be used for `canceling state`
-// return (
-//   <div className='px-2 h-full self-stretch flex flex-col justify-center rounded-r-lg bg-mui-lightblue-100'>
-//     <CircularProgress size={24} />
-//     {/* <SyncDisabledIcon className=' text-mui-organge-300' /> */}
-//   </div>
-// );
