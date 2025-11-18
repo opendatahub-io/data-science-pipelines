@@ -110,9 +110,10 @@ export function convertSubDagToFlowElements(spec: PipelineSpec, layers: string[]
  * Build single layer graph of a pipeline definition in Reactflow.
  * @param pipelineSpec Full pipeline definition
  * @param componentSpec Designated layer of a DAG/sub-DAG as part of pipelineSpec
+ * @param iterationIndex Optional iteration index of the component in the pipeline
  * @returns Graph visualization as Reactflow elements (nodes and edges)
  */
-export function buildDag(pipelineSpec: PipelineSpec, componentSpec: ComponentSpec): Elements {
+export function buildDag(pipelineSpec: PipelineSpec, componentSpec: ComponentSpec, iterationIndex?: number): Elements {
   const dag = componentSpec.dag;
   if (!dag) {
     throw new Error('dag not found in component spec.');
@@ -123,23 +124,24 @@ export function buildDag(pipelineSpec: PipelineSpec, componentSpec: ComponentSpe
 
   const tasksMap = dag.tasks || {};
 
-  addTaskNodes(tasksMap, componentsMap, flowGraph);
-  addInputArtifactNodes(componentSpec.inputDefinitions?.artifacts, flowGraph);
-  addArtifactNodes(tasksMap, componentsMap, flowGraph);
+  addTaskNodes(tasksMap, componentsMap, flowGraph, iterationIndex);
+  addInputArtifactNodes(componentSpec.inputDefinitions?.artifacts, flowGraph, iterationIndex);
+  addArtifactNodes(tasksMap, componentsMap, flowGraph, iterationIndex);
 
-  addTaskToArtifactEdges(tasksMap, componentsMap, flowGraph);
-  addArtifactToTaskEdges(tasksMap, flowGraph);
-  addTaskToTaskEdges(tasksMap, flowGraph);
+  addTaskToArtifactEdges(tasksMap, componentsMap, flowGraph, iterationIndex);
+  addArtifactToTaskEdges(tasksMap, flowGraph, iterationIndex);
+  addTaskToTaskEdges(tasksMap, flowGraph, iterationIndex);
 
   return buildGraphLayout(flowGraph);
 }
 
-function addTaskNodes(
+export function addTaskNodes(
   tasksMap: {
     [key: string]: PipelineTaskSpec;
   },
   componentsMap: { [key: string]: ComponentSpec },
   flowGraph: PipelineFlowElement[],
+  iterationIndex: number | undefined = undefined,
 ) {
   // Add tasks as nodes to the Reactflow graph.
   for (let taskKey in tasksMap) {
@@ -154,16 +156,16 @@ function addTaskNodes(
     // Component can be either an executor or subDAG,
     // If this is executor, add the node directly.
     // If subDAG, add a node which can represent expandable graph.
-    const name = taskSpec.taskInfo?.name;
-    if (!name) {
+    const displayName = taskSpec.taskInfo?.name;
+    if (!displayName) {
       console.warn("Task name doesn't exist.");
       continue;
     }
     if (componentSpec.executorLabel && componentSpec.executorLabel.length > 0) {
-      // executor label exists means this is a single execution node.
+      // Executor label exists means this is a single execution node.
       const node: Node<FlowElementDataBase> = {
-        id: getTaskNodeKey(taskKey), // Assume that key of `tasks` in `dag` is unique.
-        data: { label: name, taskType: TaskType.EXECUTOR },
+        id: getTaskNodeKey(taskKey, iterationIndex), // Assume that key of `tasks` in `dag` is unique.
+        data: { label: displayName, taskType: TaskType.EXECUTOR, taskKey: taskKey, iterationIndex: iterationIndex},
         position: { x: 100, y: 200 },
         type: NodeTypeNames.EXECUTION,
       };
@@ -171,8 +173,8 @@ function addTaskNodes(
     } else if (componentSpec.dag) {
       // dag exists means this is a sub-DAG instance.
       const node: Node<FlowElementDataBase> = {
-        id: getTaskNodeKey(taskKey),
-        data: { label: name, taskType: TaskType.DAG },
+        id: getTaskNodeKey(taskKey, iterationIndex),
+        data: { label: displayName, taskType: TaskType.DAG, taskKey: taskKey, iterationIndex: iterationIndex},
         position: { x: 100, y: 200 },
         type: NodeTypeNames.SUB_DAG,
       };
@@ -189,6 +191,7 @@ function addArtifactNodes(
   },
   componentsMap: { [key: string]: ComponentSpec },
   flowGraph: PipelineFlowElement[],
+  iterationIndex?: number,
 ) {
   for (let taskKey in tasksMap) {
     const taskSpec = tasksMap[taskKey];
@@ -211,7 +214,7 @@ function addArtifactNodes(
     const artifacts = outputDefinitions.artifacts;
     for (let artifactKey in artifacts) {
       const node: Node<FlowElementDataBase> = {
-        id: getArtifactNodeKey(taskKey, artifactKey),
+        id: getArtifactNodeKey(taskKey, artifactKey, iterationIndex),
         data: { label: artifactKey, task: taskKey },
         position: { x: 300, y: 200 },
         type: NodeTypeNames.ARTIFACT,
@@ -231,6 +234,7 @@ function addArtifactNodes(
     }
   }
 }
+
 function addInputArtifactNodes(
   artifactMap:
     | {
@@ -238,12 +242,13 @@ function addInputArtifactNodes(
       }
     | undefined,
   flowGraph: PipelineFlowElement[],
+  iterationIndex?: number,
 ) {
   for (let artifactKey in artifactMap) {
     const node: Node<FlowElementDataBase> = {
       // Because Artifact from outside the subDAG doesn't have execution within subDAG,
       // leave the taskName as empty string so the id pattern is `task..${artifactKey}`
-      id: getArtifactNodeKey('', artifactKey),
+      id: getArtifactNodeKey('', artifactKey, iterationIndex),
       data: { label: artifactKey },
       position: { x: 300, y: 200 },
       type: NodeTypeNames.ARTIFACT,
@@ -258,6 +263,7 @@ function addTaskToArtifactEdges(
   },
   componentsMap: { [key: string]: ComponentSpec },
   flowGraph: PipelineFlowElement[],
+  iterationIndex?: number,
 ) {
   // Find output and input artifacts --> edges
   // Task to Artifact: components -> key/value -> outputDefinitions -> artifacts -> key
@@ -277,9 +283,9 @@ function addTaskToArtifactEdges(
     const artifacts = outputDefinitions.artifacts;
     for (let artifactKey in artifacts) {
       const edge: Edge = {
-        id: getTaskToArtifactEdgeKey(taskKey, artifactKey),
-        source: getTaskNodeKey(taskKey),
-        target: getArtifactNodeKey(taskKey, artifactKey),
+        id: getTaskToArtifactEdgeKey(taskKey, artifactKey, iterationIndex),
+        source: getTaskNodeKey(taskKey, iterationIndex),
+        target: getArtifactNodeKey(taskKey, artifactKey, iterationIndex),
         arrowHeadType: ArrowHeadType.ArrowClosed,
       };
       flowGraph.push(edge);
@@ -292,6 +298,7 @@ function addArtifactToTaskEdges(
     [key: string]: PipelineTaskSpec;
   },
   flowGraph: PipelineFlowElement[],
+  iterationIndex?: number,
 ) {
   // Artifact to Task: root -> dag -> tasks -> key/value -> inputs -> artifacts -> key/value
   //                   -> taskOutputArtifact -> outputArtifactKey+producerTask
@@ -310,17 +317,17 @@ function addArtifactToTaskEdges(
         const outputArtifactKey = taskOutputArtifact.outputArtifactKey;
         const producerTask = taskOutputArtifact.producerTask;
         const edge: Edge = {
-          id: getArtifactToTaskEdgeKey(outputArtifactKey, inputTaskKey),
-          source: getArtifactNodeKey(producerTask, outputArtifactKey),
-          target: getTaskNodeKey(inputTaskKey),
+          id: getArtifactToTaskEdgeKey(outputArtifactKey, inputTaskKey, iterationIndex),
+          source: getArtifactNodeKey(producerTask, outputArtifactKey, iterationIndex),
+          target: getTaskNodeKey(inputTaskKey, iterationIndex),
           arrowHeadType: ArrowHeadType.ArrowClosed,
         };
         flowGraph.push(edge);
       } else if (componentInputArtifact) {
         const edge: Edge = {
-          id: getArtifactToTaskEdgeKey(componentInputArtifact, inputTaskKey),
-          source: getArtifactNodeKey('', componentInputArtifact),
-          target: getTaskNodeKey(inputTaskKey),
+          id: getArtifactToTaskEdgeKey(componentInputArtifact, inputTaskKey, iterationIndex),
+          source: getArtifactNodeKey('', componentInputArtifact, iterationIndex),
+          target: getTaskNodeKey(inputTaskKey, iterationIndex),
           arrowHeadType: ArrowHeadType.ArrowClosed,
         };
         flowGraph.push(edge);
@@ -334,6 +341,7 @@ function addTaskToTaskEdges(
     [key: string]: PipelineTaskSpec;
   },
   flowGraph: PipelineFlowElement[],
+  iterationIndex?: number,
 ) {
   const edgeKeys = new Map<String, Edge>();
   // Input Parameters: inputs => parameters => taskOutputParameter => producerTask
@@ -351,7 +359,7 @@ function addTaskToTaskEdges(
       const taskOutputParameter = paramSpec.taskOutputParameter;
       if (taskOutputParameter) {
         const producerTask = taskOutputParameter.producerTask;
-        const edgeId = getTaskToTaskEdgeKey(producerTask, inputTaskKey);
+        const edgeId = getTaskToTaskEdgeKey(producerTask, inputTaskKey, iterationIndex);
         if (edgeKeys.has(edgeId)) {
           continue;
         }
@@ -359,8 +367,8 @@ function addTaskToTaskEdges(
         const edge: Edge = {
           // id is combination of producerTask+inputTask
           id: edgeId,
-          source: getTaskNodeKey(producerTask),
-          target: getTaskNodeKey(inputTaskKey),
+          source: getTaskNodeKey(producerTask, iterationIndex),
+          target: getTaskNodeKey(inputTaskKey, iterationIndex),
           // TODO(zijianjoy): This node styling is temporarily.
           arrowHeadType: ArrowHeadType.ArrowClosed,
         };
@@ -379,7 +387,7 @@ function addTaskToTaskEdges(
       continue;
     }
     dependentTasks.forEach(upStreamTaskName => {
-      const edgeId = getTaskToTaskEdgeKey(upStreamTaskName, inputTaskKey);
+      const edgeId = getTaskToTaskEdgeKey(upStreamTaskName, inputTaskKey, iterationIndex);
       if (edgeKeys.has(edgeId)) {
         return;
       }
@@ -387,8 +395,8 @@ function addTaskToTaskEdges(
       const edge: Edge = {
         // id is combination of producerTask+inputTask
         id: edgeId,
-        source: getTaskNodeKey(upStreamTaskName),
-        target: getTaskNodeKey(inputTaskKey),
+        source: getTaskNodeKey(upStreamTaskName, iterationIndex),
+        target: getTaskNodeKey(inputTaskKey, iterationIndex),
         // TODO(zijianjoy): This node styling is temporarily.
         arrowHeadType: ArrowHeadType.ArrowClosed,
       };
@@ -457,7 +465,10 @@ function getComponent(
 }
 
 export const TASK_NODE_KEY_PREFIX = 'task.';
-export function getTaskNodeKey(taskKey: string) {
+export function getTaskNodeKey(taskKey: string, iterationIndex?: number) {
+  if (iterationIndex !== undefined) {
+    return TASK_NODE_KEY_PREFIX + taskKey + '.' + iterationIndex;
+  }
   return TASK_NODE_KEY_PREFIX + taskKey;
 }
 
@@ -468,19 +479,19 @@ export function getTaskKeyFromNodeKey(nodeKey: string) {
   return nodeKey.substring(TASK_NODE_KEY_PREFIX.length);
 }
 
-export function getIterationIdFromNodeKey(nodeKey: string) {
-  return nodeKey.split('.')[2];
-}
-
 export function isTaskNode(nodeKey: string) {
   return nodeKey.startsWith(TASK_NODE_KEY_PREFIX);
 }
 
 const ARTIFACT_NODE_KEY_PREFIX = 'artifact.';
-export function getArtifactNodeKey(taskKey: string, artifactKey: string): string {
+export function getArtifactNodeKey(taskKey: string, artifactKey: string, iterationIndex?: number): string {
   // id is in pattern artifact.producerTaskKey.outputArtifactKey
   // Because task name and artifact name cannot contain dot in python.
-  return ARTIFACT_NODE_KEY_PREFIX + taskKey + '.' + artifactKey;
+  let nodeKey = ARTIFACT_NODE_KEY_PREFIX + taskKey + '.' + artifactKey
+  if (iterationIndex !== undefined) {
+    return nodeKey + '.' + iterationIndex;
+  }
+  return nodeKey;
 }
 
 export function isArtifactNode(nodeKey: string) {
@@ -502,17 +513,29 @@ export function getKeysFromArtifactNodeKey(nodeKey: string) {
   return [sections[1], sections[2]];
 }
 
-function getTaskToArtifactEdgeKey(taskKey: string, artifactKey: string): string {
+function getTaskToArtifactEdgeKey(taskKey: string, artifactKey: string, iterationIndex?: number): string {
   // id is in pattern outedge.producerTaskKey.outputArtifactKey
-  return 'outedge.' + taskKey + '.' + artifactKey;
+  let edgeID = 'outedge.' + taskKey + '.' + artifactKey;
+  if (iterationIndex !== undefined) {
+    return edgeID + '.' + iterationIndex;
+  }
+  return edgeID;
 }
 
-function getArtifactToTaskEdgeKey(outputArtifactKey: string, inputTaskKey: string): string {
+function getArtifactToTaskEdgeKey(outputArtifactKey: string, inputTaskKey: string, iterationIndex?: number): string {
   // id is in pattern of inedge.artifactKey.inputTaskKey
-  return 'inedge.' + outputArtifactKey + '.' + inputTaskKey;
+  let edgeID = 'inedge.' + outputArtifactKey + '.' + inputTaskKey;
+  if (iterationIndex !== undefined) {
+    return edgeID + '.' + iterationIndex;
+  }
+  return edgeID;
 }
 
-function getTaskToTaskEdgeKey(producerTask: string, inputTaskKey: string) {
+function getTaskToTaskEdgeKey(producerTask: string, inputTaskKey: string, iterationIndex?: number) {
   // id is in pattern of paramedge.producerTaskKey.inputTaskKey
-  return 'paramedge.' + producerTask + '.' + inputTaskKey;
+  let edgeID = 'paramedge.' + producerTask + '.' + inputTaskKey;
+  if (iterationIndex !== undefined) {
+    return edgeID + '.' + iterationIndex;
+  }
+  return edgeID;
 }

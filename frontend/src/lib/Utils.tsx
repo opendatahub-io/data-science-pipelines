@@ -29,7 +29,7 @@ import { Apis, ListRequest } from './Apis';
 import { hasFinished, hasFinishedV2, NodePhase } from './StatusUtils';
 import { StorageService } from './WorkflowParser';
 import { ApiParameter } from 'src/apis/pipeline';
-import { V2beta1Run } from 'src/apisv2beta1/run';
+import {V2beta1PipelineTaskDetail, V2beta1Run} from 'src/apisv2beta1/run';
 
 export const logger = {
   error: (...args: any[]) => {
@@ -525,4 +525,19 @@ export function mergeApiParametersByNames(
       value: extraParamsDict[param.name],
     };
   });
+}
+
+export function createScopeToTaskMap(run: V2beta1Run): Map<string, V2beta1PipelineTaskDetail> {
+  let scopePathToTasksMap = new Map<string, V2beta1PipelineTaskDetail>();
+  if (run.tasks && run.tasks.length > 0) {
+    for (const task of run.tasks) {
+      if (task.scope_path === undefined || task.scope_path === null || task.scope_path.length <= 0) {
+        logger.warn("scope_path is undefined, null, or empty for task: ", task);
+      } else {
+        const scopeKey = task.scope_path.join(".")
+        scopePathToTasksMap.set(scopeKey, task);
+      }
+    }
+  }
+  return scopePathToTasksMap;
 }

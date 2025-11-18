@@ -13,36 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { Elements, FlowElement, Node } from 'react-flow-renderer';
+import {Elements, FlowElement, Node} from 'react-flow-renderer';
 import {
   ArtifactFlowElementData,
-  TaskFlowElementData,
-  FlowElementDataBase,
   ArtifactIconState,
+  FlowElementDataBase,
+  TaskFlowElementData,
+  SubDagFlowElementData,
 } from 'src/components/graph/Constants';
-import { PipelineSpec, PipelineTaskSpec } from 'src/generated/pipeline_spec';
+import {ComponentSpec, PipelineSpec, PipelineTaskSpec} from 'src/generated/pipeline_spec';
 import {
   buildDag,
   buildGraphLayout,
-  getArtifactNodeKey,
-  getIterationIdFromNodeKey,
-  getTaskKeyFromNodeKey,
   getTaskNodeKey,
+  addTaskNodes,
   NodeTypeNames,
-  PipelineFlowElement, TASK_NODE_KEY_PREFIX,
+  PipelineFlowElement,
+  TASK_NODE_KEY_PREFIX,
   TaskType,
 } from 'src/lib/v2/StaticFlow';
-import { getArtifactNameFromEvent, LinkedArtifact, ExecutionHelpers } from 'src/mlmd/MlmdUtils';
-import { NodeMlmdInfo } from 'src/pages/RunDetailsV2';
-import { Artifact, Event, Execution, Value } from 'src/third_party/mlmd';
-import {
-  PipelineTaskDetailTaskPodType,
-  V2beta1Artifact,
-  V2beta1PipelineTaskDetail,
-  V2beta1Run
-} from "../../apisv2beta1/run";
-import {logger} from "../Utils";
-import ArtifactsIcon from "@material-ui/icons/BubbleChart";
+import {Execution, Value} from 'src/third_party/mlmd';
+import {PipelineTaskDetailTaskType, V2beta1PipelineTaskDetail, V2beta1Run} from "../../apisv2beta1/run";
+import {logger, createScopeToTaskMap} from "../Utils";
 
 export const TASK_NAME_KEY = 'task_name';
 export const PARENT_DAG_ID_KEY = 'parent_dag_id';
@@ -55,19 +47,23 @@ export function convertSubDagToRuntimeFlowElements(
   run: V2beta1Run,
 ): Elements {
   let componentSpec = spec.root;
+
   if (!componentSpec) {
     throw new Error('root not found in pipeline spec.');
   }
 
+  let scopePathToTasksMap = createScopeToTaskMap(run)
+  const scopeKey = layers.join(".")
+  const scopeTask = scopePathToTasksMap.get(scopeKey)
+  if (!scopeTask) {
+    throw new Error("Scope task not found for scope key: " + scopeKey);
+  }
+  let isParallelForRootDag = scopeTask?.type === PipelineTaskDetailTaskType.LOOP;
 
-  let isParallelForRootDag = false;
   const componentsMap = spec.components;
   for (let index = 1; index < layers.length; index++) {
-    // isParallelForRootDag = canvasIsParallelForDag(executionLayers, layers);
-
     if (layers[index].indexOf('.') <= 0) {
       // Regular layer. This layer is not an iteration of ParallelFor SubDAG.
-
       const tasksMap = componentSpec.dag?.tasks || {};
       const pipelineTaskSpec: PipelineTaskSpec = tasksMap[layers[index]];
       const componetRef = pipelineTaskSpec.componentRef;
@@ -86,94 +82,61 @@ export function convertSubDagToRuntimeFlowElements(
   }
 
   if (isParallelForRootDag) {
-    // return buildParallelForDag(executionLayers[executionLayers.length - 1]);
+    const componentsMap = spec.components || {};
+    if (!componentSpec.dag) {
+      throw new Error("ParallelFor dag not found in pipeline spec.");
+    }
+    const tasksMap = componentSpec.dag.tasks || {};
+    const iterationCountStr = scopeTask.type_attributes?.iteration_count;
+    if (iterationCountStr === undefined || !iterationCountStr) {
+      throw new Error("iteration count does not exist for parallelFor Execution");
+    }
+    // But we do a safe conversion back to number here.
+    const iterationCount = Number(iterationCountStr);
+    if (Number.isNaN(iterationCount)) {
+      throw new Error("iteration count was not a number");
+    }
+
     // draw subdag nodes equal to the number of iteration_count
+    let flowGraph: FlowElement[] = [];
+    for (let index = 0; index < iterationCount; index++) {
+      flowGraph = [...buildDag(spec, componentSpec, index), ...flowGraph];
+    }
+    return buildGraphLayout(flowGraph);
   }
   return buildDag(spec, componentSpec);
 }
-function canvasIsParallelForDag(executionLayers: Execution[], layers: string[]) {
-  return (
-    executionLayers.length === layers.length &&
-    executionLayers[executionLayers.length - 1].getCustomPropertiesMap().has(ITERATION_COUNT_KEY)
-  );
-}
 
-function getExecutionLayers(layers: string[], executions: Execution[]) {
-  let exectuionLayers: Execution[] = [];
-  if (layers.length <= 0) {
-    return exectuionLayers;
-  }
-  const taskNameToExecution = getTaskNameToExecution(executions);
+function addIterationNodes(
+  dagTask: V2beta1PipelineTaskDetail,
+  flowGraph: PipelineFlowElement[],
+  ) {
 
-  // Get the root execution which doesn't have a task_name.
-  const rootExecutions = taskNameToExecution.get('');
-  if (!rootExecutions) {
-    return exectuionLayers;
-  }
-  exectuionLayers.push(rootExecutions[0]);
-
-  for (let index = 1; index < layers.length; index++) {
-    const parentExecution = exectuionLayers[index - 1];
-    const taskName = layers[index];
-
-    let executions = taskNameToExecution.get(taskName) || [];
-    // If this is an iteration of parrallelFor, remove the iteration index from layer name.
-    if (taskName.indexOf('.') > 0) {
-      const parallelForName = taskName.split('.')[0];
-      executions = taskNameToExecution.get(parallelForName) || [];
-    }
-
-    executions = executions.filter(exec => {
-      const customProperties = exec.getCustomPropertiesMap();
-      if (!customProperties.has(PARENT_DAG_ID_KEY)) {
-        return false;
-      }
-      const parentDagId = customProperties.get(PARENT_DAG_ID_KEY)?.getIntValue();
-      if (parentExecution.getId() !== parentDagId) {
-        return false;
-      }
-      if (taskName.indexOf('.') > 0) {
-        const iterationIndex = Number(taskName.split('.')[1]);
-        const executionIterationIndex = customProperties.get(ITERATION_INDEX_KEY)?.getIntValue();
-        return iterationIndex === executionIterationIndex;
-      }
-      return true;
-    });
-    if (executions.length <= 0) {
-      break;
-    }
-
-    exectuionLayers.push(executions[0]);
-  }
-  return exectuionLayers;
-}
-
-function buildParallelForDag(rootDagExecution: Execution): Elements {
-  let flowGraph: FlowElement[] = [];
-  addIterationNodes(rootDagExecution, flowGraph);
-  return buildGraphLayout(flowGraph);
-}
-
-function addIterationNodes(rootDagExecution: Execution, flowGraph: PipelineFlowElement[]) {
-  const taskName = rootDagExecution.getCustomPropertiesMap().get(TASK_NAME_KEY);
-  const iterationCount = rootDagExecution.getCustomPropertiesMap().get(ITERATION_COUNT_KEY);
-  if (taskName === undefined || !taskName.getStringValue()) {
+  const taskName = dagTask.name;
+  const iterationCountStr = dagTask.type_attributes?.iteration_count;
+  if (taskName === undefined || !taskName) {
     console.warn("Task name for the parallelFor Execution doesn't exist.");
     return;
   }
-  if (iterationCount === undefined || !iterationCount.getIntValue()) {
+  if (iterationCountStr === undefined || !iterationCountStr) {
     console.warn("Iteration Count for the parallelFor Execution doesn't exist.");
     return;
   }
 
-  const taskNameStr = taskName.getStringValue();
-  const iterationCountInt = iterationCount.getIntValue();
-  for (let index = 0; index < iterationCountInt; index++) {
-    const iterationNodeName = `${taskNameStr}.${index}`;
+  // Unclear why the proto generated code converted the int64 to a string
+  // But we do a safe conversion back to number here.
+  const iterationCount = Number(iterationCountStr);
+  if (Number.isNaN(iterationCount)) {
+    throw new Error("iteration count was not a number");
+  }
+
+  for (let index = 0; index < iterationCount; index++) {
+    // We have to add all tasks and their edges here for this dag for each iteration
+    const iterationNodeName = `${taskName}.${index}`;
     // One iteration is a sub-DAG instance.
     const node: Node<FlowElementDataBase> = {
       id: getTaskNodeKey(iterationNodeName),
-      data: { label: iterationNodeName, taskType: TaskType.DAG },
+      data: { label: iterationNodeName, taskType: TaskType.DAG},
       position: { x: 100, y: 200 },
       type: NodeTypeNames.SUB_DAG,
     };
@@ -222,60 +185,19 @@ export function updateFlowElementsState(
   elems: PipelineFlowElement[],
   scopePathToTasksMap: Map<string, V2beta1PipelineTaskDetail>,
 ): PipelineFlowElement[] {
-  // const executionLayers = getExecutionLayers(layers, executions);
-  // if (executionLayers.length < layers.length) {
-  //   // This Sub DAG is not executed yet. There is no runtime information to update.
-  //   return elems;
-  // }
-  //
-  // const taskNameToExecution = getTaskNameToExecution(executions);
-  // const executionIdToExectuion = getExectuionIdToExecution(executions);
-  // const artifactIdToArtifact = getArtifactIdToArtifact(artifacts);
-  // const artifactNodeKeyToArtifact = getArtifactNodeKeyToArtifact(
-  //   events,
-  //   executionIdToExectuion,
-  //   artifactIdToArtifact,
-  // );
-
   let flowGraph: PipelineFlowElement[] = [];
 
-  // if (canvasIsParallelForDag(executionLayers, layers)) {
-  //   const parallelForDagExecution = executionLayers[executionLayers.length - 1];
-  //   const executions = taskNameToExecution.get(
-  //     parallelForDagExecution
-  //       .getCustomPropertiesMap()
-  //       .get(TASK_NAME_KEY)
-  //       ?.getStringValue() || parallelForDagExecution.getName(),
-  //   );
-  //
-  //   for (let elem of elems) {
-  //     let updatedElem = Object.assign({}, elem);
-  //     const iterationId = Number(getIterationIdFromNodeKey(updatedElem.id));
-  //     const matchedExecs = executions?.filter(exec => {
-  //       const customProperties = exec.getCustomPropertiesMap();
-  //       const iteration_index = customProperties.get(ITERATION_INDEX_KEY)?.getIntValue();
-  //       const parent_dag_id = customProperties.get(PARENT_DAG_ID_KEY)?.getIntValue();
-  //       return parent_dag_id === parallelForDagExecution.getId() && iteration_index === iterationId;
-  //     });
-  //     if (matchedExecs && matchedExecs.length > 0) {
-  //       (updatedElem.data as SubDagFlowElementData).state = matchedExecs[0].getLastKnownState();
-  //     }
-  //     flowGraph.push(updatedElem);
-  //   }
-  //   return flowGraph;
-  // }
 
-
-  // Tasks in a dag scope have unique names, and artifact keys in a given task are unique to a task
-  // So we build a map with keys <task_name>.<artifact_key> => Artifact for easy indexing for the
-  // artifacts in this dag scope.
-
+  const scopeKey = layers.join(".")
+  const dagTask = scopePathToTasksMap.get(scopeKey)
+  if (!dagTask) {
+    throw new Error("Scope task not found for scope key: " + scopeKey);
+  }
 
   for (let elem of elems) {
-
     let updatedElem = Object.assign({}, elem);
     if (NodeTypeNames.EXECUTION === elem.type || NodeTypeNames.SUB_DAG === elem.type) {
-      const taskNodeKey = removeAnyPrefix(elem.id, TASK_NODE_KEY_PREFIX)
+      const taskNodeKey = elem.data?.taskKey;
       const scopeKey = [...layers, taskNodeKey].join(".")
       const scopeTask = scopePathToTasksMap.get(scopeKey)
       if (scopeTask === undefined) {

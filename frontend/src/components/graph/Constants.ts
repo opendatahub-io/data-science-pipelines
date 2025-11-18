@@ -30,6 +30,8 @@ export type SubDagFlowElementData = FlowElementDataBase & {
 
 export type TaskFlowElementData = FlowElementDataBase & {
   taskID?: string;
+  taskKey?: string;
+  iterationIndex?: number;
   state?: PipelineTaskDetailTaskState;
 };
 

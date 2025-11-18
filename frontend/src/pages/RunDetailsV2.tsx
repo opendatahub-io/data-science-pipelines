@@ -31,7 +31,7 @@ import { Apis } from 'src/lib/Apis';
 import Buttons, { ButtonKeys } from 'src/lib/Buttons';
 import { KeyValue } from 'src/lib/StaticGraphParser';
 import { hasFinishedV2, statusProtoMap } from 'src/lib/StatusUtils';
-import {formatDateString, getRunDurationV2, logger} from 'src/lib/Utils';
+import {formatDateString, getRunDurationV2, createScopeToTaskMap, logger} from 'src/lib/Utils';
 import {
     convertSubDagToRuntimeFlowElements,
     getNodeTaskInfo,
@@ -85,6 +85,12 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
     return 'unknown';
   };
 
+  // Update flow elements based on the scope path of the task.
+  let dynamicFlowElements = flowElements;
+  if (run) {
+    let scopePathToTasksMap = createScopeToTaskMap(run)
+    dynamicFlowElements = updateFlowElementsState(layers, flowElements, scopePathToTasksMap);
+  }
 
   const layerChange = (layers: string[]) => {
     setSelectedNode(null);
@@ -93,22 +99,6 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
       convertSubDagToRuntimeFlowElements(pipelineSpec, layers, run),
     ); // render elements in the sub-layer.
   };
-
-  let dynamicFlowElements = flowElements;
-  if (run) {
-    let scopePathToTasksMap = new Map<string, V2beta1PipelineTaskDetail>();
-    if (run.tasks && run.tasks.length > 0) {
-      for (const task of run.tasks) {
-        if (task.scope_path === undefined || task.scope_path === null || task.scope_path.length <= 0) {
-          logger.warn("scope_path is undefined, null, or empty for task: ", task);
-        } else {
-          const scopeKey = task.scope_path.join(".")
-          scopePathToTasksMap.set(scopeKey, task);
-        }
-      }
-    }
-    dynamicFlowElements = updateFlowElementsState(layers, flowElements, scopePathToTasksMap);
-  }
 
   const onElementSelection = (event: ReactMouseEvent, element: Node | Edge) => {
     setSelectedNode(element);
