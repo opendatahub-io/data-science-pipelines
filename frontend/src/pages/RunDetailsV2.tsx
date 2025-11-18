@@ -67,9 +67,15 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
   const run = props.run;
   const pipelineJobStr = props.pipeline_job;
   const pipelineSpec = WorkflowUtils.convertYamlToV2PipelineSpec(pipelineJobStr);
-  const elements = convertFlowElements(pipelineSpec);
 
+  // Flow elements are used to render the DAG.
+  // First, we use the same logic as in the static graph to convert the pipeline spec to flow elements.
+  const elements = convertFlowElements(pipelineSpec);
+  // Then we dynamically parse the run object to update the flow elements.
+  // Elements represent the tasks for a specific "layer" in the DAG.
+  // The layer is equivalent to the latest scope in the scope path of a task.
   const [flowElements, setFlowElements] = useState(elements);
+
   const [layers, setLayers] = useState(['root']);
   const [selectedTab, setSelectedTab] = useState(0);
   const [selectedNode, setSelectedNode] = useState<FlowElement<FlowElementDataBase> | null>(null);

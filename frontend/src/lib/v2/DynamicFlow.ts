@@ -19,27 +19,18 @@ import {
   ArtifactIconState,
   FlowElementDataBase,
   TaskFlowElementData,
-  SubDagFlowElementData,
 } from 'src/components/graph/Constants';
-import {ComponentSpec, PipelineSpec, PipelineTaskSpec} from 'src/generated/pipeline_spec';
+import {PipelineSpec, PipelineTaskSpec} from 'src/generated/pipeline_spec';
 import {
   buildDag,
   buildGraphLayout,
-  getTaskNodeKey,
-  addTaskNodes,
   NodeTypeNames,
   PipelineFlowElement,
-  TASK_NODE_KEY_PREFIX,
-  TaskType,
 } from 'src/lib/v2/StaticFlow';
-import {Execution, Value} from 'src/third_party/mlmd';
 import {PipelineTaskDetailTaskType, V2beta1PipelineTaskDetail, V2beta1Run} from "../../apisv2beta1/run";
 import {logger, createScopeToTaskMap} from "../Utils";
 
 export const TASK_NAME_KEY = 'task_name';
-export const PARENT_DAG_ID_KEY = 'parent_dag_id';
-export const ITERATION_COUNT_KEY = 'iteration_count';
-export const ITERATION_INDEX_KEY = 'iteration_index';
 
 export function convertSubDagToRuntimeFlowElements(
   spec: PipelineSpec,
@@ -58,8 +49,8 @@ export function convertSubDagToRuntimeFlowElements(
   if (!scopeTask) {
     throw new Error("Scope task not found for scope key: " + scopeKey);
   }
-  let isParallelForRootDag = scopeTask?.type === PipelineTaskDetailTaskType.LOOP;
 
+  // Retrieve the component spec for this layer
   const componentsMap = spec.components;
   for (let index = 1; index < layers.length; index++) {
     if (layers[index].indexOf('.') <= 0) {
@@ -81,23 +72,20 @@ export function convertSubDagToRuntimeFlowElements(
     }
   }
 
-  if (isParallelForRootDag) {
-    const componentsMap = spec.components || {};
+  if (scopeTask?.type === PipelineTaskDetailTaskType.LOOP) {
     if (!componentSpec.dag) {
       throw new Error("ParallelFor dag not found in pipeline spec.");
     }
-    const tasksMap = componentSpec.dag.tasks || {};
     const iterationCountStr = scopeTask.type_attributes?.iteration_count;
     if (iterationCountStr === undefined || !iterationCountStr) {
       throw new Error("iteration count does not exist for parallelFor Execution");
     }
-    // But we do a safe conversion back to number here.
     const iterationCount = Number(iterationCountStr);
     if (Number.isNaN(iterationCount)) {
       throw new Error("iteration count was not a number");
     }
 
-    // draw subdag nodes equal to the number of iteration_count
+    // Draw sub dag nodes equal to the number of iteration_count
     let flowGraph: FlowElement[] = [];
     for (let index = 0; index < iterationCount; index++) {
       flowGraph = [...buildDag(spec, componentSpec, index), ...flowGraph];
@@ -106,79 +94,6 @@ export function convertSubDagToRuntimeFlowElements(
   }
   return buildDag(spec, componentSpec);
 }
-
-function addIterationNodes(
-  dagTask: V2beta1PipelineTaskDetail,
-  flowGraph: PipelineFlowElement[],
-  ) {
-
-  const taskName = dagTask.name;
-  const iterationCountStr = dagTask.type_attributes?.iteration_count;
-  if (taskName === undefined || !taskName) {
-    console.warn("Task name for the parallelFor Execution doesn't exist.");
-    return;
-  }
-  if (iterationCountStr === undefined || !iterationCountStr) {
-    console.warn("Iteration Count for the parallelFor Execution doesn't exist.");
-    return;
-  }
-
-  // Unclear why the proto generated code converted the int64 to a string
-  // But we do a safe conversion back to number here.
-  const iterationCount = Number(iterationCountStr);
-  if (Number.isNaN(iterationCount)) {
-    throw new Error("iteration count was not a number");
-  }
-
-  for (let index = 0; index < iterationCount; index++) {
-    // We have to add all tasks and their edges here for this dag for each iteration
-    const iterationNodeName = `${taskName}.${index}`;
-    // One iteration is a sub-DAG instance.
-    const node: Node<FlowElementDataBase> = {
-      id: getTaskNodeKey(iterationNodeName),
-      data: { label: iterationNodeName, taskType: TaskType.DAG},
-      position: { x: 100, y: 200 },
-      type: NodeTypeNames.SUB_DAG,
-    };
-    flowGraph.push(node);
-  }
-}
-
-// 1. Get the Pipeline Run context using run ID (FOR subDAG, we need to wait for design)
-// 2. Fetch all executions by context. Create Map for task_name => Execution
-// 3. Fetch all Events by Context. Create Map for OUTPUT events: execution_id => Events
-// 5. Fetch all Artifacts by Context.
-// 6. Create Map for artifacts: artifact_id => Artifact
-//    a. For each task in the flowElements, find its execution state.
-//    b. For each artifact node, get its task name.
-//    c. get Execution from Map, then get execution_id.
-//    d. get Events from Map, then get artifact name from path.
-//    e. for the Event which matches artifact name, get artifact_id.
-//    f. get Artifact and update the state.
-
-// Construct ArtifactNodeKey -> Artifact Map
-//    for each OUTPUT event, get execution id and artifact id
-//         get execution task_name from Execution map
-//         get artifact name from Event path
-//         get Artifact from Artifact map
-//         set ArtifactNodeKey -> Artifact.
-// Elements change to Map node key => node, edge key => edge
-// For each node: (DAG execution doesn't have design yet)
-//     If TASK:
-//         Find exeuction from using task_name
-//         Update with execution state
-//     If ARTIFACT:
-//         Get task_name and artifact_name
-//         Get artifact from Master Map
-//         Update with artifact state
-//     IF SUBDAG: (Not designed)
-//         similar to TASK, but needs to determine subDAG type.
-
-// Questions:
-//    How to handle DAG state?
-//    How to handle subDAG input artifacts and parameters?
-//    How to handle if-condition? and show the state
-//    How to handle parallel-for? and list of workers.
 
 export function updateFlowElementsState(
   layers: string[],
@@ -236,12 +151,6 @@ export function updateFlowElementsState(
   return flowGraph;
 }
 
-function removeAnyPrefix(str: string, prefix: string): string {
-  if (str.startsWith(prefix)) {
-    return str.slice(prefix.length);
-  }
-  return str;
-}
 
 export function getNodeTaskInfo(
   elem: FlowElement<FlowElementDataBase> | null,
@@ -291,38 +200,4 @@ export function getNodeTaskInfo(
   //   return executions ? { execution: executions[0] } : {};
   // }
     return {};
-}
-
-function getTaskNameToExecution(executions: Execution[]): Map<string, Execution[]> {
-  const map = new Map<string, Execution[]>();
-  for (let exec of executions) {
-    const taskName = getTaskName(exec);
-    if (!taskName) {
-      continue;
-    }
-    const taskNameStr = taskName.getStringValue();
-    const execs = map.get(taskNameStr);
-    if (execs) {
-      execs.push(exec);
-    } else {
-      map.set(taskNameStr, [exec]);
-    }
-  }
-  return map;
-}
-
-function getTaskName(exec: Execution): Value | undefined {
-  const customProperties = exec.getCustomPropertiesMap();
-  if (!customProperties.has(TASK_NAME_KEY)) {
-    console.warn("task_name key doesn't exist for custom properties of Execution " + exec.getId());
-    return undefined;
-  }
-  const taskName = customProperties.get(TASK_NAME_KEY);
-  if (!taskName) {
-    console.warn(
-      "task_name value doesn't exist for custom properties of Execution " + exec.getId(),
-    );
-    return undefined;
-  }
-  return taskName;
 }
