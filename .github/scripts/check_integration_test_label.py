@@ -33,7 +33,7 @@ def post_instruction_comment(pull_request):
 This pull request is merging **main** → **stable** and requires integration test verification.
 
 ### ✅ Required Action:
-Comment `/integration-tests-ok` on this PR **only after** running the integration tests.
+Manually add label "integration-tests-verified" or comment `/integration-tests-ok` on this PR **only after** running the integration tests.
 
 ### 📝 Steps:
 
@@ -67,7 +67,7 @@ Comment `/integration-tests-ok` on this PR **only after** running the integratio
     13. Run [Iris Pipeline](https://github.com/red-hat-data-services/ods-ci/blob/master/ods_ci/tests/Resources/Files/pipeline-samples/v2/cache-disabled/iris_pipeline_compiled.yaml), [Flip Coin](https://github.com/red-hat-data-services/ods-ci/blob/master/ods_ci/tests/Resources/Files/pipeline-samples/v2/cache-disabled/flip_coin_compiled.yaml) pipelines
     14. Make sure the pipeline runs Succeeds
     15. Repeat the above steps but this time check `ENABLE_FIPS_IN_CLUSTER` checkbox to create a FIPS cluster
-2. Comment `/integration-tests-ok` on this PR to add the verification label
+2. Manually add label "integration-tests-verified" or comment `/integration-tests-ok` on this PR to add the verification label
 3. This workflow check will automatically pass once the label is added
 
 ### 🔒 Authorization:
@@ -145,10 +145,9 @@ New commits have been pushed to this PR. The `integration-tests-verified` label 
 
 **Next Steps to Pass This Check:**
 1. Re-run integration tests in OpenShift cluster with latest ODH nightly
-2. Fetch nightly build information from **#odh-nightlies-notifications** Slack channel
-3. Comment `/integration-tests-ok` on this PR after confirming tests pass with the new commits
+2. Readd the label "integration-tests-verified" or comment `/integration-tests-ok` on this PR after confirming tests pass with the new commits
 
-Once you comment `/integration-tests-ok`, the label will be re-added and this workflow will automatically pass."""
+Once you re-add the label or comment `/integration-tests-ok`, the label will be re-added and this workflow will automatically pass."""
 
                 try:
                     pull_request.create_issue_comment(removal_comment)
