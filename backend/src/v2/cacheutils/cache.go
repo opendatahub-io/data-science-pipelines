@@ -108,7 +108,9 @@ func cacheDefaultEndpoint() string {
 	// Discover ml-pipeline in the same namespace by env var.
 	// https://kubernetes.io/docs/concepts/services-networking/service/#environment-variables
 	cacheHost := os.Getenv("ML_PIPELINE_SERVICE_HOST")
+	glog.Infof("cacheHost: %s", cacheHost)
 	cachePort := os.Getenv("ML_PIPELINE_SERVICE_PORT_GRPC")
+	glog.Infof("cachePort: %s", cachePort)
 	if cacheHost != "" && cachePort != "" {
 		// If there is a ml-pipeline Kubernetes service in the same namespace,
 		// ML_PIPELINE_SERVICE_HOST and ML_PIPELINE_SERVICE_PORT env vars should
