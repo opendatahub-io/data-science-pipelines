@@ -21,9 +21,7 @@ spec:
             - name: METADATA_TLS_ENABLED
               value: "true"
             - name: ML_PIPELINE_SERVICE_HOST
-              value: "ml-pipeline.kubeflow"
-            - name: ML_PIPELINE_SERVICE_PORT_GRPC
-              value: "8887"
+              value: "ml-pipeline.kubeflow.svc.cluster.local"
           readinessProbe:
             httpGet:
               path: /apis/v1beta1/healthz

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -87,7 +88,7 @@ func NewClient(cacheDisabled bool, tlsCfg *tls.Config) (Client, error) {
 	if tlsCfg != nil {
 		creds = credentials.NewTLS(tlsCfg)
 	}
-	cacheEndPoint := cacheDefaultEndpoint()
+	cacheEndPoint := "ml-pipeline." + common.GetPodNamespace() + "8887"
 	glog.Infof("Connecting to cache endpoint %s", cacheEndPoint)
 	conn, err := grpc.NewClient(
 		cacheEndPoint,

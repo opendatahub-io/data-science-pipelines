@@ -8,7 +8,6 @@ spec:
   dnsNames:
     - ml-pipeline
     - ml-pipeline.kubeflow
-    - ml-pipeline.kubeflow.svc.cluster.local
     - ml-pipeline-scheduledworkflow
     - metadata-envoy
     - metadata-envoy-service
