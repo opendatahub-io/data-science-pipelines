@@ -27,8 +27,8 @@ import {
   NodeTypeNames,
   PipelineFlowElement,
 } from 'src/lib/v2/StaticFlow';
-import {PipelineTaskDetailTaskType, V2beta1PipelineTaskDetail, V2beta1Run} from "../../apisv2beta1/run";
-import {logger, createScopeToTaskMap} from "../Utils";
+import {PipelineTaskDetailTaskType, V2beta1PipelineTaskDetail, V2beta1Run, V2beta1Artifact} from "../../apisv2beta1/run";
+import {logger, createScopeToTaskMap, createTaskIDToTaskMap} from "../Utils";
 
 export const TASK_NAME_KEY = 'task_name';
 
@@ -102,7 +102,6 @@ export function updateFlowElementsState(
 ): PipelineFlowElement[] {
   let flowGraph: PipelineFlowElement[] = [];
 
-
   const scopeKey = layers.join(".")
   const dagTask = scopePathToTasksMap.get(scopeKey)
   if (!dagTask) {
@@ -152,52 +151,61 @@ export function updateFlowElementsState(
 }
 
 
-export function getNodeTaskInfo(
+export interface ArtifactWithTaskInfo {
+  artifact?: V2beta1Artifact; // TODO(Humair): Or we can just store the artifact IO for each node, it has more info we can display.
+  producerTaskName?: string;
+  producerTaskID?: string;
+  outputArtifactKey?: string;
+}
+
+export interface NodeInfo {
+  task?: V2beta1PipelineTaskDetail;
+  artifactWithTaskInfo?: ArtifactWithTaskInfo;
+}
+
+export function getNodeInfo(
   elem: FlowElement<FlowElementDataBase> | null,
   run: V2beta1Run,
-): V2beta1PipelineTaskDetail {
+): NodeInfo {
   if (!elem) {
     return {};
   }
-  // const taskNameToExecution = getTaskNameToExecution(executions);
-  // const executionIdToExectuion = getExectuionIdToExecution(executions);
-  // const artifactIdToArtifact = getArtifactIdToArtifact(artifacts);
-  // const artifactNodeKeyToArtifact = getArtifactNodeKeyToArtifact(
-  //   events,
-  //   executionIdToExectuion,
-  //   artifactIdToArtifact,
-  // );
-  //
-  // if (NodeTypeNames.EXECUTION === elem.type) {
-  //   const taskLabel = getTaskLabelByPipelineFlowElement(elem);
-  //   const executions = taskNameToExecution
-  //     .get(taskLabel)
-  //     ?.filter(exec => exec.getId() === elem.data?.mlmdId);
-  //   return executions ? { execution: executions[0] } : {};
-  // } else if (NodeTypeNames.ARTIFACT === elem.type) {
-  //   let linkedArtifact = artifactNodeKeyToArtifact.get(elem.id);
-  //
-  //   // Detect whether Artifact is an output of SubDAG, if so, search its source artifact.
-  //   let artifactData = elem.data as ArtifactFlowElementData;
-  //   if (artifactData && artifactData.outputArtifactKey && artifactData.producerSubtask) {
-  //     // SubDAG output artifact has reference to inner subtask and artifact.
-  //     const subArtifactKey = getArtifactNodeKey(
-  //       artifactData.producerSubtask,
-  //       artifactData.outputArtifactKey,
-  //     );
-  //     linkedArtifact = artifactNodeKeyToArtifact.get(subArtifactKey);
-  //   }
-  //
-  //   const executionId = linkedArtifact?.event.getExecutionId();
-  //   const execution = executionId ? executionIdToExectuion.get(executionId) : undefined;
-  //   return { execution, linkedArtifact };
-  // } else if (NodeTypeNames.SUB_DAG === elem.type) {
-  //   // TODO: Update sub-dag state based on future design.
-  //   const taskLabel = getTaskLabelByPipelineFlowElement(elem);
-  //   const executions = taskNameToExecution
-  //     .get(taskLabel)
-  //     ?.filter(exec => exec.getId() === elem.data?.mlmdId);
-  //   return executions ? { execution: executions[0] } : {};
-  // }
-    return {};
+  const idToTask = createTaskIDToTaskMap(run)
+  if (NodeTypeNames.ARTIFACT === elem.type) {
+    const artifactElem = elem as ArtifactFlowElementData;
+    const producerTaskName = artifactElem.producerTaskName;
+    const producerTaskID = artifactElem.producerTaskID;
+    const outputArtifactKey = artifactElem.outputArtifactKey;
+    if (!producerTaskName || !producerTaskID || !outputArtifactKey) {
+      throw new Error("Producer task name, output artifact key, or ID not found for artifact: " + artifactElem.label);
+    }
+    const producerTask = idToTask.get(producerTaskID)
+    if (!producerTask) {
+      throw new Error("Producer task not found for task ID: " + producerTaskID);
+    }
+    const artifact = producerTask.outputs?.artifacts
+      ?.flatMap(io => io.artifacts ?? [])
+      .find(a => a.artifact_id === artifactElem.artifactId);
+    if (!artifact) {
+      throw new Error("Artifact not found for producer task: " + producerTaskName);
+    }
+    const artifactDetails = {
+      artifact: artifact,
+      producerTaskName: producerTaskName,
+      producerTaskID: producerTaskID,
+      outputArtifactKey: outputArtifactKey
+    };
+    return { artifactWithTaskInfo: artifactDetails};
+  }
+  // If not an artifact then it's a task
+  const taskElem = elem as TaskFlowElementData
+  if (!taskElem.taskID) {
+    throw new Error("Task ID not found for task: " + taskElem.label);
+  }
+  const task = idToTask.get(taskElem.taskID)
+  if (!task) {
+    throw new Error("Task not found for task ID: " + taskElem.taskID);
+  }
+  return { task: task };
+
 }

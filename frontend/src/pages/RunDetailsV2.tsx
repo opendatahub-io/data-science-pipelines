@@ -17,7 +17,7 @@ import { MouseEvent as ReactMouseEvent, useEffect, useState } from 'react';
 import { FlowElement } from 'react-flow-renderer';
 import { useQuery } from 'react-query';
 import { V2beta1Experiment } from 'src/apisv2beta1/experiment';
-import {V2beta1Run, V2beta1RuntimeState, V2beta1RunStorageState, V2beta1PipelineTaskDetail} from 'src/apisv2beta1/run';
+import {V2beta1Run, V2beta1RuntimeState, V2beta1RunStorageState} from 'src/apisv2beta1/run';
 import MD2Tabs from 'src/atoms/MD2Tabs';
 import DetailsTable from 'src/components/DetailsTable';
 import { FlowElementDataBase } from 'src/components/graph/Constants';
@@ -33,9 +33,9 @@ import { KeyValue } from 'src/lib/StaticGraphParser';
 import { hasFinishedV2, statusProtoMap } from 'src/lib/StatusUtils';
 import {formatDateString, getRunDurationV2, createScopeToTaskMap, logger} from 'src/lib/Utils';
 import {
-    convertSubDagToRuntimeFlowElements,
-    getNodeTaskInfo,
-    updateFlowElementsState,
+  convertSubDagToRuntimeFlowElements,
+  getNodeInfo, NodeInfo,
+  updateFlowElementsState,
 } from 'src/lib/v2/DynamicFlow';
 import { convertFlowElements } from 'src/lib/v2/StaticFlow';
 import * as WorkflowUtils from 'src/lib/v2/WorkflowUtils';
@@ -79,7 +79,7 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
   const [layers, setLayers] = useState(['root']);
   const [selectedTab, setSelectedTab] = useState(0);
   const [selectedNode, setSelectedNode] = useState<FlowElement<FlowElementDataBase> | null>(null);
-  const [selectedNodeTaskInfo, setSelectedNodeTaskInfo] = useState<V2beta1PipelineTaskDetail | null>(null);
+  const [selectedNodeTaskInfo, setSelectedNodeTaskInfo] = useState<NodeInfo | null>(null);
   const [, forceUpdate] = useState();
   const [runFinished, setRunFinished] = useState(false);
 
@@ -110,7 +110,7 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
     setSelectedNode(element);
     if (run) {
       setSelectedNodeTaskInfo(
-          getNodeTaskInfo(element, run),
+        getNodeInfo(element, run),
       );
     }
   };

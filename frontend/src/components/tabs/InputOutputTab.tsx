@@ -20,23 +20,12 @@ import { Link } from 'react-router-dom';
 import { ErrorBoundary } from 'src/atoms/ErrorBoundary';
 import { commonCss, padding } from 'src/Css';
 import { KeyValue } from 'src/lib/StaticGraphParser';
-import { getMetadataValue } from 'src/mlmd/library';
-import {
-  filterEventWithInputArtifact,
-  filterEventWithOutputArtifact,
-  getArtifactName,
-  getArtifactTypeName,
-  getArtifactTypes,
-  getLinkedArtifactsByExecution,
-  getStoreSessionInfoFromArtifact,
-  LinkedArtifact,
-} from 'src/mlmd/MlmdUtils';
-import { ArtifactType, Execution } from 'src/third_party/mlmd';
 import ArtifactPreview from '../ArtifactPreview';
 import Banner from '../Banner';
 import DetailsTable from '../DetailsTable';
 import { RoutePageFactory } from '../Router';
 import { ExecutionTitle } from './ExecutionTitle';
+import {V2beta1PipelineTaskDetail} from "../../apisv2beta1/run";
 
 export type ParamList = Array<KeyValue<string>>;
 export type URIToSessionInfo = Map<string, string | undefined>;
@@ -51,11 +40,11 @@ export interface ArtifactLocation {
 }
 
 export interface IOTabProps {
-  execution: Execution;
+  task: V2beta1PipelineTaskDetail;
   namespace: string | undefined;
 }
 
-export function InputOutputTab({ execution, namespace }: IOTabProps) {
+export function InputOutputTab({ task, namespace }: IOTabProps) {
   const executionId = execution.getId();
 
   // TODO(jlyaoyuli): Showing input/output parameter for unexecuted node (retrieves from PipelineSpec).

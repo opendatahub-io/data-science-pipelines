@@ -14,47 +14,33 @@
  * limitations under the License.
  */
 
-import { Button } from '@material-ui/core';
+import {Button} from '@material-ui/core';
 import * as React from 'react';
-import { useState } from 'react';
-import { FlowElement } from 'react-flow-renderer';
+import {useState} from 'react';
+import {FlowElement} from 'react-flow-renderer';
 // import { ComponentSpec, PipelineSpec } from 'src/generated/pipeline_spec';
-import {
-  KubernetesExecutorConfig,
-  PvcMount,
-} from 'src/generated/platform_spec/kubernetes_platform';
-import { useQuery } from 'react-query';
+import {KubernetesExecutorConfig, PvcMount,} from 'src/generated/platform_spec/kubernetes_platform';
+import {useQuery} from 'react-query';
 import MD2Tabs from 'src/atoms/MD2Tabs';
-import { commonCss, padding } from 'src/Css';
-import { Apis } from 'src/lib/Apis';
-import { KeyValue } from 'src/lib/StaticGraphParser';
-import { errorToMessage } from 'src/lib/Utils';
-import { getTaskKeyFromNodeKey, NodeTypeNames } from 'src/lib/v2/StaticFlow';
-import {
-  EXECUTION_KEY_CACHED_EXECUTION_ID,
-  getArtifactTypeName,
-  getArtifactTypes,
-  KfpExecutionProperties,
-  LinkedArtifact,
-} from 'src/mlmd/MlmdUtils';
-import { NodeMlmdInfo } from 'src/pages/RunDetailsV2';
-import { ArtifactType, Execution } from 'src/third_party/mlmd';
+import {commonCss, padding} from 'src/Css';
+import {Apis} from 'src/lib/Apis';
+import {KeyValue} from 'src/lib/StaticGraphParser';
+import {errorToMessage} from 'src/lib/Utils';
+import {getTaskKeyFromNodeKey, NodeTypeNames} from 'src/lib/v2/StaticFlow';
 import ArtifactPreview from 'src/components/ArtifactPreview';
 import Banner from 'src/components/Banner';
 import DetailsTable from 'src/components/DetailsTable';
-import { FlowElementDataBase } from 'src/components/graph/Constants';
+import {FlowElementDataBase} from 'src/components/graph/Constants';
 import LogViewer from 'src/components/LogViewer';
-import { getResourceStateText, ResourceType } from 'src/components/ResourceInfo';
-import { MetricsVisualizations } from 'src/components/viewers/MetricsVisualizations';
-import { ArtifactTitle } from 'src/components/tabs/ArtifactTitle';
-import InputOutputTab, {
-  getArtifactParamList,
-  ParamList,
-} from 'src/components/tabs/InputOutputTab';
-import { convertYamlToPlatformSpec, convertYamlToV2PipelineSpec } from 'src/lib/v2/WorkflowUtils';
-import { PlatformDeploymentConfig } from 'src/generated/pipeline_spec/pipeline_spec';
-import { getComponentSpec } from 'src/lib/v2/NodeUtils';
-import {V2beta1PipelineTaskDetail} from "../../apisv2beta1/run";
+import {getResourceStateText, ResourceType} from 'src/components/ResourceInfo';
+import {MetricsVisualizations} from 'src/components/viewers/MetricsVisualizations';
+import {ArtifactTitle} from 'src/components/tabs/ArtifactTitle';
+import InputOutputTab, {getArtifactParamList, ParamList,} from 'src/components/tabs/InputOutputTab';
+import {convertYamlToPlatformSpec, convertYamlToV2PipelineSpec} from 'src/lib/v2/WorkflowUtils';
+import {PlatformDeploymentConfig} from 'src/generated/pipeline_spec/pipeline_spec';
+import {getComponentSpec} from 'src/lib/v2/NodeUtils';
+import {PipelineTaskDetailTaskPodType, V2beta1PipelineTaskDetail} from "../../apisv2beta1/run";
+import {ArtifactWithTaskInfo, NodeInfo} from "../../lib/v2/DynamicFlow";
 
 export const LOGS_DETAILS = 'logs_details';
 export const LOGS_BANNER_MESSAGE = 'logs_banner_message';
@@ -83,7 +69,7 @@ interface RuntimeNodeDetailsV2Props {
   pipelineJobString?: string;
   runId?: string;
   element?: FlowElement<FlowElementDataBase> | null;
-  elementTaskInfo?: V2beta1PipelineTaskDetail | null;
+  elementTaskInfo?: NodeInfo | null;
   namespace: string | undefined;
 }
 
@@ -107,7 +93,7 @@ export function RuntimeNodeDetailsV2({
           pipelineJobString={pipelineJobString}
           runId={runId}
           element={element}
-          execution={undefined} // TODO(HumairAK)
+          task={elementTaskInfo?.task}
           layers={layers}
           namespace={namespace}
         ></TaskNodeDetail>
@@ -115,8 +101,8 @@ export function RuntimeNodeDetailsV2({
     } else if (NodeTypeNames.ARTIFACT === element.type) {
       return (
         <ArtifactNodeDetail
-          execution={undefined} // TODO(HumairAK)
-          linkedArtifact={undefined} // TODO(HumairAK)
+          task={elementTaskInfo?.task}
+          artifactDetails={elementTaskInfo?.artifactWithTaskInfo}
           namespace={namespace}
         />
       );
@@ -124,7 +110,7 @@ export function RuntimeNodeDetailsV2({
       return (
         <SubDAGNodeDetail
           element={element}
-          execution={undefined} // TODO(HumairAK)
+          task={elementTaskInfo?.task}
           layers={layers}
           onLayerChange={onLayerChange}
           namespace={namespace}
@@ -139,7 +125,7 @@ interface TaskNodeDetailProps {
   pipelineJobString?: string;
   runId?: string;
   element?: FlowElement<FlowElementDataBase> | null;
-  execution?: Execution;
+  task?: V2beta1PipelineTaskDetail;
   layers: string[];
   namespace: string | undefined;
 }
@@ -148,19 +134,38 @@ function TaskNodeDetail({
   pipelineJobString,
   runId,
   element,
-  execution,
+  task,
   layers,
   namespace,
 }: TaskNodeDetailProps) {
+
   const { data: logsInfo } = useQuery<Map<string, string>, Error>(
-    [execution],
+    [task],
     async () => {
-      if (!execution) {
+      if (!task) {
         throw new Error('No execution is found.');
       }
-      return await getLogsInfo(execution, runId);
+      const taskPods = task.pods
+      let executorPodName: string | undefined;
+
+      // Retrieve pod name from task api
+      if (!taskPods || taskPods.length === 0) {
+        return new Map<string, string>();
+      }
+
+      // Find the executor pod name
+      for (const pod of taskPods) {
+        if (pod.type === PipelineTaskDetailTaskPodType.EXECUTOR) {
+          executorPodName = pod.name
+        }
+      }
+      if (!executorPodName) {
+        return new Map<string, string>();
+      }
+      return await getLogsInfo(executorPodName, runId);
     },
-    { enabled: !!execution },
+    // Only fetch logs when we have a task.
+    { enabled: !!task },
   );
 
   const logsDetails = logsInfo?.get(LOGS_DETAILS);
@@ -298,32 +303,21 @@ function getNodeVolumeMounts(
   return volumeMounts;
 }
 
-async function getLogsInfo(execution: Execution, runId?: string): Promise<Map<string, string>> {
+async function getLogsInfo(podName: string, runId?: string): Promise<Map<string, string>> {
   const logsInfo = new Map<string, string>();
-  let podName = '';
   let podNameSpace = '';
   let cachedExecutionId = '';
   let logsDetails = '';
   let logsBannerMessage = '';
   let logsBannerAdditionalInfo = '';
-  const customPropertiesMap = execution.getCustomPropertiesMap();
-  const createdAt = new Date(execution.getCreateTimeSinceEpoch()).toISOString().split('T')[0];
-
-  if (execution) {
-    podName = customPropertiesMap.get(KfpExecutionProperties.POD_NAME)?.getStringValue() || '';
-    podNameSpace = customPropertiesMap.get('namespace')?.getStringValue() || '';
-    cachedExecutionId =
-      customPropertiesMap.get(EXECUTION_KEY_CACHED_EXECUTION_ID)?.getStringValue() || '';
-  }
 
   // TODO(jlyaoyuli): Consider to link to the cached execution.
   if (cachedExecutionId) {
     logsInfo.set(LOGS_DETAILS, 'This step output is taken from cache.');
     return logsInfo; // Early return if it is from cache.
   }
-
   try {
-    logsDetails = await Apis.getPodLogs(runId!, podName, podNameSpace, createdAt);
+    logsDetails = await Apis.getPodLogs(runId!, podName, podNameSpace, '');
     logsInfo.set(LOGS_DETAILS, logsDetails);
   } catch (err) {
     let errMsg = await errorToMessage(err);
@@ -336,17 +330,11 @@ async function getLogsInfo(execution: Execution, runId?: string): Promise<Map<st
 }
 
 interface ArtifactNodeDetailProps {
-  execution?: Execution;
-  linkedArtifact?: LinkedArtifact;
+  task?: V2beta1PipelineTaskDetail;
+  artifactDetails?: ArtifactWithTaskInfo;
   namespace: string | undefined;
 }
-function ArtifactNodeDetail({ execution, linkedArtifact, namespace }: ArtifactNodeDetailProps) {
-  const { data } = useQuery<ArtifactType[], Error>(
-    ['artifact_types', { linkedArtifact }],
-    () => getArtifactTypes(),
-    {},
-  );
-
+function ArtifactNodeDetail({ task, artifactDetails, namespace }: ArtifactNodeDetailProps) {
   const [selectedTab, setSelectedTab] = useState(0);
   return (
     <div className={commonCss.page}>
@@ -359,19 +347,17 @@ function ArtifactNodeDetail({ execution, linkedArtifact, namespace }: ArtifactNo
         {/* Artifact Info tab */}
         {selectedTab === 0 && (
           <ArtifactInfo
-            execution={execution}
-            artifactTypes={data}
-            linkedArtifact={linkedArtifact}
+            task={task}
+            artifactDetails={artifactDetails}
             namespace={namespace}
           ></ArtifactInfo>
         )}
 
         {/* Visualization tab */}
-        {selectedTab === 1 && execution && (
+        {selectedTab === 1 && task && (
           <MetricsVisualizations
-            linkedArtifacts={linkedArtifact ? [linkedArtifact] : []}
-            artifactTypes={data ? data : []}
-            execution={execution}
+            artifactDetails={artifactDetails ? [artifactDetails] : []}
+            execution={task}
             namespace={namespace}
           />
         )}
@@ -382,15 +368,13 @@ function ArtifactNodeDetail({ execution, linkedArtifact, namespace }: ArtifactNo
 
 interface ArtifactNodeDetailProps {
   execution?: Execution;
-  artifactTypes?: ArtifactType[];
-  linkedArtifact?: LinkedArtifact;
+  artifactDetails?: ArtifactWithTaskInfo;
   namespace: string | undefined;
 }
 
 function ArtifactInfo({
   execution,
-  artifactTypes,
-  linkedArtifact,
+  artifactDetails,
   namespace,
 }: ArtifactNodeDetailProps) {
   if (!execution || !linkedArtifact) {
@@ -457,7 +441,7 @@ function ArtifactInfo({
 
 interface SubDAGNodeDetailProps {
   element: FlowElement<FlowElementDataBase>;
-  execution?: Execution;
+  task?: V2beta1PipelineTaskDetail;
   layers: string[];
   onLayerChange: (layers: string[]) => void;
   namespace: string | undefined;
@@ -465,16 +449,12 @@ interface SubDAGNodeDetailProps {
 
 function SubDAGNodeDetail({
   element,
-  execution,
+  task,
   layers,
   onLayerChange,
   namespace,
 }: SubDAGNodeDetailProps) {
   const taskKey = getTaskKeyFromNodeKey(element.id);
-  // const componentSpec = getComponentSpec(pipelineSpec, layers, taskKey);
-  // if (!componentSpec) {
-  //   return NODE_INFO_UNKNOWN;
-  // }
 
   const onSubDagOpenClick = () => {
     onLayerChange([...layers, taskKey]);
@@ -499,9 +479,9 @@ function SubDAGNodeDetail({
           {/* Input/Output tab */}
           {selectedTab === 0 &&
             (() => {
-              if (execution) {
+              if (task) {
                 return (
-                  <InputOutputTab execution={execution} namespace={namespace}></InputOutputTab>
+                  <InputOutputTab task={task} namespace={namespace}></InputOutputTab>
                 );
               }
               return NODE_STATE_UNAVAILABLE;

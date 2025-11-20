@@ -541,3 +541,17 @@ export function createScopeToTaskMap(run: V2beta1Run): Map<string, V2beta1Pipeli
   }
   return scopePathToTasksMap;
 }
+
+export function createTaskIDToTaskMap(run: V2beta1Run): Map<string, V2beta1PipelineTaskDetail> {
+  let taskIDToTask = new Map<string, V2beta1PipelineTaskDetail>();
+  if (run.tasks && run.tasks.length > 0) {
+    for (const task of run.tasks) {
+      if (task.task_id === undefined || task.task_id === null || task.task_id.length <= 0) {
+        logger.error("task_id is undefined, null, or empty for task: ", task);
+      } else {
+        taskIDToTask.set(task.task_id, task);
+      }
+    }
+  }
+  return taskIDToTask;
+}

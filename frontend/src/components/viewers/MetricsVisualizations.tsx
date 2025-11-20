@@ -62,6 +62,7 @@ import { logger } from 'src/lib/Utils';
 import { stylesheet } from 'typestyle';
 import { buildRocCurveConfig, validateConfidenceMetrics } from './ROCCurveHelper';
 import { isEqual } from 'lodash';
+import {ArtifactWithTaskInfo} from "../../lib/v2/DynamicFlow";
 
 const css = stylesheet({
   inline: {
@@ -70,8 +71,7 @@ const css = stylesheet({
 });
 
 interface MetricsVisualizationsProps {
-  linkedArtifacts: LinkedArtifact[];
-  artifactTypes: ArtifactType[];
+  artifactDetails: ArtifactWithTaskInfo[];
   execution: Execution;
   namespace: string | undefined;
 }
@@ -81,8 +81,7 @@ interface MetricsVisualizationsProps {
  * and multiple visualizations associated with one artifact.
  */
 export function MetricsVisualizations({
-  linkedArtifacts,
-  artifactTypes,
+  artifactDetails,
   execution,
   namespace,
 }: MetricsVisualizationsProps) {
