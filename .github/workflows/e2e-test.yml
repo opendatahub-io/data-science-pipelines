@@ -59,32 +59,62 @@ jobs:
     needs: build
     strategy:
       matrix:
-        k8s_version: ["v1.31.0"]
+        k8s_version: ["v1.29.2", "v1.31.0"]
         cache_enabled: ["true", "false"]
-        argo_version: [ "v3.7.1", "v3.6.10", "v3.5.15"]
-        storage: [ "seaweedfs", "minio"]
+        deploy_external_argo: [ "false" ]
+        storage: [ "seaweedfs" ]
         proxy: [ "false" ]
         test_label: [ "E2ECritical" ]
-        pod_to_pod_tls_enabled: [ "false" ]
+        pod_to_pod_tls_enabled: [ "true" ]
+        deploy_pypi_server: [ "false" ]
         include:
-          - k8s_version: "v1.29.2"
+          - k8s_version: "v1.31.0"
             cache_enabled: "false"
+            deploy_external_argo: "true"
             argo_version: "v3.5.15"
             test_label: "E2ECritical"
+            pod_to_pod_tls_enabled: "true"
+          - k8s_version: "v1.31.0"
+            cache_enabled: "false"
+            deploy_external_argo: "true"
+            argo_version: "v3.6.10"
+            test_label: "E2ECritical"
+            pod_to_pod_tls_enabled: "true"
+          - k8s_version: "v1.31.0"
+            cache_enabled: "false"
+            deploy_external_argo: "true"
+            argo_version: "v3.5.15"
+            test_label: "E2ECritical"
+            pod_to_pod_tls_enabled: "true"
           - k8s_version: "v1.31.0"
             cache_enabled: "false"
             proxy: "true"
             test_label: "E2EProxy"
+            pod_to_pod_tls_enabled: "true"
           - k8s_version: "v1.31.0"
             cache_enabled: "false"
             test_label: "E2EEssential"
+            pod_to_pod_tls_enabled: "true"
           - k8s_version: "v1.31.0"
             cache_enabled: "false"
             test_label: "E2EFailure"
-          - k8s_version: "v1.31.0"
-            cache_enabled: "true"
             pod_to_pod_tls_enabled: "true"
+          - deploy_pypi_server: "true"
+            k8s_version: "v1.31.0"
+            cache_enabled: "false"
+            deploy_external_argo: "false"
+            storage: "seaweedfs"
+            proxy: "false"
             test_label: "E2ECritical"
+            pod_to_pod_tls_enabled: "true"
+          - deploy_pypi_server: "true"
+            k8s_version: "v1.31.0"
+            cache_enabled: "false"
+            deploy_external_argo: "false"
+            storage: "seaweedfs"
+            proxy: "false"
+            test_label: "E2ECritical"
+            pod_to_pod_tls_enabled: "false"
       fail-fast: false
     name: End to End ${{ matrix.test_label}} Tests - K8s ${{ matrix.k8s_version }} cacheEnabled=${{ matrix.cache_enabled }} argoVersion=${{ matrix.argo_version}} proxy=${{ matrix.proxy}} storage=${{ matrix.storage }} pod_to_pod_tls_enabled=${{ matrix.pod_to_pod_tls_enabled }}
     steps:
@@ -109,17 +139,25 @@ jobs:
           cache_enabled: ${{ matrix.cache_enabled }}
           argo_version: ${{ matrix.argo_version }}
           storage_backend: ${{ matrix.storage }}
+          deploy_external_argo: ${{ matrix.deploy_external_argo }}
+          deploy_pypi_server: ${{ matrix.deploy_pypi_server }}
+          proxy: ${{ matrix.proxy }}
           pod_to_pod_tls_enabled: ${{ matrix.pod_to_pod_tls_enabled }}
           image_path: ${{ needs.build.outputs.IMAGE_PATH }}
           image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
           image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
 
-      - name: Configure Cluster CA Cert for TLS-Enabled Tests
+      - name: Configure Cluster CA e2e for TLS-Enabled Tests
         shell: bash
         if: ${{ matrix.pod_to_pod_tls_enabled == 'true'}}
         run: |
-          kubectl get secret kfp-api-tls-cert -n kubeflow -o jsonpath='{.data.ca\.crt}' | base64 -d > "${{ github.workspace }}/ca.crt"
-          echo "CA_CERT_PATH=${{ github.workspace }}/ca.crt" >> $GITHUB_ENV
+          if [ "${{ matrix.proxy }}" = "true" ]; then
+            kubectl get secret kfp-api-tls-cert -n kubeflow -o jsonpath='{.data.ca\.crt}' | base64 -d > "${{ github.workspace }}/ca.crt"
+          else
+            kubectl get configmap openshift-service-ca.crt -n kubeflow -o jsonpath='{.data.service-ca\.crt}' > "${{ github.workspace }}/ca.crt"
+          fi
+          echo "CA_CERT_PATH=${{ github.workspace }}/ca.crt" >> "$GITHUB_ENV"
+
       - name: Configure Input Variables
         shell: bash
         id: configure
@@ -133,7 +171,7 @@ jobs:
             TEST_LABEL=${{ inputs.test_label }}
             NAMESPACE=${{ inputs.namespace }}
           fi
-          
+
           echo "NUMBER_OF_NODES=$NUMBER_OF_NODES" >> $GITHUB_OUTPUT
           echo "TEST_LABEL=$TEST_LABEL" >> $GITHUB_OUTPUT
           echo "NAMESPACE=$NAMESPACE" >> $GITHUB_OUTPUT
@@ -157,9 +195,12 @@ jobs:
           num_parallel_nodes: ${{ steps.configure.outputs.NUMBER_OF_NODES }}
           default_namespace: ${{ steps.configure.outputs.NAMESPACE }}
           python_version: ${{ env.PYTHON_VERSION }}
-          report_name: "${{ matrix.test_label}}Tests_K8s=${{ matrix.k8s_version }}_cacheEnabled=${{ matrix.cache_enabled }}_argoVersion=${{ matrix.argo_version}}_proxy=${{ matrix.proxy }}_storage=${{ matrix.storage }}"
+          report_name: "${{ matrix.test_label}}Tests_K8s=${{ matrix.k8s_version }}_cacheEnabled=${{ matrix.cache_enabled }}_argoVersion=${{ matrix.argo_version}}_proxy=${{ matrix.proxy }}_storage=${{ matrix.storage }}_tls=${{ matrix.pod_to_pod_tls_enabled }}_pypi=${{ matrix.deploy_pypi_server }}"
           tls_enabled: ${{ matrix.pod_to_pod_tls_enabled }}
           ca_cert_path: ${{ env.CA_CERT_PATH }}
+          deployment_name: ${{ steps.deploy.outputs.deployment_name }}
+          deployment_service_account_name: ${{ steps.deploy.outputs.service_account_name }}
+          deployment_mode: ${{ steps.deploy.outputs.deployment_mode }}
 
       - name: Notify test reports
         shell: bash
@@ -183,7 +224,7 @@ jobs:
           storage: "seaweedfs"
           k8s_version: "v1.31.0"
           cache_enabled: "true"
-          test_label: "E2ECritical" 
+          test_label: "E2ECritical"
       fail-fast: false
     name: End to End Critical Scenario Multi User Tests - K8s ${{ matrix.k8s_version }} cacheEnabled=${{ matrix.cache_enabled }} multiUser=${{ matrix.multi_user }} argoVersion=${{ matrix.argo_version}} proxy=${{ matrix.proxy}} storage=${{ matrix.storage }} artifactProxy=${{ matrix.artifact_proxy }}
     steps:
@@ -263,7 +304,10 @@ jobs:
           default_namespace: ${{ steps.configure.outputs.NAMESPACE }}
           python_version: ${{ env.PYTHON_VERSION }}
           user_namespace: ${{ env.USER_NAMESPACE }}
-          report_name: "E2EMultiUserTests_K8s=${{ matrix.k8s_version }}_cacheEnabled=${{ matrix.cache_enabled }}_multiUser=${{ matrix.multi_user }}_storage=${{ matrix.storage }}"
+          report_name: "E2EMultiUserTests_K8s=${{ matrix.k8s_version }}_cacheEnabled=${{ matrix.cache_enabled }}_multiUser=${{ matrix.multi_user }}_storage=${{ matrix.storage }}_artifactProxy=${{ matrix.artifact_proxy }}"
+          deployment_name: ${{ steps.deploy.outputs.deployment_name }}
+          deployment_service_account_name: ${{ steps.deploy.outputs.service_account_name }}
+          deployment_mode: ${{ steps.deploy.outputs.deployment_mode }}
 
       - name: Notify test reports
         shell: bash
