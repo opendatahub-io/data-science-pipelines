@@ -22,7 +22,6 @@ import (
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/v2/component"
-	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
 	k8score "k8s.io/api/core/v1"
 )
 
@@ -34,53 +33,48 @@ func (c *workflowCompiler) Importer(name string, componentSpec *pipelinespec.Com
 	return c.saveComponentImpl(name, importer)
 }
 
-func (c *workflowCompiler) importerTask(name string, task *pipelinespec.PipelineTaskSpec, taskJSON string, parentDagID string) (*wfapi.DAGTask, error) {
-	componentPlaceholder, err := c.useComponentSpec(task.GetComponentRef().GetName())
-	if err != nil {
-		return nil, err
-	}
+func (c *workflowCompiler) importerTask(name string, task *pipelinespec.PipelineTaskSpec, taskName string, parentDagID string, downloadToWorkspace bool) (*wfapi.DAGTask, error) {
 	importerPlaceholder, err := c.useComponentImpl(task.GetComponentRef().GetName())
 	if err != nil {
 		return nil, err
 	}
 	return &wfapi.DAGTask{
 		Name:     name,
-		Template: c.addImporterTemplate(),
-		Arguments: wfapi.Arguments{Parameters: []wfapi.Parameter{{
-			Name:  paramTask,
-			Value: wfapi.AnyStringPtr(taskJSON),
-		}, {
-			Name:  paramComponent,
-			Value: wfapi.AnyStringPtr(componentPlaceholder),
-		}, {
-			Name:  paramImporter,
-			Value: wfapi.AnyStringPtr(importerPlaceholder),
-		}, {
-			Name:  paramParentDagID,
-			Value: wfapi.AnyStringPtr(parentDagID),
-		}}},
+		Template: c.addImporterTemplate(downloadToWorkspace),
+		Arguments: wfapi.Arguments{Parameters: []wfapi.Parameter{
+			{
+				Name:  paramTaskName,
+				Value: wfapi.AnyStringPtr(taskName),
+			},
+			{
+				Name:  paramImporter,
+				Value: wfapi.AnyStringPtr(importerPlaceholder),
+			}, {
+				Name:  paramParentDagTaskID,
+				Value: wfapi.AnyStringPtr(parentDagID),
+			}}},
 	}, nil
 }
 
-func (c *workflowCompiler) addImporterTemplate() string {
+func (c *workflowCompiler) addImporterTemplate(downloadToWorkspace bool) string {
 	name := "system-importer"
+	if downloadToWorkspace {
+		name += "-workspace"
+	}
 	if _, alreadyExists := c.templates[name]; alreadyExists {
 		return name
 	}
 	args := []string{
 		"--executor_type", "importer",
-		"--task_spec", inputValue(paramTask),
-		"--component_spec", inputValue(paramComponent),
+		"--task_name", inputValue(paramTaskName),
 		"--importer_spec", inputValue(paramImporter),
 		"--pipeline_name", c.spec.PipelineInfo.GetName(),
 		"--run_id", runID(),
-		"--parent_dag_id", inputValue(paramParentDagID),
+		"--parent_task_id", inputValue(paramParentDagTaskID),
 		"--pod_name",
 		fmt.Sprintf("$(%s)", component.EnvPodName),
 		"--pod_uid",
 		fmt.Sprintf("$(%s)", component.EnvPodUID),
-		"--mlmd_server_address", metadata.DefaultConfig().Address,
-		"--mlmd_server_port", metadata.DefaultConfig().Port,
 	}
 	if c.cacheDisabled {
 		args = append(args, "--cache_disabled")
@@ -88,13 +82,11 @@ func (c *workflowCompiler) addImporterTemplate() string {
 	if c.mlPipelineTLSEnabled {
 		args = append(args, "--ml_pipeline_tls_enabled")
 	}
-	if common.GetMetadataTLSEnabled() {
-		args = append(args, "--metadata_tls_enabled")
-	}
 
 	setCABundle := false
-	if common.GetCaBundleSecretName() != "" && (c.mlPipelineTLSEnabled || common.GetMetadataTLSEnabled()) {
-		args = append(args, "--ca_cert_path", common.TLSCertCAPath)
+	// If CABUNDLE_SECRET_NAME or CABUNDLE_CONFIGMAP_NAME is set, add the custom CA bundle to the importer.
+	if common.GetCaBundleSecretName() != "" || common.GetCaBundleConfigMapName() != "" {
+		args = append(args, "--ca_cert_path", common.CustomCaCertPath)
 		setCABundle = true
 	}
 
@@ -104,24 +96,70 @@ func (c *workflowCompiler) addImporterTemplate() string {
 	if value, ok := os.LookupEnv(PublishLogsEnvVar); ok {
 		args = append(args, "--publish_logs", value)
 	}
+
+	// Always mount the KFP token volume for authentication with the API server
+	volumeMounts := []k8score.VolumeMount{
+		{
+			Name:      kfpTokenVolumeName,
+			MountPath: kfpTokenMountPath,
+			ReadOnly:  true,
+		},
+	}
+	volumes := []k8score.Volume{
+		{
+			Name: kfpTokenVolumeName,
+			VolumeSource: k8score.VolumeSource{
+				Projected: &k8score.ProjectedVolumeSource{
+					Sources: []k8score.VolumeProjection{
+						{
+							ServiceAccountToken: &k8score.ServiceAccountTokenProjection{
+								Path:              "token",
+								Audience:          kfpTokenAudience,
+								ExpirationSeconds: kfpTokenExpirationSecondsPtr(),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if downloadToWorkspace {
+		volumeMounts = append(volumeMounts,
+			k8score.VolumeMount{
+				Name:      workspaceVolumeName,
+				MountPath: component.WorkspaceMountPath,
+			})
+		volumes = append(volumes,
+			k8score.Volume{
+				Name: workspaceVolumeName,
+				VolumeSource: k8score.VolumeSource{
+					PersistentVolumeClaim: &k8score.PersistentVolumeClaimVolumeSource{
+						ClaimName: fmt.Sprintf("{{workflow.name}}-%s", workspaceVolumeName),
+					},
+				},
+			},
+		)
+	}
+
 	importerTemplate := &wfapi.Template{
 		Name: name,
 		Inputs: wfapi.Inputs{
 			Parameters: []wfapi.Parameter{
-				{Name: paramTask},
-				{Name: paramComponent},
+				{Name: paramTaskName},
 				{Name: paramImporter},
-				{Name: paramParentDagID},
+				{Name: paramParentDagTaskID},
 			},
 		},
 		Container: &k8score.Container{
-			Image:     c.launcherImage,
-			Command:   c.launcherCommand,
-			Args:      args,
-			EnvFrom:   []k8score.EnvFromSource{metadataEnvFrom},
-			Env:       commonEnvs,
-			Resources: driverResources,
+			Image:        c.launcherImage,
+			Command:      c.launcherCommand,
+			Args:         args,
+			EnvFrom:      []k8score.EnvFromSource{metadataEnvFrom},
+			Env:          commonEnvs,
+			Resources:    driverResources,
+			VolumeMounts: volumeMounts,
 		},
+		Volumes: volumes,
 	}
 
 	// If TLS is enabled (apiserver or metadata), add the custom CA bundle to the importer template.

@@ -27,6 +27,11 @@ on:
         default: 'true'
         description: 'Add a sha image tag.'
         required: false
+      dry_run:
+        type: boolean
+        default: false
+        description: 'Dry run mode - build images without pushing to registry or creating tags.'
+        required: false
 jobs:
   build-images-for-release:
     strategy:
@@ -63,12 +68,6 @@ jobs:
           - image: kfp-cache-server
             dockerfile: backend/Dockerfile.cacheserver
             context: .
-          - image: kfp-metadata-writer
-            dockerfile: backend/metadata_writer/Dockerfile
-            context: .
-          - image: kfp-metadata-envoy
-            dockerfile: third_party/metadata_envoy/Dockerfile
-            context: .
           - image: kfp-inverse-proxy-agent
             dockerfile: proxy/Dockerfile
             context: ./proxy
@@ -82,4 +81,4 @@ jobs:
       app_to_build: ${{ matrix.image }}
       image_context: ${{ matrix.context }}
       docker_file: ${{ matrix.dockerfile }}
-      push: true
+      push: ${{ !inputs.dry_run }}

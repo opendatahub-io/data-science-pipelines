@@ -1,11 +1,11 @@
 module github.com/kubeflow/pipelines
 
-go 1.24.7
+go 1.24.10
 
 require (
 	github.com/Masterminds/squirrel v0.0.0-20190107164353-fa735ea14f09
 	github.com/VividCortex/mysqlerr v0.0.0-20170204212430-6c6b55f8796f
-	github.com/argoproj/argo-workflows/v3 v3.7.3
+	github.com/argoproj/argo-workflows/v3 v3.7.5
 	github.com/aws/aws-sdk-go v1.55.5 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/eapache/go-resiliency v1.2.0
@@ -22,13 +22,11 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.0
-	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2
 	// Should match GRPC_GATEWAY_VERSION in backend/api/Dockerfile
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/kubeflow/pipelines/api v0.0.0-20250102152816-873e9dedd766
 	github.com/kubeflow/pipelines/kubernetes_platform v0.0.0-20240725205754-d911c8b73b49
-	github.com/kubeflow/pipelines/third_party/ml-metadata v0.0.0-20240416215826-da804407ad31
 	github.com/lestrrat-go/strftime v1.0.4
 	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/minio/minio-go/v7 v7.0.94
@@ -44,7 +42,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
 	gocloud.dev v0.40.0
-	golang.org/x/net v0.45.0
+	golang.org/x/net v0.47.0
 	golang.org/x/oauth2 v0.30.0
 	// Pre-generated Go code (.pb.go files) for a subset of the .proto files found in
 	// googleapis/googleapis both /api and /rpc should be released relatively close to
@@ -126,7 +124,7 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/evilmonkeyinc/jsonpath v0.8.1 // indirect
-	github.com/expr-lang/expr v1.17.5 // indirect
+	github.com/expr-lang/expr v1.17.7 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fxamacker/cbor/v2 v2.8.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -219,6 +217,7 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.61.0 // indirect
 	go.opentelemetry.io/otel v1.36.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.36.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.36.0 // indirect
 	go.opentelemetry.io/otel/exporters/prometheus v0.58.0 // indirect
 	go.opentelemetry.io/otel/metric v1.36.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.36.0 // indirect
@@ -226,15 +225,15 @@ require (
 	go.opentelemetry.io/otel/trace v1.36.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.7.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/exp v0.0.0-20250531010427-b6e5de432a8b // indirect
-	golang.org/x/mod v0.28.0 // indirect
-	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/sys v0.37.0 // indirect
-	golang.org/x/term v0.36.0 // indirect
-	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/mod v0.29.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
-	golang.org/x/tools v0.37.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	golang.org/x/tools/go/packages/packagestest v0.1.1-deprecated // indirect
 	golang.org/x/xerrors v0.0.0-20240716161551-93cc26a95ae9 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect

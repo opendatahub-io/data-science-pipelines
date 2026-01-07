@@ -2067,7 +2067,9 @@ type RuntimeArtifact struct {
 	// Properties of the Artifact.
 	Metadata *structpb.Struct `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	// Custom path for output artifact.
-	CustomPath    *string `protobuf:"bytes,7,opt,name=custom_path,json=customPath,proto3,oneof" json:"custom_path,omitempty"`
+	CustomPath *string `protobuf:"bytes,7,opt,name=custom_path,json=customPath,proto3,oneof" json:"custom_path,omitempty"`
+	// The unique server generated id of the artifact.
+	ArtifactId    string `protobuf:"bytes,8,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2149,6 +2151,13 @@ func (x *RuntimeArtifact) GetMetadata() *structpb.Struct {
 func (x *RuntimeArtifact) GetCustomPath() string {
 	if x != nil && x.CustomPath != nil {
 		return *x.CustomPath
+	}
+	return ""
+}
+
+func (x *RuntimeArtifact) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
 	}
 	return ""
 }
@@ -4638,12 +4647,14 @@ type PipelineDeploymentConfig_ImporterSpec struct {
 	//
 	// Deprecated: Marked as deprecated in pipeline_spec.proto.
 	CustomProperties map[string]*ValueOrRuntimeParameter `protobuf:"bytes,4,rep,name=custom_properties,json=customProperties,proto3" json:"custom_properties,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Whether or not import an artifact regardless it has been imported before.
+	Reimport bool `protobuf:"varint,5,opt,name=reimport,proto3" json:"reimport,omitempty"`
 	// Properties of the Artifact.
 	Metadata *structpb.Struct `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	// Whether or not import an artifact regardless it has been imported before.
-	Reimport      bool `protobuf:"varint,5,opt,name=reimport,proto3" json:"reimport,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// If true, download artifact into the pipeline workspace.
+	DownloadToWorkspace bool `protobuf:"varint,7,opt,name=download_to_workspace,json=downloadToWorkspace,proto3" json:"download_to_workspace,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PipelineDeploymentConfig_ImporterSpec) Reset() {
@@ -4706,6 +4717,13 @@ func (x *PipelineDeploymentConfig_ImporterSpec) GetCustomProperties() map[string
 	return nil
 }
 
+func (x *PipelineDeploymentConfig_ImporterSpec) GetReimport() bool {
+	if x != nil {
+		return x.Reimport
+	}
+	return false
+}
+
 func (x *PipelineDeploymentConfig_ImporterSpec) GetMetadata() *structpb.Struct {
 	if x != nil {
 		return x.Metadata
@@ -4713,9 +4731,9 @@ func (x *PipelineDeploymentConfig_ImporterSpec) GetMetadata() *structpb.Struct {
 	return nil
 }
 
-func (x *PipelineDeploymentConfig_ImporterSpec) GetReimport() bool {
+func (x *PipelineDeploymentConfig_ImporterSpec) GetDownloadToWorkspace() bool {
 	if x != nil {
-		return x.Reimport
+		return x.DownloadToWorkspace
 	}
 	return false
 }
@@ -5903,7 +5921,7 @@ const file_pipeline_spec_proto_rawDesc = "" +
 	"\x0econstant_value\x18\x01 \x01(\v2\x13.ml_pipelines.ValueB\x02\x18\x01H\x00R\rconstantValue\x12-\n" +
 	"\x11runtime_parameter\x18\x02 \x01(\tH\x00R\x10runtimeParameter\x124\n" +
 	"\bconstant\x18\x03 \x01(\v2\x16.google.protobuf.ValueH\x00R\bconstantB\a\n" +
-	"\x05value\"\xcf\x17\n" +
+	"\x05value\"\x83\x18\n" +
 	"\x18PipelineDeploymentConfig\x12S\n" +
 	"\texecutors\x18\x01 \x03(\v25.ml_pipelines.PipelineDeploymentConfig.ExecutorsEntryR\texecutors\x1a\xfc\t\n" +
 	"\x15PipelineContainerSpec\x12\x14\n" +
@@ -5937,7 +5955,7 @@ const file_pipeline_spec_proto_rawDesc = "" +
 	"\x0eresource_count\x18\x04 \x01(\tR\rresourceCountJ\x04\b\x04\x10\x05\x1a2\n" +
 	"\x06EnvVar\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\x1a\xa3\x05\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x1a\xd7\x05\n" +
 	"\fImporterSpec\x12H\n" +
 	"\fartifact_uri\x18\x01 \x01(\v2%.ml_pipelines.ValueOrRuntimeParameterR\vartifactUri\x12A\n" +
 	"\vtype_schema\x18\x02 \x01(\v2 .ml_pipelines.ArtifactTypeSchemaR\n" +
@@ -5945,9 +5963,10 @@ const file_pipeline_spec_proto_rawDesc = "" +
 	"\n" +
 	"properties\x18\x03 \x03(\v2C.ml_pipelines.PipelineDeploymentConfig.ImporterSpec.PropertiesEntryB\x02\x18\x01R\n" +
 	"properties\x12z\n" +
-	"\x11custom_properties\x18\x04 \x03(\v2I.ml_pipelines.PipelineDeploymentConfig.ImporterSpec.CustomPropertiesEntryB\x02\x18\x01R\x10customProperties\x123\n" +
-	"\bmetadata\x18\x06 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12\x1a\n" +
-	"\breimport\x18\x05 \x01(\bR\breimport\x1ad\n" +
+	"\x11custom_properties\x18\x04 \x03(\v2I.ml_pipelines.PipelineDeploymentConfig.ImporterSpec.CustomPropertiesEntryB\x02\x18\x01R\x10customProperties\x12\x1a\n" +
+	"\breimport\x18\x05 \x01(\bR\breimport\x123\n" +
+	"\bmetadata\x18\x06 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x122\n" +
+	"\x15download_to_workspace\x18\a \x01(\bR\x13downloadToWorkspace\x1ad\n" +
 	"\x0fPropertiesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12;\n" +
 	"\x05value\x18\x02 \x01(\v2%.ml_pipelines.ValueOrRuntimeParameterR\x05value:\x028\x01\x1aj\n" +
@@ -5979,7 +5998,7 @@ const file_pipeline_spec_proto_rawDesc = "" +
 	"\tint_value\x18\x01 \x01(\x03H\x00R\bintValue\x12#\n" +
 	"\fdouble_value\x18\x02 \x01(\x01H\x00R\vdoubleValue\x12#\n" +
 	"\fstring_value\x18\x03 \x01(\tH\x00R\vstringValueB\a\n" +
-	"\x05value\"\xbf\x04\n" +
+	"\x05value\"\xe0\x04\n" +
 	"\x0fRuntimeArtifact\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x124\n" +
 	"\x04type\x18\x02 \x01(\v2 .ml_pipelines.ArtifactTypeSchemaR\x04type\x12\x10\n" +
@@ -5990,7 +6009,9 @@ const file_pipeline_spec_proto_rawDesc = "" +
 	"\x11custom_properties\x18\x05 \x03(\v23.ml_pipelines.RuntimeArtifact.CustomPropertiesEntryB\x02\x18\x01R\x10customProperties\x123\n" +
 	"\bmetadata\x18\x06 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12$\n" +
 	"\vcustom_path\x18\a \x01(\tH\x00R\n" +
-	"customPath\x88\x01\x01\x1aR\n" +
+	"customPath\x88\x01\x01\x12\x1f\n" +
+	"\vartifact_id\x18\b \x01(\tR\n" +
+	"artifactId\x1aR\n" +
 	"\x0fPropertiesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
 	"\x05value\x18\x02 \x01(\v2\x13.ml_pipelines.ValueR\x05value:\x028\x01\x1aX\n" +

@@ -18,8 +18,17 @@ images:
   - name: ghcr.io/kubeflow/kfp-frontend
     newName: kind-registry:5000/frontend
     newTag: latest
-  - name: ghcr.io/kubeflow/kfp-metadata-writer
-    newName: kind-registry:5000/metadata-writer
+  - name: ghcr.io/kubeflow/kfp-viewer-crd-controller
+    newName: kind-registry:5000/viewer-crd-controller
+    newTag: latest
+  - name: ghcr.io/kubeflow/kfp-visualization-server
+    newName: kind-registry:5000/visualization-server
+    newTag: latest
+  - name: ghcr.io/kubeflow/kfp-cache-deployer
+    newName: kind-registry:5000/cache-deployer
+    newTag: latest
+  - name: ghcr.io/kubeflow/kfp-cache-server
+    newName: kind-registry:5000/cache-server
     newTag: latest
 
 patches:
@@ -27,14 +36,14 @@ patches:
     target:
       kind: Deployment
       name: ml-pipeline
-  - path: ../../base/grpc-specs.yaml
-    target:
-      kind: Deployment
-      name: metadata-grpc-deployment
   - path: ../../base/cache-specs.yaml
     target:
       kind: Deployment
       name: cache-server
+  - path: env.yaml
+    target:
+      kind: Deployment
+      name: kubeflow-pipelines-profile-controller
   - target:
       kind: ConfigMap
       name: pipeline-install-config
@@ -61,11 +70,6 @@ replacements:
       - select:
           kind: Deployment
           name: ml-pipeline
-        fieldPaths:
-          - spec.template.spec.dnsConfig.searches.[=NAMESPACE.svc.cluster.local]
-      - select:
-          kind: Deployment
-          name: metadata-grpc-deployment
         fieldPaths:
           - spec.template.spec.dnsConfig.searches.[=NAMESPACE.svc.cluster.local]
       - select:

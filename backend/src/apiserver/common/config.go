@@ -32,10 +32,13 @@ const (
 	KubeflowUserIDPrefix                    string = "KUBEFLOW_USERID_PREFIX"
 	UpdatePipelineVersionByDefault          string = "AUTO_UPDATE_PIPELINE_DEFAULT_VERSION"
 	TokenReviewAudience                     string = "TOKEN_REVIEW_AUDIENCE"
-	MetadataTLSEnabled                      string = "METADATA_TLS_ENABLED"
 	CaBundleSecretName                      string = "CABUNDLE_SECRET_NAME"
+	CaBundleConfigMapName                   string = "CABUNDLE_CONFIGMAP_NAME"
+	CaBundleKeyName                         string = "CABUNDLE_KEY_NAME"
 	RequireNamespaceForPipelines            string = "REQUIRE_NAMESPACE_FOR_PIPELINES"
 	CompiledPipelineSpecPatch               string = "COMPILED_PIPELINE_SPEC_PATCH"
+	MLPipelineServiceName                   string = "ML_PIPELINE_SERVICE_NAME"
+	MetadataServiceName                     string = "METADATA_SERVICE_NAME"
 )
 
 func IsPipelineVersionUpdatedByDefault() bool {
@@ -112,6 +115,14 @@ func GetPodNamespace() string {
 	return GetStringConfigWithDefault(PodNamespace, DefaultPodNamespace)
 }
 
+func GetMLPipelineServiceName() string {
+	return GetStringConfigWithDefault(MLPipelineServiceName, DefaultMLPipelineServiceName)
+}
+
+func GetMetadataServiceName() string {
+	return GetStringConfigWithDefault(MetadataServiceName, DefaultMetadataServiceName)
+}
+
 func GetBoolFromStringWithDefault(value string, defaultValue bool) bool {
 	boolVal, err := strconv.ParseBool(value)
 	if err != nil {
@@ -136,12 +147,16 @@ func GetTokenReviewAudience() string {
 	return GetStringConfigWithDefault(TokenReviewAudience, DefaultTokenReviewAudience)
 }
 
-func GetMetadataTLSEnabled() bool {
-	return GetBoolConfigWithDefault(MetadataTLSEnabled, DefaultMetadataTLSEnabled)
-}
-
 func GetCaBundleSecretName() string {
 	return GetStringConfigWithDefault(CaBundleSecretName, "")
+}
+
+func GetCABundleKey() string {
+	return GetStringConfigWithDefault(CaBundleKeyName, "")
+}
+
+func GetCaBundleConfigMapName() string {
+	return GetStringConfigWithDefault(CaBundleConfigMapName, "")
 }
 
 func GetCompiledPipelineSpecPatch() string {
