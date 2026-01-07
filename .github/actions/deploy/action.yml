@@ -1,7 +1,31 @@
-name: "Set up KFP on KinD"
-description: "Step to start and configure KFP on Kind"
+name: "Deploy Data Science Pipelines"
+description: "Enhanced deployment with DSPO and PyPI server support"
 
 inputs:
+  # Image configuration
+  image_tag:
+    default: "latest"
+    required: true
+    description: "Provide the image tag your image was tagged with"
+  image_path:
+    required: true
+    description: "Path within github artifacts where your image tarball is stored"
+  image_registry:
+    default: "kind-registry:5000"
+    required: true
+    description: "Image Registry address of the images"
+
+  # Operator deployment options
+  deploy_pypi_server:
+    description: "Deploy PyPI server for Python packages"
+    required: false
+    default: 'false'
+  deploy_external_argo:
+    description: "Deploy Argo Workflows externally in separate namespace"
+    required: false
+    default: 'false'
+
+  # Existing KFP options
   pipeline_store:
     description: "Flag to deploy KFP with K8s Native API"
     default: 'database'
@@ -14,15 +38,6 @@ inputs:
     description: "If KFP should be deployed with cache enabled globally"
     required: false
     default: 'true'
-  image_tag:
-    required: true
-    description: "Provide the image tag your image was tagged with"
-  image_path:
-    required: true
-    description: "Path within github artifacts where your image tarball is stored"
-  image_registry:
-    required: true
-    description: "Image Registry address of the images"
   multi_user:
     description: "If KFP should be deployed in multi-user mode"
     required: false
@@ -37,6 +52,7 @@ inputs:
     default: 'seaweedfs'
   argo_version:
     required: false
+    default: 'v3.6.7'
     description: "Argo version to use for the cluster"
   forward_port:
     required: false
@@ -45,7 +61,11 @@ inputs:
   pod_to_pod_tls_enabled:
     description: "If KFP should be deployed with TLS pod-to-pod communication."
     required: false
-    default: 'false'
+    default: 'true'
+  namespace:
+    description: "Namespace for DSPA deployment"
+    required: false
+    default: 'kubeflow'
 
 runs:
   using: "composite"
@@ -64,70 +84,55 @@ runs:
     - name: Load Docker Images
       shell: bash
       run: |
-        APPS=("apiserver" "driver" "launcher" "scheduledworkflow" "persistenceagent" "frontend" "metadata-writer")
+        APPS=("apiserver" "driver" "launcher" "scheduledworkflow" "persistenceagent" "frontend" "metadata-writer"  )
         for app in "${APPS[@]}"; do
           docker image load -i ${{ inputs.image_path }}/$app/$app.tar
           docker push ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }}
           rm ${{ inputs.image_path }}/$app/$app.tar
           docker image rm ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }}
-        done  
+        done
 
-    - name: Configure Args
+    - name: Install Python Dependencies
       shell: bash
-      id: configure
       run: |
-        ARGS=""
+        pip3 install pyyaml
 
-        if [ "${{ inputs.proxy }}" = "true" ]; then
-          echo "Enabling Proxy"
-          ARGS="${ARGS} --proxy"
-        fi
-
-        if [ "${{inputs.cache_enabled }}" = "false" ]; then
-          echo "Disabling Cache"
-          ARGS="${ARGS} --cache-disabled"
-        fi
-
-        if [ "${{inputs.pipeline_store }}" = "kubernetes" ]; then
-          echo "Deploying in native K8s API Mode"
-          ARGS="${ARGS} --deploy-k8s-native"
-        fi
-
-        if [ "${{ inputs.multi_user }}" = "true" ]; then
-          echo "Deploying in Multi User Mode"
-          ARGS="${ARGS} --multi-user"
-        fi
-
-        if [ "${{ inputs.artifact_proxy }}" = "true" ]; then
-          echo "Enabling artifact proxy"
-          ARGS="${ARGS} --artifact-proxy"
-        fi
-
-        if [ "${{ inputs.storage_backend }}" != "seaweedfs" ] && [ -n "${{ inputs.storage_backend }}" ]; then
-          echo "Deploying with artifact storage ${{ inputs.storage_backend }}"
-          ARGS="${ARGS} --storage ${{ inputs.storage_backend }}"
-        fi
-
-        if [ -n "${{ inputs.argo_version }}" ]; then
-          echo "Deploying with argo version ${{ inputs.argo_version }}"
-          ARGS="${ARGS} --argo-version ${{ inputs.argo_version }}"
-        fi
-        if [ "${{inputs.pod_to_pod_tls_enabled }}" = "true" ]; then
-          ARGS="${ARGS} --tls-enabled"
-        fi
-        echo "ARGS=$ARGS" >> $GITHUB_OUTPUT
-
-    - name: Deploy KFP
-      id: deploy-kfp
-      if: ${{ steps.configure.outcome == 'success' }}
-      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08
+    - name: Set up Go
+      uses: actions/setup-go@v4
       with:
-        max_attempts: 2
-        timeout_minutes: 15
-        command: ./.github/resources/scripts/deploy-kfp.sh ${{ steps.configure.outputs.ARGS }}
+        go-version: 'stable'  # Uses latest stable Go version
 
-    - name: Forward API port
-      id: forward-api-port
+    - name: Deploy Data Science Pipelines
       shell: bash
-      if: ${{ steps.deploy-kfp.outcome == 'success' && inputs.forward_port == 'true'}}
-      run: ./.github/resources/scripts/forward-port.sh "kubeflow" "ml-pipeline" 8888 8888
+      run: |
+        # Handle empty inputs by using defaults
+        PIPELINE_STORE="${{ inputs.pipeline_store }}"
+        STORAGE_BACKEND="${{ inputs.storage_backend }}"
+        NAMESPACE="${{ inputs.namespace }}"
+        PROXY="${{ inputs.proxy }}"
+        POD_TO_POD_TLS_ENABLED="${{ inputs.pod_to_pod_tls_enabled }}"
+
+        # Use defaults if empty
+        PIPELINE_STORE=${PIPELINE_STORE:-"database"}
+        STORAGE_BACKEND=${STORAGE_BACKEND:-"seaweedfs"}
+        NAMESPACE=${NAMESPACE:-"kubeflow"}
+        PROXY=${PROXY:-"false"}
+        POD_TO_POD_TLS_ENABLED=${POD_TO_POD_TLS_ENABLED:-"true"}
+
+        python3 ./.github/actions/deploy/deploy.py \
+          --github-repository "${{ github.repository }}" \
+          --github-base-ref "${{ github.base_ref }}" \
+          --image-tag "${{ inputs.image_tag }}" \
+          --image-registry "${{ inputs.image_registry }}" \
+          --deploy-pypi-server "${{ inputs.deploy_pypi_server }}" \
+          --deploy-external-argo "${{ inputs.deploy_external_argo }}" \
+          --pipeline-store "$PIPELINE_STORE" \
+          --proxy "$PROXY" \
+          --cache-enabled "${{ inputs.cache_enabled }}" \
+          --multi-user "${{ inputs.multi_user }}" \
+          --artifact-proxy "${{ inputs.artifact_proxy }}" \
+          --storage-backend "$STORAGE_BACKEND" \
+          --argo-version "${{ inputs.argo_version }}" \
+          --forward-port "${{ inputs.forward_port }}" \
+          --pod-to-pod-tls-enabled "$POD_TO_POD_TLS_ENABLED" \
+          --namespace "$NAMESPACE"
