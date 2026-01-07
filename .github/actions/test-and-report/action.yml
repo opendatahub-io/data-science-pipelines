@@ -56,6 +56,40 @@ inputs:
     description: "Path to the CA certificate file."
     required: false
     default: ""
+  # Deployment metadata inputs (from deploy action outputs)
+  deployment_name:
+    description: "Name of the KFP API server deployment/service (from deploy action)"
+    required: false
+    default: ""
+  deployment_service_account_name:
+    description: "Service account name from deployment (from deploy action)"
+    required: false
+    default: ""
+  deployment_mode:
+    description: "Deployment mode used - operator or direct (from deploy action)"
+    required: false
+    default: ""
+  # Optional API overrides (for custom scenarios)
+  api_url:
+    description: "Override API server URL (leave empty for auto-detection)"
+    required: false
+    default: ""
+  auth_token:
+    description: "Override authentication token (leave empty for auto-generation)"
+    required: false
+    default: ""
+  service_account_name:
+    description: "Override service account name for pipeline execution (leave empty to use deployment SA)"
+    required: false
+    default: ""
+  base_image:
+    description: "Base container image for pipeline components"
+    required: false
+    default: ""
+  skip_api_config:
+    description: "Skip API access configuration and token generation (for tests that do not need a cluster)"
+    required: false
+    default: 'false'
 
 
 runs:
@@ -65,6 +99,84 @@ runs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ inputs.python_version }}
+
+    - name: Configure API Access
+      id: configure-api
+      if: ${{ inputs.skip_api_config != 'true' }}
+      shell: bash
+      run: |
+        echo "🔧 Configuring API access for tests..."
+
+        # Use provided API URL if available, otherwise detect from deployment
+        if [ -n "${{ inputs.api_url }}" ]; then
+          API_URL="${{ inputs.api_url }}"
+          echo "ℹ️  Using provided API URL: $API_URL"
+        else
+          # Auto-detect API URL based on TLS configuration
+          TLS_ENABLED="${{ inputs.tls_enabled }}"
+          if [ "$TLS_ENABLED" = "true" ]; then
+            API_URL="https://localhost:8888"
+          else
+            API_URL="http://localhost:8888"
+          fi
+          echo "🔍 Auto-detected API URL: $API_URL"
+        fi
+
+        # Use provided token if available, otherwise generate from service account
+        # In multi-user mode without an explicit token, skip token generation here
+        # and let the test code handle it via CreateUserToken with the user namespace/SA.
+        MULTI_USER="${{ inputs.multi_user }}"
+        if [ -n "${{ inputs.auth_token }}" ]; then
+          API_TOKEN="${{ inputs.auth_token }}"
+          echo "ℹ️  Using provided auth token"
+        elif [ "$MULTI_USER" = "true" ]; then
+          API_TOKEN=""
+          echo "ℹ️  Multi-user mode: skipping token generation, tests will create user token"
+        else
+          # Determine service account name
+          if [ -n "${{ inputs.service_account_name }}" ]; then
+            SERVICE_ACCOUNT_NAME="${{ inputs.service_account_name }}"
+            echo "ℹ️  Using provided service account: $SERVICE_ACCOUNT_NAME"
+          elif [ -n "${{ inputs.deployment_service_account_name }}" ]; then
+            SERVICE_ACCOUNT_NAME="${{ inputs.deployment_service_account_name }}"
+            echo "🔍 Using deployment service account: $SERVICE_ACCOUNT_NAME"
+          else
+            # Fallback based on deployment name
+            DEPLOYMENT_NAME="${{ inputs.deployment_name }}"
+            if [ -n "$DEPLOYMENT_NAME" ]; then
+              SERVICE_ACCOUNT_NAME="$DEPLOYMENT_NAME"
+              echo "🔍 Using deployment name as service account: $SERVICE_ACCOUNT_NAME"
+            else
+              SERVICE_ACCOUNT_NAME="ml-pipeline"  # Final fallback
+              echo "⚠️  Using fallback service account: $SERVICE_ACCOUNT_NAME"
+            fi
+          fi
+
+          # Wait for deployment to be ready
+          DEPLOYMENT_NAME="${{ inputs.deployment_name }}"
+          if [ -n "$DEPLOYMENT_NAME" ]; then
+            echo "⏳ Waiting for service $DEPLOYMENT_NAME to be available..."
+            timeout 2m bash -c "until kubectl get service $DEPLOYMENT_NAME -n ${{ inputs.default_namespace }} &> /dev/null; do echo 'Waiting for service $DEPLOYMENT_NAME...'; sleep 10; done"
+          fi
+
+          # Generate API token
+          echo "🔑 Generating token for $SERVICE_ACCOUNT_NAME..."
+          API_TOKEN=$(kubectl create token $SERVICE_ACCOUNT_NAME --namespace ${{ inputs.default_namespace }} --duration=60m)
+          if [ $? -eq 0 ]; then
+            echo "✅ Token generated successfully"
+          else
+            echo "❌ Token generation failed"
+            exit 1
+          fi
+        fi
+
+        # Output for next step
+        if [ -n "$API_TOKEN" ]; then
+          echo "::add-mask::$API_TOKEN"
+        fi
+        echo "API_URL=$API_URL" >> $GITHUB_OUTPUT
+        echo "API_TOKEN=$API_TOKEN" >> $GITHUB_OUTPUT
+        echo "SERVICE_ACCOUNT_NAME=${SERVICE_ACCOUNT_NAME:-${{ inputs.service_account_name }}}" >> $GITHUB_OUTPUT
 
     - name: Run Tests
       id: run-tests
@@ -82,16 +194,32 @@ runs:
           MULTI_USER='false'
         fi
         TLS_ENABLED=${{ inputs.tls_enabled }}
-        if [ -z $TLS_ENABLED ]; then
+        if [ -z "$TLS_ENABLED" ]; then
           TLS_ENABLED='false'
         fi
-        CA_CERT_PATH=${{ inputs.ca_cert_path }}
-        if [ -z $CA_CERT_PATH ]; then
-          CA_CERT_PATH=''
+
+        # Set API scheme and CA cert path based on TLS configuration
+        if [[ "$TLS_ENABLED" == 'true' ]]; then
+          API_SCHEME='https'
+          CA_CERT_PATH=${{ inputs.ca_cert_path }}
+          if [ -z "$CA_CERT_PATH" ]; then
+            CA_CERT_PATH=''
+          fi
+        else
+          API_SCHEME='http'
+          CA_CERT_PATH=''  # Force empty when TLS is disabled
         fi
         PULL_NUMBER="${{ github.event.inputs.pull_number || github.event.pull_request.number }}"
         REPO_NAME="${{ github.repository }}"
-        go run github.com/onsi/ginkgo/v2/ginkgo -r -v --cover -p --keep-going --github-output=true --nodes=${{ inputs.num_parallel_nodes }} -v --label-filter=${{ inputs.test_label }} -- -namespace=${{ inputs.default_namespace }} -multiUserMode=$MULTI_USER -useProxy=$USE_PROXY -userNamespace=${{ inputs.user_namespace }} -uploadPipelinesWithKubernetes=${{ inputs.upload_pipelines_with_kubernetes_client}} -tlsEnabled=$TLS_ENABLED -caCertPath=$CA_CERT_PATH -pullNumber=$PULL_NUMBER -repoName=$REPO_NAME
+        API_URL="${{ steps.configure-api.outputs.API_URL }}"
+        AUTH_TOKEN="${{ steps.configure-api.outputs.API_TOKEN }}"
+        SERVICE_ACCOUNT_NAME="${{ steps.configure-api.outputs.SERVICE_ACCOUNT_NAME }}"
+        BASE_IMAGE_FLAG=""
+        if [ -n "${{ inputs.base_image }}" ]; then
+          BASE_IMAGE_FLAG="-baseImage=${{ inputs.base_image }}"
+        fi
+
+        go run github.com/onsi/ginkgo/v2/ginkgo -r -v --cover -p --keep-going --github-output=true --nodes=${{ inputs.num_parallel_nodes }} -v --label-filter=${{ inputs.test_label }} -- -namespace=${{ inputs.default_namespace }} -multiUserMode=$MULTI_USER -useProxy=$USE_PROXY -userNamespace=${{ inputs.user_namespace }} -uploadPipelinesWithKubernetes=${{ inputs.upload_pipelines_with_kubernetes_client}} -disableTlsCheck=true -apiScheme=$API_SCHEME -tlsEnabled=$TLS_ENABLED -caCertPath=$CA_CERT_PATH -pullNumber=$PULL_NUMBER -repoName=$REPO_NAME -apiUrl="$API_URL" -authToken="$AUTH_TOKEN" -serviceAccountName="$SERVICE_ACCOUNT_NAME" $BASE_IMAGE_FLAG
       continue-on-error: true
 
     - name: Collect Pod logs in case of Test Failures
