@@ -17,12 +17,12 @@ package argocompiler
 import (
 	"fmt"
 	"os"
-	"strconv"
 
 	wfapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/v2/component"
+	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
 	k8score "k8s.io/api/core/v1"
 )
 
@@ -79,14 +79,26 @@ func (c *workflowCompiler) addImporterTemplate() string {
 		fmt.Sprintf("$(%s)", component.EnvPodName),
 		"--pod_uid",
 		fmt.Sprintf("$(%s)", component.EnvPodUID),
-		"--mlmd_server_address", common.GetMetadataGrpcServiceServiceHost(),
-		"--mlmd_server_port", common.GetMetadataGrpcServiceServicePort(),
-		"--metadataTLSEnabled", strconv.FormatBool(common.GetMetadataTLSEnabled()),
-		"--ca_cert_path", common.GetCaCertPath(),
+		"--mlmd_server_address", metadata.GetMetadataConfig().Address,
+		"--mlmd_server_port", metadata.GetMetadataConfig().Port,
 	}
 	if c.cacheDisabled {
 		args = append(args, "--cache_disabled")
 	}
+	if c.mlPipelineTLSEnabled {
+		args = append(args, "--ml_pipeline_tls_enabled")
+	}
+	if common.GetMetadataTLSEnabled() {
+		args = append(args, "--metadata_tls_enabled")
+	}
+
+	setCABundle := false
+	// If CABUNDLE_SECRET_NAME or CABUNDLE_CONFIGMAP_NAME is set, add the custom CA bundle to the importer.
+	if common.GetCaBundleSecretName() != "" || common.GetCaBundleConfigMapName() != "" {
+		args = append(args, "--ca_cert_path", common.CustomCaCertPath)
+		setCABundle = true
+	}
+
 	if value, ok := os.LookupEnv(PipelineLogLevelEnvVar); ok {
 		args = append(args, "--log_level", value)
 	}
@@ -113,8 +125,10 @@ func (c *workflowCompiler) addImporterTemplate() string {
 		},
 	}
 
-	ConfigureCABundle(importerTemplate)
-
+	// If TLS is enabled (apiserver or metadata), add the custom CA bundle to the importer template.
+	if setCABundle {
+		ConfigureCustomCABundle(importerTemplate)
+	}
 	c.templates[name] = importerTemplate
 	c.wf.Spec.Templates = append(c.wf.Spec.Templates, *importerTemplate)
 	return name

@@ -15,9 +15,8 @@
 package api_server_v2
 
 import (
+	"crypto/tls"
 	"fmt"
-
-	httptransport "github.com/go-openapi/runtime/client"
 
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
@@ -46,10 +45,10 @@ type RunClient struct {
 	authInfoWriter runtime.ClientAuthInfoWriter
 }
 
-func NewRunClient(clientConfig clientcmd.ClientConfig, debug bool) (
+func NewRunClient(clientConfig clientcmd.ClientConfig, debug bool, tlsCfg *tls.Config) (
 	*RunClient, error) {
 
-	runtime, err := api_server.NewHTTPRuntime(clientConfig, debug)
+	runtime, err := api_server.NewHTTPRuntime(clientConfig, debug, tlsCfg)
 	if err != nil {
 		return nil, fmt.Errorf("Error occurred when creating run client: %w", err)
 	}
@@ -62,10 +61,10 @@ func NewRunClient(clientConfig clientcmd.ClientConfig, debug bool) (
 	}, nil
 }
 
-func NewKubeflowInClusterRunClient(namespace string, debug bool) (
+func NewKubeflowInClusterRunClient(namespace string, debug bool, tlsCfg *tls.Config) (
 	*RunClient, error) {
 
-	runtime := api_server.NewKubeflowInClusterHTTPRuntime(namespace, debug)
+	runtime := api_server.NewKubeflowInClusterHTTPRuntime(namespace, debug, tlsCfg)
 
 	apiClient := apiclient.New(runtime, strfmt.Default)
 
@@ -76,15 +75,14 @@ func NewKubeflowInClusterRunClient(namespace string, debug bool) (
 	}, nil
 }
 
-func NewMultiUserRunClient(clientConfig clientcmd.ClientConfig, userToken string, debug bool) (
+func NewMultiUserRunClient(clientConfig clientcmd.ClientConfig, userToken string, debug bool, tlsCfg *tls.Config) (
 	*RunClient, error) {
 
-	runtime, err := api_server.NewHTTPRuntime(clientConfig, debug)
+	runtime, err := api_server.NewHTTPRuntime(clientConfig, debug, tlsCfg)
 	if err != nil {
 		return nil, fmt.Errorf("Error occurred when creating run client: %w", err)
 	}
 
-	runtime.DefaultAuthentication = httptransport.BearerToken(userToken)
 	apiClient := apiclient.New(runtime, strfmt.Default)
 
 	// Creating run client
@@ -158,7 +156,7 @@ func (c *RunClient) Archive(parameters *params.RunServiceArchiveRunParams) error
 
 		return util.NewUserError(err,
 			fmt.Sprintf("Failed to archive runs. Params: '%+v'", parameters),
-			fmt.Sprintf("Failed to archive runs"))
+			"Failed to archive runs")
 	}
 
 	return nil
@@ -182,7 +180,7 @@ func (c *RunClient) Unarchive(parameters *params.RunServiceUnarchiveRunParams) e
 
 		return util.NewUserError(err,
 			fmt.Sprintf("Failed to unarchive runs. Params: '%+v'", parameters),
-			fmt.Sprintf("Failed to unarchive runs"))
+			"Failed to unarchive runs")
 	}
 
 	return nil
@@ -206,7 +204,7 @@ func (c *RunClient) Delete(parameters *params.RunServiceDeleteRunParams) error {
 
 		return util.NewUserError(err,
 			fmt.Sprintf("Failed to delete runs. Params: '%+v'", parameters),
-			fmt.Sprintf("Failed to delete runs"))
+			"Failed to delete runs")
 	}
 
 	return nil
@@ -231,7 +229,7 @@ func (c *RunClient) List(parameters *params.RunServiceListRunsParams) (
 
 		return nil, 0, "", util.NewUserError(err,
 			fmt.Sprintf("Failed to list runs. Params: '%+v'", parameters),
-			fmt.Sprintf("Failed to list runs"))
+			"Failed to list runs")
 	}
 
 	return response.Payload.Runs, int(response.Payload.TotalSize), response.Payload.NextPageToken, nil

@@ -6,10 +6,10 @@ metadata:
 spec:
   arguments:
     parameters:
-    - name: components-41946b6fb2d5d2dfad624f45e380a74ae2e501121a3202c09d5afeafaf165105
+    - name: components-40c540274b1d226bcb00c4909232618684bccf133c18257336a6d001e5eba8b4
       value: '{"executorLabel":"exec-container-io","inputDefinitions":{"parameters":{"text":{"parameterType":"STRING"}}},"outputDefinitions":{"parameters":{"output_path":{"parameterType":"STRING"}}}}'
-    - name: implementations-41946b6fb2d5d2dfad624f45e380a74ae2e501121a3202c09d5afeafaf165105
-      value: '{"args":["--output_path","{{$.outputs.parameters[''output_path''].output_file}}"],"command":["my_program","{{$.inputs.parameters[''text'']}}"],"image":"python:3.9"}'
+    - name: implementations-40c540274b1d226bcb00c4909232618684bccf133c18257336a6d001e5eba8b4
+      value: '{"args":["--output_path","{{$.outputs.parameters[''output_path''].output_file}}"],"command":["my_program","{{$.inputs.parameters[''text'']}}"],"image":"registry.access.redhat.com/ubi9/python-311:latest"}'
     - name: components-root
       value: '{"dag":{"outputs":{"parameters":{"output_path":{"valueFromParameter":{"outputParameterKey":"output_path","producerSubtask":"container-io"}}}},"tasks":{"container-io":{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-container-io"},"inputs":{"parameters":{"text":{"componentInputParameter":"text"}}},"taskInfo":{"name":"container-io"}}}},"inputDefinitions":{"parameters":{"text":{"parameterType":"STRING"}}},"outputDefinitions":{"parameters":{"output_path":{"parameterType":"STRING"}}}}'
   entrypoint: entrypoint
@@ -58,23 +58,16 @@ spec:
       - ""
       - --no_proxy
       - ""
-      - --mlPipelineServiceTLSEnabled
-      - "false"
+      - --ml_pipeline_server_address
+      - ml-pipeline.kubeflow
+      - --ml_pipeline_server_port
+      - "8887"
       - --mlmd_server_address
-      - metadata-grpc-service
+      - metadata-grpc-service.kubeflow.svc.cluster.local
       - --mlmd_server_port
       - "8080"
-      - --metadataTLSEnabled
-      - "false"
-      - --ca_cert_path
-      - ""
       command:
       - driver
-      env:
-      - name: ML_PIPELINE_SERVICE_HOST
-        value: ml-pipeline.kubeflow.svc.cluster.local
-      - name: ML_PIPELINE_SERVICE_PORT_GRPC
-        value: "8887"
       image: ghcr.io/kubeflow/kfp-driver:latest
       name: ""
       resources:
@@ -141,10 +134,6 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.uid
-      - name: ML_PIPELINE_SERVICE_HOST
-        value: ml-pipeline.kubeflow.svc.cluster.local
-      - name: ML_PIPELINE_SERVICE_PORT_GRPC
-        value: "8887"
       envFrom:
       - configMapRef:
           name: metadata-grpc-configmap
@@ -211,11 +200,11 @@ spec:
       - arguments:
           parameters:
           - name: component
-            value: '{{workflow.parameters.components-41946b6fb2d5d2dfad624f45e380a74ae2e501121a3202c09d5afeafaf165105}}'
+            value: '{{workflow.parameters.components-40c540274b1d226bcb00c4909232618684bccf133c18257336a6d001e5eba8b4}}'
           - name: task
             value: '{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-container-io"},"inputs":{"parameters":{"text":{"componentInputParameter":"text"}}},"taskInfo":{"name":"container-io"}}'
           - name: container
-            value: '{{workflow.parameters.implementations-41946b6fb2d5d2dfad624f45e380a74ae2e501121a3202c09d5afeafaf165105}}'
+            value: '{{workflow.parameters.implementations-40c540274b1d226bcb00c4909232618684bccf133c18257336a6d001e5eba8b4}}'
           - name: task-name
             value: container-io
           - name: parent-dag-id
@@ -274,23 +263,16 @@ spec:
       - ""
       - --no_proxy
       - ""
-      - --mlPipelineServiceTLSEnabled
-      - "false"
+      - --ml_pipeline_server_address
+      - ml-pipeline.kubeflow
+      - --ml_pipeline_server_port
+      - "8887"
       - --mlmd_server_address
-      - metadata-grpc-service
+      - metadata-grpc-service.kubeflow.svc.cluster.local
       - --mlmd_server_port
       - "8080"
-      - --metadataTLSEnabled
-      - "false"
-      - --ca_cert_path
-      - ""
       command:
       - driver
-      env:
-      - name: ML_PIPELINE_SERVICE_HOST
-        value: ml-pipeline.kubeflow.svc.cluster.local
-      - name: ML_PIPELINE_SERVICE_PORT_GRPC
-        value: "8887"
       image: ghcr.io/kubeflow/kfp-driver:latest
       name: ""
       resources:

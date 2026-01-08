@@ -68,21 +68,25 @@ type Options struct {
 
 	CacheDisabled bool
 
+	DriverType string
+
+	TaskName string // the original name of the task, used for input resolution
+
 	// set to true if ml pipeline server is serving over tls
 	MLPipelineTLSEnabled bool
+
+	// set to true if metadata server is serving over tls
+	MLMDTLSEnabled bool
+
+	MLPipelineServerAddress string
+
+	MLPipelineServerPort string
 
 	MLMDServerAddress string
 
 	MLMDServerPort string
 
-	// set to true if MLMD server is serving over tls
-	MLMDTLSEnabled bool
-
 	CaCertPath string
-
-	DriverType string
-
-	TaskName string // the original name of the task, used for input resolution
 }
 
 // TaskConfig needs to stay aligned with the TaskConfig in the SDK.
@@ -231,12 +235,14 @@ func initPodSpecPatch(
 	pipelineLogLevel string,
 	publishLogs string,
 	cacheDisabled string,
+	taskConfig *TaskConfig,
 	mlPipelineTLSEnabled bool,
+	metadataTLSEnabled bool,
+	caCertPath string,
+	mlPipelineServerAddress string,
+	mlPipelineServerPort string,
 	mlmdServerAddress string,
 	mlmdServerPort string,
-	mlmdTLSEnabled bool,
-	caCertPath string,
-	taskConfig *TaskConfig,
 ) (*k8score.PodSpec, error) {
 	executorInputJSON, err := protojson.Marshal(executorInput)
 	if err != nil {
@@ -277,15 +283,20 @@ func initPodSpecPatch(
 		fmt.Sprintf("$(%s)", component.EnvPodName),
 		"--pod_uid",
 		fmt.Sprintf("$(%s)", component.EnvPodUID),
-		"--mlmd_server_address",
-		mlmdServerAddress,
-		"--mlmd_server_port",
-		mlmdServerPort,
+		"--ml_pipeline_server_address", mlPipelineServerAddress,
+		"--ml_pipeline_server_port", mlPipelineServerPort,
+		"--mlmd_server_address", mlmdServerAddress,
+		"--mlmd_server_port", mlmdServerPort,
 		"--publish_logs", publishLogs,
-		"--metadataTLSEnabled", fmt.Sprintf("%v", mlmdTLSEnabled),
-		"--mlPipelineServiceTLSEnabled",
-		fmt.Sprintf("%v", mlPipelineTLSEnabled),
-		"--ca_cert_path", caCertPath,
+	}
+	if mlPipelineTLSEnabled {
+		launcherCmd = append(launcherCmd, "--ml_pipeline_tls_enabled")
+	}
+	if metadataTLSEnabled {
+		launcherCmd = append(launcherCmd, "--metadata_tls_enabled")
+	}
+	if caCertPath != "" {
+		launcherCmd = append(launcherCmd, "--ca_cert_path", caCertPath)
 	}
 	if cacheDisabled == "true" {
 		launcherCmd = append(launcherCmd, "--cache_disabled")

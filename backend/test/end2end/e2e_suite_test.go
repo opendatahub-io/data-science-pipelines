@@ -15,6 +15,7 @@
 package end2end
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"os"
@@ -27,8 +28,6 @@ import (
 	"github.com/kubeflow/pipelines/backend/test/config"
 	"github.com/kubeflow/pipelines/backend/test/logger"
 	"github.com/kubeflow/pipelines/backend/test/testutil"
-	"github.com/kubeflow/pipelines/backend/test/v2"
-
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
@@ -68,17 +67,23 @@ var _ = BeforeSuite(func() {
 	clientConfig := testutil.GetClientConfig(*config.Namespace)
 	k8Client, err = testutil.CreateK8sClient()
 	Expect(err).To(BeNil(), "Failed to initialize K8s client")
-
+	var tlsCfg *tls.Config
+	if *config.TLSEnabled {
+		tlsCfg, err = testutil.GetTLSConfig(*config.CaCertPath)
+		if err != nil {
+			log.Fatalf("Error getting TLS Config: %v", err)
+		}
+	}
 	if *config.KubeflowMode {
 		logger.Log("Creating API Clients for Kubeflow Mode")
 		newPipelineClient = func() (*apiserver.PipelineClient, error) {
-			return apiserver.NewKubeflowInClusterPipelineClient(*config.Namespace, *config.DebugMode)
+			return apiserver.NewKubeflowInClusterPipelineClient(*config.Namespace, *config.DebugMode, tlsCfg)
 		}
 		newExperimentClient = func() (*apiserver.ExperimentClient, error) {
-			return apiserver.NewKubeflowInClusterExperimentClient(*config.Namespace, *config.DebugMode)
+			return apiserver.NewKubeflowInClusterExperimentClient(*config.Namespace, *config.DebugMode, tlsCfg)
 		}
 		newRunClient = func() (*apiserver.RunClient, error) {
-			return apiserver.NewKubeflowInClusterRunClient(*config.Namespace, *config.DebugMode)
+			return apiserver.NewKubeflowInClusterRunClient(*config.Namespace, *config.DebugMode, tlsCfg)
 		}
 	} else if *config.MultiUserMode || *config.AuthToken != "" {
 		if *config.AuthToken != "" {
@@ -89,33 +94,35 @@ var _ = BeforeSuite(func() {
 			userToken = testutil.CreateUserToken(k8Client, *config.UserNamespace, *config.UserServiceAccountName)
 		}
 		newPipelineClient = func() (*apiserver.PipelineClient, error) {
-			return apiserver.NewMultiUserPipelineClient(clientConfig, userToken, *config.DebugMode)
+			return apiserver.NewMultiUserPipelineClient(clientConfig, userToken, *config.DebugMode, tlsCfg)
 		}
 		newExperimentClient = func() (*apiserver.ExperimentClient, error) {
-			return apiserver.NewMultiUserExperimentClient(clientConfig, userToken, *config.DebugMode)
+			return apiserver.NewMultiUserExperimentClient(clientConfig, userToken, *config.DebugMode, tlsCfg)
 		}
 		newRunClient = func() (*apiserver.RunClient, error) {
-			return apiserver.NewMultiUserRunClient(clientConfig, userToken, *config.DebugMode)
+			return apiserver.NewMultiUserRunClient(clientConfig, userToken, *config.DebugMode, tlsCfg)
 		}
 	} else {
 		logger.Log("Creating API Clients for Single User Mode")
 		newPipelineClient = func() (*apiserver.PipelineClient, error) {
-			return apiserver.NewPipelineClient(clientConfig, *config.DebugMode)
+			return apiserver.NewPipelineClient(clientConfig, *config.DebugMode, tlsCfg)
 		}
 		newExperimentClient = func() (*apiserver.ExperimentClient, error) {
-			return apiserver.NewExperimentClient(clientConfig, *config.DebugMode)
+			return apiserver.NewExperimentClient(clientConfig, *config.DebugMode, tlsCfg)
 		}
 		newRunClient = func() (*apiserver.RunClient, error) {
-			return apiserver.NewRunClient(clientConfig, *config.DebugMode)
+			return apiserver.NewRunClient(clientConfig, *config.DebugMode, tlsCfg)
 		}
 	}
 
-	pipelineUploadClient, err = test.GetPipelineUploadClient(
+	pipelineUploadClient, err = testutil.GetPipelineUploadClient(
 		*config.UploadPipelinesWithKubernetes,
 		*config.KubeflowMode,
 		*config.DebugMode,
+		*config.AuthToken,
 		*config.Namespace,
 		clientConfig,
+		tlsCfg,
 	)
 
 	Expect(err).To(BeNil(), "Failed to get Pipeline Upload Client")
@@ -155,5 +162,5 @@ func TestAPIs(t *testing.T) {
 	reporterConfigE2E.SilenceSkips = true
 	reporterConfigE2E.JUnitReport = filepath.Join(testReportDirectory, junitReportFilename)
 	reporterConfigE2E.JSONReport = filepath.Join(testReportDirectory, jsonReportFilename)
-	RunSpecs(t, "E2E Tests Suite", suiteConfigE2E, reporterConfigE2E)
+	RunSpecs(t, "AIPipelinesE2ETests", suiteConfigE2E, reporterConfigE2E)
 }

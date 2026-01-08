@@ -90,7 +90,7 @@ func (s *UpgradeTests) SetupSuite() {
 	// Integration tests also run these tests to first ensure they work, so that
 	// when integration tests pass and upgrade tests fail, we know for sure
 	// upgrade process went wrong somehow.
-	if !(*runIntegrationTests || *runUpgradeTests) {
+	if !*runIntegrationTests && !*runUpgradeTests {
 		s.T().SkipNow()
 		return
 	}
@@ -261,7 +261,6 @@ func (s *UpgradeTests) VerifyExperiments() {
 	assert.Equal(t, "", experiments[4].Description)
 	assert.NotEmpty(t, experiments[4].ID)
 	assert.NotEmpty(t, experiments[4].CreatedAt)
-
 }
 
 // TODO(jingzhang36): prepare pipeline versions.
@@ -293,15 +292,15 @@ func (s *UpgradeTests) PreparePipelines() {
 	/* ---------- Upload pipelines zip ---------- */
 	time.Sleep(1 * time.Second)
 	argumentUploadPipeline, err := s.pipelineUploadClient.UploadFile(
-		"../resources/arguments.pipeline.zip", &uploadParams.UploadPipelineParams{Name: util.StringPointer("zip-arguments-parameters")})
+		"../resources/arguments_parameters.zip", &uploadParams.UploadPipelineParams{Name: util.StringPointer("zip-arguments-parameters")})
 	require.Nil(t, err)
 	assert.Equal(t, "zip-arguments-parameters", argumentUploadPipeline.Name)
 
 	/* ---------- Import pipeline tarball by URL ---------- */
-	pipelineURL = fmt.Sprintf("https://github.com/%s/raw/refs/heads/master/test_data/sdk_compiled_pipelines/valid/arguments.pipeline.zip", s.repoName)
+	pipelineURL = fmt.Sprintf("https://github.com/%s/raw/refs/heads/master/test_data/sdk_compiled_pipelines/valid/arguments_parameters.zip", s.repoName)
 
 	if pullNumber := os.Getenv("PULL_NUMBER"); pullNumber != "" {
-		pipelineURL = fmt.Sprintf("https://raw.githubusercontent.com/%s/pull/%s/head/test_data/sdk_compiled_pipelines/valid/arguments.pipeline.zip", s.repoName, pullNumber)
+		pipelineURL = fmt.Sprintf("https://raw.githubusercontent.com/%s/pull/%s/head/test_data/sdk_compiled_pipelines/valid/arguments_parameters.zip", s.repoName, pullNumber)
 	}
 
 	time.Sleep(1 * time.Second)
@@ -313,7 +312,7 @@ func (s *UpgradeTests) PreparePipelines() {
 		},
 	})
 	require.Nil(t, err)
-	assert.Equal(t, "arguments.pipeline.zip", argumentUrlPipeline.Name)
+	assert.Equal(t, "arguments_parameters.zip", argumentUrlPipeline.Name)
 
 	time.Sleep(1 * time.Second)
 }
@@ -331,12 +330,12 @@ func (s *UpgradeTests) VerifyPipelines() {
 	assert.Equal(t, "arguments-parameters.yaml", pipelines[0].Name)
 	assert.Equal(t, "sequential", pipelines[1].Name)
 	assert.Equal(t, "zip-arguments-parameters", pipelines[2].Name)
-	assert.Equal(t, "arguments.pipeline.zip", pipelines[3].Name)
+	assert.Equal(t, "arguments_parameters.zip", pipelines[3].Name)
 
 	verifyPipeline(t, pipelines[0])
 
 	/* ---------- Verify get template works ---------- */
-	template, err := s.pipelineClient.GetTemplate(&pipelineParams.PipelineServiceGetTemplateParams{ID: pipelines[0].ID})
+	tmpl, err := s.pipelineClient.GetTemplate(&pipelineParams.PipelineServiceGetTemplateParams{ID: pipelines[0].ID})
 	require.Nil(t, err)
 	bytes, err := os.ReadFile("../resources/arguments-parameters.yaml")
 	require.Nil(t, err)
@@ -346,9 +345,9 @@ func (s *UpgradeTests) VerifyPipelines() {
 		},
 		StorageClassName: util.StringPointer("my-storage"),
 	}
-	expected, err := pipelinetemplate.New(bytes, true, defaultPVC)
+	expected, err := pipelinetemplate.New(bytes, pipelinetemplate.TemplateOptions{CacheDisabled: true, DefaultWorkspace: defaultPVC})
 	require.Nil(t, err)
-	assert.Equal(t, expected, template)
+	assert.Equal(t, expected, tmpl)
 }
 
 func (s *UpgradeTests) PrepareRuns() {

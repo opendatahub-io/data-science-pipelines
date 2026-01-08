@@ -34,15 +34,23 @@ const (
 	TokenReviewAudience                     string = "TOKEN_REVIEW_AUDIENCE"
 	MetadataGrpcServiceServiceHost          string = "METADATA_GRPC_SERVICE_SERVICE_HOST"
 	MetadataGrpcServiceServicePort          string = "METADATA_GRPC_SERVICE_SERVICE_PORT"
-	MetadataTLSEnabled                      string = "METADATA_TLS_ENABLED"
 	SignedURLExpiryTimeSeconds              string = "SIGNED_URL_EXPIRY_TIME_SECONDS"
-	CaBundleMountPath                       string = "ARTIFACT_COPY_STEP_CABUNDLE_MOUNTPATH"
-	CaBundleConfigMapKey                    string = "ARTIFACT_COPY_STEP_CABUNDLE_CONFIGMAP_KEY"
-	CaBundleConfigMapName                   string = "ARTIFACT_COPY_STEP_CABUNDLE_CONFIGMAP_NAME"
+	MetadataTLSEnabled                      string = "METADATA_TLS_ENABLED"
+	CaBundleSecretName                      string = "CABUNDLE_SECRET_NAME"
+	CaBundleConfigMapName                   string = "CABUNDLE_CONFIGMAP_NAME"
+	CaBundleKeyName                         string = "CABUNDLE_KEY_NAME"
+	RequireNamespaceForPipelines            string = "REQUIRE_NAMESPACE_FOR_PIPELINES"
+	CompiledPipelineSpecPatch               string = "COMPILED_PIPELINE_SPEC_PATCH"
+	MLPipelineServiceName                   string = "ML_PIPELINE_SERVICE_NAME"
+	MetadataServiceName                     string = "METADATA_SERVICE_NAME"
 )
 
 func IsPipelineVersionUpdatedByDefault() bool {
 	return GetBoolConfigWithDefault(UpdatePipelineVersionByDefault, true)
+}
+
+func IsNamespaceRequiredForPipelines() bool {
+	return GetBoolConfigWithDefault(RequireNamespaceForPipelines, false)
 }
 
 func GetStringConfig(configName string) string {
@@ -108,7 +116,15 @@ func IsMultiUserSharedReadMode() bool {
 }
 
 func GetPodNamespace() string {
-	return GetStringConfig(PodNamespace)
+	return GetStringConfigWithDefault(PodNamespace, DefaultPodNamespace)
+}
+
+func GetMLPipelineServiceName() string {
+	return GetStringConfigWithDefault(MLPipelineServiceName, DefaultMLPipelineServiceName)
+}
+
+func GetMetadataServiceName() string {
+	return GetStringConfigWithDefault(MetadataServiceName, DefaultMetadataServiceName)
 }
 
 func GetBoolFromStringWithDefault(value string, defaultValue bool) bool {
@@ -151,12 +167,18 @@ func GetMetadataTLSEnabled() bool {
 	return GetBoolConfigWithDefault(MetadataTLSEnabled, DefaultMetadataTLSEnabled)
 }
 
-func GetCaCertPath() string {
-	caBundleMountPath := GetStringConfigWithDefault(CaBundleMountPath, "")
-	if caBundleMountPath != "" {
-		caBundleConfigMapKey := GetStringConfigWithDefault(CaBundleConfigMapKey, "")
-		return caBundleMountPath + "/" + caBundleConfigMapKey
-	} else {
-		return ""
-	}
+func GetCaBundleSecretName() string {
+	return GetStringConfigWithDefault(CaBundleSecretName, "")
+}
+
+func GetCABundleKey() string {
+	return GetStringConfigWithDefault(CaBundleKeyName, "")
+}
+
+func GetCaBundleConfigMapName() string {
+	return GetStringConfigWithDefault(CaBundleConfigMapName, "")
+}
+
+func GetCompiledPipelineSpecPatch() string {
+	return GetStringConfigWithDefault(CompiledPipelineSpecPatch, "{}")
 }
