@@ -531,11 +531,10 @@ export function createScopeToTaskMap(run: V2beta1Run): Map<string, V2beta1Pipeli
   let scopePathToTasksMap = new Map<string, V2beta1PipelineTaskDetail>();
   if (run.tasks && run.tasks.length > 0) {
     for (const task of run.tasks) {
-      if (task.scope_path === undefined || task.scope_path === null || task.scope_path.length <= 0) {
-        logger.warn("scope_path is undefined, null, or empty for task: ", task);
+      if (task.scope_path === undefined || task.scope_path === "") {
+        logger.warn("scope_path is undefined or empty for task: ", task);
       } else {
-        const scopeKey = task.scope_path.join(".")
-        scopePathToTasksMap.set(scopeKey, task);
+        scopePathToTasksMap.set(task.scope_path, task);
       }
     }
   }

@@ -15,11 +15,11 @@
  */
 import { Struct } from 'google-protobuf/google/protobuf/struct_pb';
 import * as React from 'react';
-import { getMetadataValue } from 'src/mlmd/library';
-import { Artifact, Execution } from 'src/third_party/mlmd';
 import { stylesheet } from 'typestyle';
 import { color, commonCss } from '../Css';
 import { ArtifactLink } from './ArtifactLink';
+import {PipelineTaskDetailTaskState, V2beta1PipelineTaskDetail} from "../apisv2beta1/run";
+import {V2beta1Artifact} from "../apisv2beta1/artifact";
 
 export const css = stylesheet({
   field: {
@@ -48,22 +48,22 @@ export const css = stylesheet({
 
 export enum ResourceType {
   ARTIFACT = 'ARTIFACT',
-  EXECUTION = 'EXECUTION',
+  TASK = 'TASK',
 }
 
 export interface ArtifactProps {
   resourceType: ResourceType.ARTIFACT;
-  resource: Artifact;
+  resource: V2beta1Artifact;
   typeName: string;
 }
 
-export interface ExecutionProps {
-  resourceType: ResourceType.EXECUTION;
-  resource: Execution;
+export interface TaskProps {
+  resourceType: ResourceType.TASK;
+  resource: V2beta1PipelineTaskDetail;
   typeName: string;
 }
 
-export type ResourceInfoProps = ArtifactProps | ExecutionProps;
+export type ResourceInfoProps = ArtifactProps | TaskProps;
 
 export class ResourceInfo extends React.Component<ResourceInfoProps, {}> {
   public render(): JSX.Element {
@@ -162,38 +162,23 @@ function prettyPrintJsonValue(value: string): JSX.Element | string {
 // Works for both artifact and execution.
 export function getResourceStateText(props: ResourceInfoProps): string | undefined {
   if (props.resourceType === ResourceType.ARTIFACT) {
-    const state = props.resource.getState();
-    switch (state) {
-      case Artifact.State.UNKNOWN:
-        return undefined; // when state is not set, it defaults to UNKNOWN
-      case Artifact.State.PENDING:
-        return 'Pending';
-      case Artifact.State.LIVE:
-        return 'Live';
-      case Artifact.State.MARKED_FOR_DELETION:
-        return 'Marked for deletion';
-      case Artifact.State.DELETED:
-        return 'Deleted';
-      default:
-        throw new Error(`Impossible artifact state value: ${state}`);
-    }
+    // Prior to mlmd removal, artifacts used to have state, but now they don't.
+    return 'Live'
   } else {
     // type == EXECUTION
-    const state = props.resource.getLastKnownState();
+    const state = props.resource.state;
     switch (state) {
-      case Execution.State.UNKNOWN:
+      case PipelineTaskDetailTaskState.RUNTIMESTATEUNSPECIFIED:
         return undefined;
-      case Execution.State.NEW:
-        return 'New';
-      case Execution.State.RUNNING:
+      case PipelineTaskDetailTaskState.RUNNING:
         return 'Running';
-      case Execution.State.COMPLETE:
-        return 'Complete';
-      case Execution.State.CANCELED:
-        return 'Canceled';
-      case Execution.State.FAILED:
+      case PipelineTaskDetailTaskState.SUCCEEDED:
+        return 'Succeeded';
+      case PipelineTaskDetailTaskState.SKIPPED:
+        return 'Skipped';
+      case PipelineTaskDetailTaskState.FAILED:
         return 'Failed';
-      case Execution.State.CACHED:
+      case PipelineTaskDetailTaskState.CACHED:
         return 'Cached';
       default:
         throw new Error(`Impossible execution state value: ${state}`);

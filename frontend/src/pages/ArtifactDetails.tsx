@@ -38,7 +38,6 @@ import { ToolbarProps } from '../components/Toolbar';
 import { commonCss, padding } from '../Css';
 import { logger, serviceErrorToString, titleCase } from '../lib/Utils';
 import { Page, PageProps } from './Page';
-import { ArtifactHelpers } from 'src/mlmd/MlmdUtils';
 
 export enum ArtifactDetailsTab {
   OVERVIEW = 0,

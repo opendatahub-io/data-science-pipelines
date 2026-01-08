@@ -356,6 +356,12 @@ export interface PipelineTaskDetailTypeAttributes {
      * @memberof PipelineTaskDetailTypeAttributes
      */
     iteration_count?: string;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof PipelineTaskDetailTypeAttributes
+     */
+    download_to_workspace?: boolean;
 }
 
 /**
@@ -606,12 +612,6 @@ export interface V2beta1PipelineTaskDetail {
      */
     create_time?: Date;
     /**
-     * Starting time of a task.
-     * @type {Date}
-     * @memberof V2beta1PipelineTaskDetail
-     */
-    start_time?: Date;
-    /**
      * Completion time of a task.
      * @type {Date}
      * @memberof V2beta1PipelineTaskDetail
@@ -678,11 +678,11 @@ export interface V2beta1PipelineTaskDetail {
      */
     outputs?: PipelineTaskDetailInputOutputs;
     /**
-     * The scope of this task within the pipeline spec. Each entry represents either a Dag Task or a Container task. Note that Container task will are always the last entry in a scope_path.
-     * @type {Array<string>}
+     * 
+     * @type {string}
      * @memberof V2beta1PipelineTaskDetail
      */
-    scope_path?: Array<string>;
+    scope_path?: string;
 }
 
 /**
@@ -703,20 +703,6 @@ export interface V2beta1PipelineVersionReference {
      * @memberof V2beta1PipelineVersionReference
      */
     pipeline_version_id?: string;
-}
-
-/**
- * 
- * @export
- * @interface V2beta1ReadArtifactResponse
- */
-export interface V2beta1ReadArtifactResponse {
-    /**
-     * Byte array of the artifact content.
-     * @type {string}
-     * @memberof V2beta1ReadArtifactResponse
-     */
-    data?: string;
 }
 
 /**
@@ -911,7 +897,7 @@ export interface V2beta1RuntimeConfig {
 }
 
 /**
- * Describes the runtime state of an entity.   - RUNTIME_STATE_UNSPECIFIED: Default value. This value is not used.  - PENDING: Service is preparing to execute an entity.  - RUNNING: Entity execution is in progress.  - SUCCEEDED: Entity completed successfully.  - SKIPPED: Entity has been skipped. For example, due to caching.  - FAILED: Entity execution has failed.  - CANCELING: Entity is being canceled. From this state, an entity may only change its state to SUCCEEDED, FAILED or CANCELED.  - CANCELED: Entity has been canceled.  - PAUSED: Entity has been paused. It can be resumed.
+ * Describes the runtime state of an entity.   - RUNTIME_STATE_UNSPECIFIED: Default value. This value is not used.  - PENDING: Service is preparing to execute an entity.  - RUNNING: Entity execution is in progress.  - SUCCEEDED: Entity completed successfully.  - FAILED: Entity execution has failed.  - CANCELING: Entity is being canceled. From this state, an entity may only change its state to SUCCEEDED, FAILED or CANCELED.  - CANCELED: Entity has been canceled.  - PAUSED: Entity has been paused. It can be resumed.
  * @export
  * @enum {string}
  */
@@ -920,7 +906,6 @@ export enum V2beta1RuntimeState {
     PENDING = <any> 'PENDING',
     RUNNING = <any> 'RUNNING',
     SUCCEEDED = <any> 'SUCCEEDED',
-    SKIPPED = <any> 'SKIPPED',
     FAILED = <any> 'FAILED',
     CANCELING = <any> 'CANCELING',
     CANCELED = <any> 'CANCELED',
@@ -1415,60 +1400,6 @@ export const RunServiceApiFetchParamCreator = function (configuration?: Configur
         },
         /**
          * 
-         * @summary Finds artifact data in a run.
-         * @param {string} run_id ID of the run.
-         * @param {string} node_id ID of the running node.
-         * @param {string} artifact_name Name of the artifact.
-         * @param {string} [experiment_id] The ID of the parent experiment.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        runServiceReadArtifact(run_id: string, node_id: string, artifact_name: string, experiment_id?: string, options: any = {}): FetchArgs {
-            // verify required parameter 'run_id' is not null or undefined
-            if (run_id === null || run_id === undefined) {
-                throw new RequiredError('run_id','Required parameter run_id was null or undefined when calling runServiceReadArtifact.');
-            }
-            // verify required parameter 'node_id' is not null or undefined
-            if (node_id === null || node_id === undefined) {
-                throw new RequiredError('node_id','Required parameter node_id was null or undefined when calling runServiceReadArtifact.');
-            }
-            // verify required parameter 'artifact_name' is not null or undefined
-            if (artifact_name === null || artifact_name === undefined) {
-                throw new RequiredError('artifact_name','Required parameter artifact_name was null or undefined when calling runServiceReadArtifact.');
-            }
-            const localVarPath = `/apis/v2beta1/runs/{run_id}/nodes/{node_id}/artifacts/{artifact_name}:read`
-                .replace(`{${"run_id"}}`, encodeURIComponent(String(run_id)))
-                .replace(`{${"node_id"}}`, encodeURIComponent(String(node_id)))
-                .replace(`{${"artifact_name"}}`, encodeURIComponent(String(artifact_name)));
-            const localVarUrlObj = url.parse(localVarPath, true);
-            const localVarRequestOptions = Object.assign({ method: 'GET' }, options);
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication Bearer required
-            if (configuration && configuration.apiKey) {
-                const localVarApiKeyValue = typeof configuration.apiKey === 'function'
-					? configuration.apiKey("authorization")
-					: configuration.apiKey;
-                localVarHeaderParameter["authorization"] = localVarApiKeyValue;
-            }
-
-            if (experiment_id !== undefined) {
-                localVarQueryParameter['experiment_id'] = experiment_id;
-            }
-
-            localVarUrlObj.query = Object.assign({}, localVarUrlObj.query, localVarQueryParameter, options.query);
-            // fix override query string Detail: https://stackoverflow.com/a/7517673/1077943
-            delete localVarUrlObj.search;
-            localVarRequestOptions.headers = Object.assign({}, localVarHeaderParameter, options.headers);
-
-            return {
-                url: url.format(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * 
          * @summary Re-initiates a failed or terminated run.
          * @param {string} run_id The ID of the run to be retried.
          * @param {string} [experiment_id] The ID of the parent experiment.
@@ -1838,28 +1769,6 @@ export const RunServiceApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
-         * @summary Finds artifact data in a run.
-         * @param {string} run_id ID of the run.
-         * @param {string} node_id ID of the running node.
-         * @param {string} artifact_name Name of the artifact.
-         * @param {string} [experiment_id] The ID of the parent experiment.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        runServiceReadArtifact(run_id: string, node_id: string, artifact_name: string, experiment_id?: string, options?: any): (fetch?: FetchAPI, basePath?: string) => Promise<V2beta1ReadArtifactResponse> {
-            const localVarFetchArgs = RunServiceApiFetchParamCreator(configuration).runServiceReadArtifact(run_id, node_id, artifact_name, experiment_id, options);
-            return (fetch: FetchAPI = portableFetch, basePath: string = BASE_PATH) => {
-                return fetch(basePath + localVarFetchArgs.url, localVarFetchArgs.options).then((response) => {
-                    if (response.status >= 200 && response.status < 300) {
-                        return response.json();
-                    } else {
-                        throw response;
-                    }
-                });
-            };
-        },
-        /**
-         * 
          * @summary Re-initiates a failed or terminated run.
          * @param {string} run_id The ID of the run to be retried.
          * @param {string} [experiment_id] The ID of the parent experiment.
@@ -2056,19 +1965,6 @@ export const RunServiceApiFactory = function (configuration?: Configuration, fet
         },
         /**
          * 
-         * @summary Finds artifact data in a run.
-         * @param {string} run_id ID of the run.
-         * @param {string} node_id ID of the running node.
-         * @param {string} artifact_name Name of the artifact.
-         * @param {string} [experiment_id] The ID of the parent experiment.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        runServiceReadArtifact(run_id: string, node_id: string, artifact_name: string, experiment_id?: string, options?: any) {
-            return RunServiceApiFp(configuration).runServiceReadArtifact(run_id, node_id, artifact_name, experiment_id, options)(fetch, basePath);
-        },
-        /**
-         * 
          * @summary Re-initiates a failed or terminated run.
          * @param {string} run_id The ID of the run to be retried.
          * @param {string} [experiment_id] The ID of the parent experiment.
@@ -2244,21 +2140,6 @@ export class RunServiceApi extends BaseAPI {
      */
     public runServiceListRuns(namespace?: string, experiment_id?: string, page_token?: string, page_size?: number, sort_by?: string, filter?: string, view?: 'DEFAULT' | 'FULL', options?: any) {
         return RunServiceApiFp(this.configuration).runServiceListRuns(namespace, experiment_id, page_token, page_size, sort_by, filter, view, options)(this.fetch, this.basePath);
-    }
-
-    /**
-     * 
-     * @summary Finds artifact data in a run.
-     * @param {string} run_id ID of the run.
-     * @param {string} node_id ID of the running node.
-     * @param {string} artifact_name Name of the artifact.
-     * @param {string} [experiment_id] The ID of the parent experiment.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof RunServiceApi
-     */
-    public runServiceReadArtifact(run_id: string, node_id: string, artifact_name: string, experiment_id?: string, options?: any) {
-        return RunServiceApiFp(this.configuration).runServiceReadArtifact(run_id, node_id, artifact_name, experiment_id, options)(this.fetch, this.basePath);
     }
 
     /**

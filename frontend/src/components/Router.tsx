@@ -126,7 +126,7 @@ export const RoutePage = {
 };
 
 export const RoutePageFactory = {
-  artifactDetails: (artifactId: number) => {
+  artifactDetails: (artifactId: string | undefined) => {
     return RoutePage.ARTIFACT_DETAILS.replace(`:${RouteParams.ID}`, '' + artifactId);
   },
   executionDetails: (executionId: number) => {

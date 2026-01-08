@@ -185,8 +185,8 @@ function TaskNodeDetail({
         {/* Input/Output tab */}
         {selectedTab === 0 &&
           (() => {
-            if (execution) {
-              return <InputOutputTab execution={execution} namespace={namespace} />;
+            if (task) {
+              return <InputOutputTab task={task} namespace={namespace} />;
             }
             return NODE_STATE_UNAVAILABLE;
           })()}
@@ -194,7 +194,7 @@ function TaskNodeDetail({
         {/* Task Details tab */}
         {selectedTab === 1 && (
           <div className={padding(20)}>
-            <DetailsTable title='Task Details' fields={getTaskDetailsFields(element, execution)} />
+            <DetailsTable title='Task Details' fields={getTaskDetailsFields(element, task)} />
             <DetailsTable
               title='Volume Mounts'
               fields={getNodeVolumeMounts(layers, pipelineJobString, element)}
@@ -223,40 +223,36 @@ function TaskNodeDetail({
 
 function getTaskDetailsFields(
   element?: FlowElement<FlowElementDataBase> | null,
-  execution?: Execution,
+  task?: V2beta1PipelineTaskDetail,
 ): Array<KeyValue<string>> {
   const details: Array<KeyValue<string>> = [];
   if (element) {
     details.push(['Task ID', element.id || '-']);
-    if (execution) {
+    if (task) {
       // Static execution info.
       details.push([
         'Task name',
-        execution
-          .getCustomPropertiesMap()
-          .get('display_name')
-          ?.getStringValue() || '-',
-      ]);
+        task.display_name || task.name,]);
 
       // Runtime execution info.
       const stateText = getResourceStateText({
         resourceType: ResourceType.EXECUTION,
-        resource: execution,
+        resource: task,
         typeName: 'Execution',
       });
       details.push(['Status', stateText || '-']);
 
-      const createdAt = new Date(execution.getCreateTimeSinceEpoch()).toString();
+      const createdAt = new Date(task.getCreateTimeSinceEpoch()).toString();
       details.push(['Created At', createdAt]);
 
-      const lastUpdatedTime = execution.getLastUpdateTimeSinceEpoch();
+      const lastUpdatedTime = task.getLastUpdateTimeSinceEpoch();
       let finishedAt = '-';
       if (
         lastUpdatedTime &&
-        (execution.getLastKnownState() === Execution.State.COMPLETE ||
-          execution.getLastKnownState() === Execution.State.FAILED ||
-          execution.getLastKnownState() === Execution.State.CACHED ||
-          execution.getLastKnownState() === Execution.State.CANCELED)
+        (task.getLastKnownState() === Execution.State.COMPLETE ||
+          task.getLastKnownState() === Execution.State.FAILED ||
+          task.getLastKnownState() === Execution.State.CACHED ||
+          task.getLastKnownState() === Execution.State.CANCELED)
       ) {
         finishedAt = new Date(lastUpdatedTime).toString();
       }
@@ -367,37 +363,27 @@ function ArtifactNodeDetail({ task, artifactDetails, namespace }: ArtifactNodeDe
 }
 
 interface ArtifactNodeDetailProps {
-  execution?: Execution;
+  task?: V2beta1PipelineTaskDetail;
   artifactDetails?: ArtifactWithTaskInfo;
   namespace: string | undefined;
 }
 
 function ArtifactInfo({
-  execution,
+  task,
   artifactDetails,
   namespace,
 }: ArtifactNodeDetailProps) {
-  if (!execution || !linkedArtifact) {
+  if (!task || !artifactDetails) {
     return NODE_STATE_UNAVAILABLE;
   }
 
   // Static Artifact information.
-  const taskName =
-    execution
-      .getCustomPropertiesMap()
-      .get('display_name')
-      ?.getStringValue() || '-';
-  const artifactName =
-    linkedArtifact.artifact
-      .getCustomPropertiesMap()
-      .get('display_name')
-      ?.getStringValue() || '-';
-  let artifactTypeName = artifactTypes
-    ? getArtifactTypeName(artifactTypes, [linkedArtifact])
-    : ['-'];
+  const taskName = task.display_name || task.name
+  const artifactName = artifactDetails.outputArtifactKey
+  let artifactTypeName = artifactDetails.artifact?.type
 
   // Runtime artifact information.
-  const createdAt = new Date(linkedArtifact.artifact.getCreateTimeSinceEpoch());
+  const createdAt = artifactDetails.artifact?.created_at;
 
   // Artifact info rows.
   const artifactInfo = [
@@ -416,7 +402,7 @@ function ArtifactInfo({
 
   return (
     <div>
-      <ArtifactTitle artifact={linkedArtifact.artifact}></ArtifactTitle>
+      <ArtifactTitle artifact={artifactDetails}></ArtifactTitle>
       {artifactInfo && (
         <div>
           <DetailsTable title='Artifact Info' fields={artifactInfo} />
@@ -492,7 +478,7 @@ function SubDAGNodeDetail({
             <div className={padding(20)}>
               <DetailsTable
                 title='Task Details'
-                fields={getTaskDetailsFields(element, execution)}
+                fields={getTaskDetailsFields(element, task)}
               />
             </div>
           )}

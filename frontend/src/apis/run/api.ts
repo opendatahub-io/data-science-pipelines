@@ -191,20 +191,6 @@ export interface ApiPipelineSpec {
 /**
  * 
  * @export
- * @interface ApiReadArtifactResponse
- */
-export interface ApiReadArtifactResponse {
-    /**
-     * The bytes of the artifact content.
-     * @type {string}
-     * @memberof ApiReadArtifactResponse
-     */
-    data?: string;
-}
-
-/**
- * 
- * @export
  * @enum {string}
  */
 export enum ApiRelationship {
@@ -797,55 +783,6 @@ export const RunServiceApiFetchParamCreator = function (configuration?: Configur
         },
         /**
          * 
-         * @summary Finds a run's artifact data.
-         * @param {string} run_id The ID of the run.
-         * @param {string} node_id The ID of the running node.
-         * @param {string} artifact_name The name of the artifact.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        runServiceReadArtifactV1(run_id: string, node_id: string, artifact_name: string, options: any = {}): FetchArgs {
-            // verify required parameter 'run_id' is not null or undefined
-            if (run_id === null || run_id === undefined) {
-                throw new RequiredError('run_id','Required parameter run_id was null or undefined when calling runServiceReadArtifactV1.');
-            }
-            // verify required parameter 'node_id' is not null or undefined
-            if (node_id === null || node_id === undefined) {
-                throw new RequiredError('node_id','Required parameter node_id was null or undefined when calling runServiceReadArtifactV1.');
-            }
-            // verify required parameter 'artifact_name' is not null or undefined
-            if (artifact_name === null || artifact_name === undefined) {
-                throw new RequiredError('artifact_name','Required parameter artifact_name was null or undefined when calling runServiceReadArtifactV1.');
-            }
-            const localVarPath = `/apis/v1beta1/runs/{run_id}/nodes/{node_id}/artifacts/{artifact_name}:read`
-                .replace(`{${"run_id"}}`, encodeURIComponent(String(run_id)))
-                .replace(`{${"node_id"}}`, encodeURIComponent(String(node_id)))
-                .replace(`{${"artifact_name"}}`, encodeURIComponent(String(artifact_name)));
-            const localVarUrlObj = url.parse(localVarPath, true);
-            const localVarRequestOptions = Object.assign({ method: 'GET' }, options);
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication Bearer required
-            if (configuration && configuration.apiKey) {
-                const localVarApiKeyValue = typeof configuration.apiKey === 'function'
-					? configuration.apiKey("authorization")
-					: configuration.apiKey;
-                localVarHeaderParameter["authorization"] = localVarApiKeyValue;
-            }
-
-            localVarUrlObj.query = Object.assign({}, localVarUrlObj.query, localVarQueryParameter, options.query);
-            // fix override query string Detail: https://stackoverflow.com/a/7517673/1077943
-            delete localVarUrlObj.search;
-            localVarRequestOptions.headers = Object.assign({}, localVarHeaderParameter, options.headers);
-
-            return {
-                url: url.format(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * 
          * @summary ReportRunMetrics reports metrics of a run. Each metric is reported in its own transaction, so this API accepts partial failures. Metric can be uniquely identified by (run_id, node_id, name). Duplicate reporting will be ignored by the API. First reporting wins.
          * @param {string} run_id Required. The parent run ID of the metric.
          * @param {RunServiceReportRunMetricsV1Body} body 
@@ -1112,27 +1049,6 @@ export const RunServiceApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
-         * @summary Finds a run's artifact data.
-         * @param {string} run_id The ID of the run.
-         * @param {string} node_id The ID of the running node.
-         * @param {string} artifact_name The name of the artifact.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        runServiceReadArtifactV1(run_id: string, node_id: string, artifact_name: string, options?: any): (fetch?: FetchAPI, basePath?: string) => Promise<ApiReadArtifactResponse> {
-            const localVarFetchArgs = RunServiceApiFetchParamCreator(configuration).runServiceReadArtifactV1(run_id, node_id, artifact_name, options);
-            return (fetch: FetchAPI = portableFetch, basePath: string = BASE_PATH) => {
-                return fetch(basePath + localVarFetchArgs.url, localVarFetchArgs.options).then((response) => {
-                    if (response.status >= 200 && response.status < 300) {
-                        return response.json();
-                    } else {
-                        throw response;
-                    }
-                });
-            };
-        },
-        /**
-         * 
          * @summary ReportRunMetrics reports metrics of a run. Each metric is reported in its own transaction, so this API accepts partial failures. Metric can be uniquely identified by (run_id, node_id, name). Duplicate reporting will be ignored by the API. First reporting wins.
          * @param {string} run_id Required. The parent run ID of the metric.
          * @param {RunServiceReportRunMetricsV1Body} body 
@@ -1274,18 +1190,6 @@ export const RunServiceApiFactory = function (configuration?: Configuration, fet
         },
         /**
          * 
-         * @summary Finds a run's artifact data.
-         * @param {string} run_id The ID of the run.
-         * @param {string} node_id The ID of the running node.
-         * @param {string} artifact_name The name of the artifact.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        runServiceReadArtifactV1(run_id: string, node_id: string, artifact_name: string, options?: any) {
-            return RunServiceApiFp(configuration).runServiceReadArtifactV1(run_id, node_id, artifact_name, options)(fetch, basePath);
-        },
-        /**
-         * 
          * @summary ReportRunMetrics reports metrics of a run. Each metric is reported in its own transaction, so this API accepts partial failures. Metric can be uniquely identified by (run_id, node_id, name). Duplicate reporting will be ignored by the API. First reporting wins.
          * @param {string} run_id Required. The parent run ID of the metric.
          * @param {RunServiceReportRunMetricsV1Body} body 
@@ -1398,20 +1302,6 @@ export class RunServiceApi extends BaseAPI {
      */
     public runServiceListRunsV1(page_token?: string, page_size?: number, sort_by?: string, resource_reference_key_type?: 'UNKNOWN_RESOURCE_TYPE' | 'EXPERIMENT' | 'JOB' | 'PIPELINE' | 'PIPELINE_VERSION' | 'NAMESPACE', resource_reference_key_id?: string, filter?: string, options?: any) {
         return RunServiceApiFp(this.configuration).runServiceListRunsV1(page_token, page_size, sort_by, resource_reference_key_type, resource_reference_key_id, filter, options)(this.fetch, this.basePath);
-    }
-
-    /**
-     * 
-     * @summary Finds a run's artifact data.
-     * @param {string} run_id The ID of the run.
-     * @param {string} node_id The ID of the running node.
-     * @param {string} artifact_name The name of the artifact.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     * @memberof RunServiceApi
-     */
-    public runServiceReadArtifactV1(run_id: string, node_id: string, artifact_name: string, options?: any) {
-        return RunServiceApiFp(this.configuration).runServiceReadArtifactV1(run_id, node_id, artifact_name, options)(this.fetch, this.basePath);
     }
 
     /**

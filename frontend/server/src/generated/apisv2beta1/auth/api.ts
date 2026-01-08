@@ -186,7 +186,7 @@ export const AuthServiceApiFetchParamCreator = function (configuration?: Configu
 
             localVarUrlObj.query = Object.assign({}, localVarUrlObj.query, localVarQueryParameter, options.query);
             // fix override query string Detail: https://stackoverflow.com/a/7517673/1077943
-            delete (localVarUrlObj as any).search;
+            delete localVarUrlObj.search;
             localVarRequestOptions.headers = Object.assign({}, localVarHeaderParameter, options.headers);
 
             return {

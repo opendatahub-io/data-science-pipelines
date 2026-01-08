@@ -17,12 +17,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { commonCss } from 'src/Css';
-import { ArtifactHelpers } from 'src/mlmd/MlmdUtils';
-import { Artifact } from 'src/third_party/mlmd';
 import { RoutePageFactory } from '../Router';
+import {V2beta1Artifact} from "../../apisv2beta1/artifact";
 
 interface ArtifactTitleProps {
-  artifact: Artifact;
+  artifact: V2beta1Artifact;
 }
 
 export function ArtifactTitle({ artifact }: ArtifactTitleProps) {
@@ -30,8 +29,8 @@ export function ArtifactTitle({ artifact }: ArtifactTitleProps) {
     <>
       <div>
         This step corresponds to artifact{' '}
-        <Link className={commonCss.link} to={RoutePageFactory.artifactDetails(artifact.getId())}>
-          "{ArtifactHelpers.getName(artifact)}"
+        <Link className={commonCss.link} to={RoutePageFactory.artifactDetails(artifact.artifact_id)}>
+          "{artifact.name}"
         </Link>
         .
       </div>
