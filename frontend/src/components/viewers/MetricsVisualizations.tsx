@@ -15,349 +15,116 @@
  */
 
 import HelpIcon from '@material-ui/icons/Help';
-import React, { useEffect, useState } from 'react';
-import { useQuery } from 'react-query';
+import React from 'react';
 import { Array as ArrayRunType, Failure, Number, Record, String, ValidationError } from 'runtypes';
 import IconWithTooltip from 'src/atoms/IconWithTooltip';
-import { color, commonCss, padding } from 'src/Css';
-import { Apis, ListRequest } from 'src/lib/Apis';
-import { OutputArtifactLoader } from 'src/lib/OutputArtifactLoader';
-import WorkflowParser, { StoragePath } from 'src/lib/WorkflowParser';
-import { getMetadataValue } from 'src/mlmd/library';
-import {
-  filterArtifactsByType,
-  filterLinkedArtifactsByType,
-  getArtifactName,
-  getStoreSessionInfoFromArtifact,
-  LinkedArtifact,
-} from 'src/mlmd/MlmdUtils';
-import { Artifact, ArtifactType, Execution } from 'src/third_party/mlmd';
+import { color, padding } from 'src/Css';
 import Banner from '../Banner';
-import CustomTable, {
-  Column,
-  CustomRendererProps,
-  Row as TableRow,
-} from 'src/components/CustomTable';
-import PlotCard from '../PlotCard';
 import ConfusionMatrix, { ConfusionMatrixConfig } from './ConfusionMatrix';
 import { HTMLViewerConfig } from './HTMLViewer';
 import { MarkdownViewerConfig } from './MarkdownViewer';
 import PagedTable from './PagedTable';
-import ROCCurve, { ROCCurveConfig } from './ROCCurve';
-import { PlotType, ViewerConfig } from './Viewer';
-import { componentMap } from './ViewerContainer';
-import Tooltip from '@material-ui/core/Tooltip';
-import { Link } from 'react-router-dom';
-import { RoutePage, RouteParams } from 'src/components/Router';
-import { ApiFilter, PredicateOp } from 'src/apis/filter';
+import { PlotType } from './Viewer';
 import {
-  FullArtifactPath,
   FullArtifactPathMap,
-  getRocCurveId,
-  mlmdDisplayName,
-  NameId,
   RocCurveColorMap,
 } from 'src/lib/v2/CompareUtils';
-import { logger } from 'src/lib/Utils';
-import { stylesheet } from 'typestyle';
-import { buildRocCurveConfig, validateConfidenceMetrics } from './ROCCurveHelper';
-import { isEqual } from 'lodash';
-import {ArtifactWithTaskInfo} from "../../lib/v2/DynamicFlow";
-
-const css = stylesheet({
-  inline: {
-    display: 'inline',
-  },
-});
+import { ArtifactWithTaskInfo } from '../../lib/v2/DynamicFlow';
+import { V2beta1PipelineTaskDetail } from '../../apisv2beta1/run';
+import { V2beta1Artifact, ArtifactArtifactType } from '../../apisv2beta1/artifact';
 
 interface MetricsVisualizationsProps {
   artifactDetails: ArtifactWithTaskInfo[];
-  execution: Execution;
+  execution: V2beta1PipelineTaskDetail;
   namespace: string | undefined;
 }
 
 /**
  * Visualize system metrics based on artifact input. There can be multiple artifacts
  * and multiple visualizations associated with one artifact.
+ *
+ * TODO(HumairAK): This component has been simplified during MLMD removal.
+ * Many features like ROC curves, confusion matrices, HTML/Markdown viewers
+ * need to be reimplemented to work with the new V2beta1 API types.
  */
 export function MetricsVisualizations({
   artifactDetails,
   execution,
   namespace,
 }: MetricsVisualizationsProps) {
-  // There can be multiple system.ClassificationMetrics or system.Metrics artifacts per execution.
-  // Get scalar metrics, confidenceMetrics and confusionMatrix from artifact.
-  // If there is no available metrics, show banner to notify users.
-  // Otherwise, Visualize all available metrics per artifact.
-  const artifacts = linkedArtifacts.map(x => x.artifact);
-  const classificationMetricsArtifacts = getVerifiedClassificationMetricsArtifacts(
-    linkedArtifacts,
-    artifactTypes,
+  // Filter artifacts by type
+  const classificationMetricsArtifacts = artifactDetails.filter(
+    ad => ad.artifact?.type === ArtifactArtifactType.ClassificationMetric
   );
-  const metricsArtifacts = getVerifiedMetricsArtifacts(artifacts, artifactTypes);
-  const htmlArtifacts = getVertifiedHtmlArtifacts(linkedArtifacts, artifactTypes);
-  const mdArtifacts = getVertifiedMarkdownArtifacts(linkedArtifacts, artifactTypes);
-  const v1VisualizationArtifact = getV1VisualizationArtifacts(linkedArtifacts, artifactTypes);
-
-  const {
-    isSuccess: isV1ViewerConfigsSuccess,
-    error: v1ViewerConfigError,
-    data: v1ViewerConfigs,
-  } = useQuery<ViewerConfig[], Error>(
-    [
-      'viewconfig',
-      {
-        artifact: v1VisualizationArtifact?.artifact.getId(),
-        state: execution.getLastKnownState(),
-        namespace: namespace,
-      },
-    ],
-    () => getViewConfig(v1VisualizationArtifact, namespace),
-    { staleTime: Infinity },
+  const metricsArtifacts = artifactDetails.filter(
+    ad => ad.artifact?.type === ArtifactArtifactType.Metric
+  );
+  const htmlArtifacts = artifactDetails.filter(
+    ad => ad.artifact?.type === ArtifactArtifactType.HTML
+  );
+  const mdArtifacts = artifactDetails.filter(
+    ad => ad.artifact?.type === ArtifactArtifactType.Markdown
   );
 
-  const { isSuccess: isHtmlDownloaded, error: htmlError, data: htmlViewerConfigs } = useQuery<
-    HTMLViewerConfig[],
-    Error
-  >(
-    [
-      'htmlViewerConfig',
-      {
-        artifacts: htmlArtifacts.map(linkedArtifact => {
-          return linkedArtifact.artifact.getId();
-        }),
-        state: execution.getLastKnownState(),
-        namespace: namespace,
-      },
-    ],
-    () => getHtmlViewerConfig(htmlArtifacts, namespace),
-    { staleTime: Infinity },
-  );
-
-  const {
-    isSuccess: isMarkdownDownloaded,
-    error: markdownError,
-    data: markdownViewerConfigs,
-  } = useQuery<MarkdownViewerConfig[], Error>(
-    [
-      'markdownViewerConfig',
-      {
-        artifacts: mdArtifacts.map(linkedArtifact => {
-          return linkedArtifact.artifact.getId();
-        }),
-        state: execution.getLastKnownState(),
-        namespace: namespace,
-      },
-    ],
-    () => getMarkdownViewerConfig(mdArtifacts, namespace),
-    { staleTime: Infinity },
-  );
+  // TODO(HumairAK): Re-implement HTML and Markdown artifact downloading
+  // using the new V2beta1 API types.
 
   if (
     classificationMetricsArtifacts.length === 0 &&
     metricsArtifacts.length === 0 &&
     htmlArtifacts.length === 0 &&
-    mdArtifacts.length === 0 &&
-    !v1VisualizationArtifact
+    mdArtifacts.length === 0
   ) {
     return <Banner message='There is no metrics artifact available in this step.' mode='info' />;
   }
 
   return (
     <>
-      {/* Shows first encountered issue on Banner */}
-
-      {(() => {
-        if (v1ViewerConfigError) {
-          return (
-            <Banner
-              message='Error in retrieving v1 metrics information.'
-              mode='error'
-              additionalInfo={v1ViewerConfigError.message}
-            />
-          );
-        }
-        if (htmlError) {
-          return (
-            <Banner
-              message='Error in retrieving HTML visualization information.'
-              mode='error'
-              additionalInfo={htmlError.message}
-            />
-          );
-        }
-        if (markdownError) {
-          return (
-            <Banner
-              message='Error in retrieving Markdown visualization information.'
-              mode='error'
-              additionalInfo={markdownError.message}
-            />
-          );
-        }
-        return null;
-      })()}
-
-      {/* Shows visualizations of all kinds */}
-      {classificationMetricsArtifacts.map(linkedArtifact => {
+      {/* Classification Metrics */}
+      {classificationMetricsArtifacts.map(artifactDetail => {
+        const artifact = artifactDetail.artifact;
+        if (!artifact) return null;
         return (
-          <React.Fragment key={linkedArtifact.artifact.getId()}>
-            <ConfidenceMetricsSection linkedArtifacts={[linkedArtifact]} />
-            <ConfusionMatrixSection artifact={linkedArtifact.artifact} />
+          <React.Fragment key={artifact.artifact_id || artifactDetail.outputArtifactKey}>
+            <ConfidenceMetricsSectionV2 artifact={artifact} />
+            <ConfusionMatrixSectionV2 artifact={artifact} />
           </React.Fragment>
         );
       })}
-      {metricsArtifacts.map(artifact => (
-        <ScalarMetricsSection artifact={artifact} key={artifact.getId()} />
-      ))}
-      {isHtmlDownloaded && htmlViewerConfigs && (
-        <div key={'html'} className={padding(20, 'lrt')}>
-          <PlotCard configs={htmlViewerConfigs} title={'Static HTML'} />
+
+      {/* Scalar Metrics */}
+      {metricsArtifacts.map(artifactDetail => {
+        const artifact = artifactDetail.artifact;
+        if (!artifact) return null;
+        return (
+          <ScalarMetricsSectionV2
+            artifact={artifact}
+            key={artifact.artifact_id || artifactDetail.outputArtifactKey}
+          />
+        );
+      })}
+
+      {/* HTML Artifacts */}
+      {htmlArtifacts.length > 0 && (
+        <div className={padding(20, 'lrt')}>
+          <Banner
+            message='HTML visualization is temporarily unavailable during API migration.'
+            mode='info'
+          />
         </div>
       )}
-      {isMarkdownDownloaded && markdownViewerConfigs && (
-        <div key={'markdown'} className={padding(20, 'lrt')}>
-          <PlotCard configs={markdownViewerConfigs} title={'Static Markdown'} />
+
+      {/* Markdown Artifacts */}
+      {mdArtifacts.length > 0 && (
+        <div className={padding(20, 'lrt')}>
+          <Banner
+            message='Markdown visualization is temporarily unavailable during API migration.'
+            mode='info'
+          />
         </div>
       )}
-      {isV1ViewerConfigsSuccess &&
-        v1ViewerConfigs &&
-        v1ViewerConfigs.map((config, i) => {
-          const title = componentMap[config.type].prototype.getDisplayName();
-          return (
-            <div key={i} className={padding(20, 'lrt')}>
-              <PlotCard configs={[config]} title={title} />
-            </div>
-          );
-        })}
     </>
   );
-}
-
-function getVerifiedClassificationMetricsArtifacts(
-  linkedArtifacts: LinkedArtifact[],
-  artifactTypes: ArtifactType[],
-): LinkedArtifact[] {
-  if (!linkedArtifacts || !artifactTypes) {
-    return [];
-  }
-  // Reference: https://github.com/kubeflow/pipelines/blob/master/sdk/python/kfp/dsl/io_types.py#L124
-  // system.ClassificationMetrics contains confusionMatrix or confidenceMetrics.
-  const classificationMetricsArtifacts = filterLinkedArtifactsByType(
-    'system.ClassificationMetrics',
-    artifactTypes,
-    linkedArtifacts,
-  );
-
-  return classificationMetricsArtifacts
-    .map(linkedArtifact => ({
-      name: linkedArtifact.artifact
-        .getCustomPropertiesMap()
-        .get('display_name')
-        ?.getStringValue(),
-      customProperties: linkedArtifact.artifact.getCustomPropertiesMap(),
-      linkedArtifact: linkedArtifact,
-    }))
-    .filter(x => !!x.name)
-    .filter(x => {
-      const confidenceMetrics = x.customProperties
-        .get('confidenceMetrics')
-        ?.getStructValue()
-        ?.toJavaScript();
-
-      const confusionMatrix = x.customProperties
-        .get('confusionMatrix')
-        ?.getStructValue()
-        ?.toJavaScript();
-      return !!confidenceMetrics || !!confusionMatrix;
-    })
-    .map(x => x.linkedArtifact);
-}
-
-function getVerifiedMetricsArtifacts(
-  artifacts: Artifact[],
-  artifactTypes: ArtifactType[],
-): Artifact[] {
-  if (!artifacts || !artifactTypes) {
-    return [];
-  }
-  // Reference: https://github.com/kubeflow/pipelines/blob/master/sdk/python/kfp/dsl/io_types.py#L104
-  // system.Metrics contains scalar metrics.
-  const metricsArtifacts = filterArtifactsByType('system.Metrics', artifactTypes, artifacts);
-
-  return metricsArtifacts.filter(x =>
-    x
-      .getCustomPropertiesMap()
-      .get('display_name')
-      ?.getStringValue(),
-  );
-}
-
-function getVertifiedHtmlArtifacts(
-  linkedArtifacts: LinkedArtifact[],
-  artifactTypes: ArtifactType[],
-): LinkedArtifact[] {
-  if (!linkedArtifacts || !artifactTypes) {
-    return [];
-  }
-  const htmlArtifacts = filterLinkedArtifactsByType('system.HTML', artifactTypes, linkedArtifacts);
-
-  return htmlArtifacts.filter(x =>
-    x.artifact
-      .getCustomPropertiesMap()
-      .get('display_name')
-      ?.getStringValue(),
-  );
-}
-
-function getVertifiedMarkdownArtifacts(
-  linkedArtifacts: LinkedArtifact[],
-  artifactTypes: ArtifactType[],
-): LinkedArtifact[] {
-  if (!linkedArtifacts || !artifactTypes) {
-    return [];
-  }
-  const htmlArtifacts = filterLinkedArtifactsByType(
-    'system.Markdown',
-    artifactTypes,
-    linkedArtifacts,
-  );
-
-  return htmlArtifacts.filter(x =>
-    x.artifact
-      .getCustomPropertiesMap()
-      .get('display_name')
-      ?.getStringValue(),
-  );
-}
-
-function getV1VisualizationArtifacts(
-  linkedArtifacts: LinkedArtifact[],
-  artifactTypes: ArtifactType[],
-): LinkedArtifact | undefined {
-  const systemArtifacts = filterLinkedArtifactsByType(
-    'system.Artifact',
-    artifactTypes,
-    linkedArtifacts,
-  );
-
-  const v1VisualizationArtifacts = systemArtifacts.filter(x => {
-    if (!x) {
-      return false;
-    }
-    const artifactName = getArtifactName(x);
-    // This is a hack to find mlpipeline-ui-metadata artifact for visualization.
-    const updatedName = artifactName?.replace(/[\W_]/g, '-').toLowerCase();
-    return updatedName === 'mlpipeline-ui-metadata';
-  });
-
-  if (v1VisualizationArtifacts.length > 1) {
-    throw new Error(
-      'There are more than 1 mlpipeline-ui-metadata artifact: ' +
-        JSON.stringify(v1VisualizationArtifacts),
-    );
-  }
-  return v1VisualizationArtifacts.length === 0 ? undefined : v1VisualizationArtifacts[0];
 }
 
 const ROC_CURVE_DEFINITION =
@@ -376,296 +143,28 @@ export interface ConfidenceMetricsFilter {
 }
 
 export interface ConfidenceMetricsSectionProps {
-  linkedArtifacts: LinkedArtifact[];
+  artifact: V2beta1Artifact;
   filter?: ConfidenceMetricsFilter;
 }
 
-const runNameCustomRenderer: React.FC<CustomRendererProps<NameId>> = (
-  props: CustomRendererProps<NameId>,
-) => {
-  const runName = props.value ? props.value.name : '';
-  const runId = props.value ? props.value.id : '';
-  return (
-    <Tooltip title={runName} enterDelay={300} placement='top-start'>
-      <Link
-        className={commonCss.link}
-        onClick={e => e.stopPropagation()}
-        to={RoutePage.RUN_DETAILS.replace(':' + RouteParams.runId, runId)}
-      >
-        {runName}
-      </Link>
-    </Tooltip>
-  );
-};
+/**
+ * V2 version of ConfidenceMetricsSection using new V2beta1 API types
+ */
+function ConfidenceMetricsSectionV2({ artifact }: { artifact: V2beta1Artifact }) {
+  const metadata = artifact.metadata || {};
+  const confidenceMetrics = metadata['confidenceMetrics'];
+  const name = artifact.name || 'Unknown';
 
-const executionArtifactCustomRenderer: React.FC<CustomRendererProps<string>> = (
-  props: CustomRendererProps<string>,
-) => (
-  <Tooltip title={props.value || ''} enterDelay={300} placement='top-start'>
-    <p className={css.inline}>{props.value || ''}</p>
-  </Tooltip>
-);
-
-const curveLegendCustomRenderer: React.FC<CustomRendererProps<string>> = (
-  props: CustomRendererProps<string>,
-) => (
-  <div
-    style={{
-      width: '2rem',
-      height: '4px',
-      backgroundColor: props.value,
-    }}
-  />
-);
-
-interface ConfidenceMetricsData {
-  confidenceMetrics: any;
-  name?: string;
-  id: string;
-  artifactId: string;
-}
-
-interface RocCurveFilterTable {
-  columns: Column[];
-  rows: TableRow[];
-  selectedConfidenceMetrics: ConfidenceMetricsData[];
-}
-
-// Get the columns, rows, and id-color mappings for filter functionality.
-const getRocCurveFilterTable = (
-  confidenceMetricsDataList: ConfidenceMetricsData[],
-  linkedArtifactsPage: LinkedArtifact[],
-  filter?: ConfidenceMetricsFilter,
-): RocCurveFilterTable => {
-  const columns: Column[] = [
-    {
-      customRenderer: executionArtifactCustomRenderer,
-      flex: 1,
-      label: 'Execution name > Artifact name',
-    },
-    {
-      customRenderer: runNameCustomRenderer,
-      flex: 1,
-      label: 'Run name',
-    },
-    { customRenderer: curveLegendCustomRenderer, flex: 1, label: 'Curve legend' },
-  ];
-  const rows: TableRow[] = [];
-  if (filter) {
-    const { selectedIds, selectedIdColorMap, fullArtifactPathMap } = filter;
-
-    // Only display the selected ROC Curves on the plot, in order of selection.
-    const confidenceMetricsDataMap = new Map();
-    for (const confidenceMetrics of confidenceMetricsDataList) {
-      confidenceMetricsDataMap.set(confidenceMetrics.id, confidenceMetrics);
-    }
-    confidenceMetricsDataList = selectedIds.map(selectedId =>
-      confidenceMetricsDataMap.get(selectedId),
-    );
-
-    // Populate the filter table rows.
-    for (const linkedArtifact of linkedArtifactsPage) {
-      const id = getRocCurveId(linkedArtifact);
-      const fullArtifactPath = fullArtifactPathMap[id];
-      const row = {
-        id,
-        otherFields: [
-          `${fullArtifactPath.execution.name} > ${fullArtifactPath.artifact.name}`,
-          fullArtifactPath.run,
-          selectedIdColorMap[id],
-        ] as any,
-      };
-      rows.push(row);
-    }
-  }
-  return {
-    columns,
-    rows,
-    selectedConfidenceMetrics: confidenceMetricsDataList,
-  };
-};
-
-const updateRocCurveSelection = (
-  filter: ConfidenceMetricsFilter,
-  maxSelectedRocCurves: number,
-  newSelectedIds: string[],
-): void => {
-  const {
-    selectedIds: oldSelectedIds,
-    setSelectedIds,
-    selectedIdColorMap,
-    setSelectedIdColorMap,
-    lineColorsStack,
-    setLineColorsStack,
-  } = filter;
-
-  // Convert arrays to sets for quick lookup.
-  const newSelectedIdsSet = new Set(newSelectedIds);
-  const oldSelectedIdsSet = new Set(oldSelectedIds);
-
-  // Find the symmetric difference and intersection of new and old IDs.
-  const addedIds = newSelectedIds.filter(selectedId => !oldSelectedIdsSet.has(selectedId));
-  const removedIds = oldSelectedIds.filter(selectedId => !newSelectedIdsSet.has(selectedId));
-  const sharedIds = oldSelectedIds.filter(selectedId => newSelectedIdsSet.has(selectedId));
-
-  // Restrict the number of selected ROC Curves to a maximum of 10.
-  const numElementsRemaining = maxSelectedRocCurves - sharedIds.length;
-  const limitedAddedIds = addedIds.slice(0, numElementsRemaining);
-  setSelectedIds(sharedIds.concat(limitedAddedIds));
-
-  // Update the color stack and mapping to match the new selected ROC Curves.
-  removedIds.forEach(removedId => {
-    lineColorsStack.push(selectedIdColorMap[removedId]);
-    delete selectedIdColorMap[removedId];
-  });
-  limitedAddedIds.forEach(addedId => {
-    selectedIdColorMap[addedId] = lineColorsStack.pop()!;
-  });
-  setSelectedIdColorMap(selectedIdColorMap);
-  setLineColorsStack(lineColorsStack);
-};
-
-function reloadRocCurve(
-  filter: ConfidenceMetricsFilter,
-  linkedArtifacts: LinkedArtifact[],
-  setLinkedArtifactsPage: (linkedArtifactsPage: LinkedArtifact[]) => void,
-  request: ListRequest,
-): Promise<string> {
-  // Filter the linked artifacts by run, execution, and artifact display name.
-  const apiFilter = JSON.parse(
-    decodeURIComponent(request.filter || '{"predicates": []}'),
-  ) as ApiFilter;
-  const predicates = apiFilter.predicates?.filter(
-    p => p.key === 'name' && p.op === PredicateOp.ISSUBSTRING,
-  );
-  const substrings = predicates?.map(p => p.string_value?.toLowerCase() || '') || [];
-  const displayLinkedArtifacts = linkedArtifacts.filter(linkedArtifact => {
-    if (filter) {
-      const fullArtifactPath: FullArtifactPath =
-        filter.fullArtifactPathMap[getRocCurveId(linkedArtifact)];
-      for (const sub of substrings) {
-        const executionArtifactName = `${fullArtifactPath.execution.name} > ${fullArtifactPath.artifact.name}`;
-        if (!executionArtifactName.includes(sub) && !fullArtifactPath.run.name.includes(sub)) {
-          return false;
-        }
-      }
-    }
-    return true;
-  });
-
-  // pageToken represents an incrementing integer which segments the linked artifacts into
-  // sub-lists of length "pageSize"; this allows us to avoid re-requesting all MLMD artifacts.
-  let linkedArtifactsPage: LinkedArtifact[] = displayLinkedArtifacts;
-  let nextPageToken: string = '';
-  if (request.pageSize) {
-    // Retrieve the specific page of linked artifacts.
-    const numericPageToken = request.pageToken ? parseInt(request.pageToken) : 0;
-    linkedArtifactsPage = displayLinkedArtifacts.slice(
-      numericPageToken * request.pageSize,
-      (numericPageToken + 1) * request.pageSize,
-    );
-
-    // Set the next page token if the last item has not been reached.
-    if (displayLinkedArtifacts.length > (numericPageToken + 1) * request.pageSize) {
-      nextPageToken = `${numericPageToken + 1}`;
-    }
-  }
-  setLinkedArtifactsPage(linkedArtifactsPage);
-  return Promise.resolve(nextPageToken);
-}
-
-export function ConfidenceMetricsSection({
-  linkedArtifacts,
-  filter,
-}: ConfidenceMetricsSectionProps) {
-  const maxSelectedRocCurves: number = 10;
-  const [allLinkedArtifacts, setAllLinkedArtifacts] = useState<LinkedArtifact[]>(linkedArtifacts);
-  const [linkedArtifactsPage, setLinkedArtifactsPage] = useState<LinkedArtifact[]>(linkedArtifacts);
-  const [filterString, setFilterString] = useState<string>('');
-
-  // Reload the page on linked artifacts refresh or re-selection.
-  useEffect(() => {
-    if (filter && !isEqual(linkedArtifacts, allLinkedArtifacts)) {
-      setLinkedArtifactsPage(linkedArtifacts);
-      setAllLinkedArtifacts(linkedArtifacts);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkedArtifacts]);
-
-  // Verify that the existing linked artifacts are correct; otherwise, wait for refresh.
-  if (filter && !isEqual(linkedArtifacts, allLinkedArtifacts)) {
+  if (!confidenceMetrics) {
     return null;
   }
 
-  let confidenceMetricsDataList: ConfidenceMetricsData[] = linkedArtifacts
-    .map(linkedArtifact => {
-      const artifact = linkedArtifact.artifact;
-      const customProperties = artifact.getCustomPropertiesMap();
-      return {
-        confidenceMetrics: customProperties
-          .get('confidenceMetrics')
-          ?.getStructValue()
-          ?.toJavaScript(),
-        name: mlmdDisplayName(
-          artifact.getId().toString(),
-          'Artifact',
-          customProperties.get('display_name')?.getStringValue(),
-        ),
-        id: getRocCurveId(linkedArtifact),
-        artifactId: linkedArtifact.artifact.getId().toString(),
-      };
-    })
-    .filter(confidenceMetricsData => confidenceMetricsData.confidenceMetrics);
-
-  if (confidenceMetricsDataList.length === 0) {
-    return null;
-  } else if (confidenceMetricsDataList.length !== linkedArtifacts.length && filter) {
-    // If a filter is provided, each of the artifacts must already have valid confidence metrics.
-    logger.error('Filter provided but not all of the artifacts have valid confidence metrics.');
-    return null;
-  }
-
-  const { columns, rows, selectedConfidenceMetrics } = getRocCurveFilterTable(
-    confidenceMetricsDataList,
-    linkedArtifactsPage,
-    filter,
-  );
-
-  const rocCurveConfigs: ROCCurveConfig[] = [];
-  for (const confidenceMetricsItem of selectedConfidenceMetrics) {
-    const confidenceMetrics = confidenceMetricsItem.confidenceMetrics as any;
-
-    // Export used to allow testing mock.
-    const { error } = validateConfidenceMetrics(confidenceMetrics.list);
-
-    // If an error exists with confidence metrics, return the first one with an issue.
-    if (error) {
-      const errorMsg =
-        'Error in ' +
-        `${confidenceMetricsItem.name} (artifact ID #${confidenceMetricsItem.artifactId})` +
-        " artifact's confidenceMetrics data format.";
-      return <Banner message={errorMsg} mode='error' additionalInfo={error} />;
-    }
-
-    rocCurveConfigs.push(buildRocCurveConfig(confidenceMetrics.list));
-  }
-
-  const colors: string[] | undefined =
-    filter && filter.selectedIds.map(selectedId => filter.selectedIdColorMap[selectedId]);
-  const disableAdditionalSelection: boolean =
-    filter !== undefined &&
-    filter.selectedIds.length === maxSelectedRocCurves &&
-    linkedArtifacts.length > maxSelectedRocCurves;
+  // TODO(HumairAK): Re-implement ROC curve visualization with new types
   return (
     <div className={padding(40, 'lrt')}>
       <div className={padding(40, 'b')}>
         <h3>
-          {'ROC Curve: ' +
-            (selectedConfidenceMetrics.length === 0
-              ? 'no artifacts'
-              : selectedConfidenceMetrics.length === 1
-              ? selectedConfidenceMetrics[0].name
-              : 'multiple artifacts')}{' '}
+          {'ROC Curve: ' + name}{' '}
           <IconWithTooltip
             Icon={HelpIcon}
             iconColor={color.weak}
@@ -673,46 +172,10 @@ export function ConfidenceMetricsSection({
           ></IconWithTooltip>
         </h3>
       </div>
-      <ROCCurve
-        configs={rocCurveConfigs}
-        colors={colors}
-        forceLegend={filter !== undefined} // Prevent legend from disappearing w/ one artifact left
-        disableAnimation={filter !== undefined}
+      <Banner
+        message='ROC Curve visualization is temporarily unavailable during API migration.'
+        mode='info'
       />
-      {filter && (
-        <>
-          {disableAdditionalSelection ? (
-            <Banner
-              message={
-                `You have reached the maximum number of ROC Curves (${maxSelectedRocCurves})` +
-                ' you can select at once.'
-              }
-              mode='info'
-              additionalInfo={
-                `You have reached the maximum number of ROC Curves (${maxSelectedRocCurves})` +
-                ' you can select at once. Deselect an item in order to select additional artifacts.'
-              }
-              isLeftAlign
-            />
-          ) : null}
-          <CustomTable
-            columns={columns}
-            rows={rows}
-            selectedIds={filter.selectedIds}
-            filterLabel='Filter artifacts'
-            updateSelection={updateRocCurveSelection.bind(null, filter, maxSelectedRocCurves)}
-            reload={reloadRocCurve.bind(null, filter, linkedArtifacts, setLinkedArtifactsPage)}
-            disablePaging={false}
-            disableSorting={false}
-            disableSelection={false}
-            noFilterBox={false}
-            emptyMessage='No artifacts found'
-            disableAdditionalSelection={disableAdditionalSelection}
-            initialFilterString={filterString}
-            setFilterString={setFilterString}
-          />
-        </>
-      )}
     </div>
   );
 }
@@ -728,34 +191,34 @@ type ConfusionMatrixInput = {
   rows: Row[];
 };
 
-interface ConfusionMatrixProps {
-  artifact: Artifact;
-}
-
 const CONFUSION_MATRIX_DEFINITION =
   'The number of correct and incorrect predictions are ' +
   'summarized with count values and broken down by each class. ' +
   'The higher value on cell where Predicted label matches True label, ' +
   'the better prediction performance of this model is.';
 
-export function ConfusionMatrixSection({ artifact }: ConfusionMatrixProps) {
-  const customProperties = artifact.getCustomPropertiesMap();
-  const name = customProperties.get('display_name')?.getStringValue();
+/**
+ * V2 version of ConfusionMatrixSection using new V2beta1 API types
+ */
+function ConfusionMatrixSectionV2({ artifact }: { artifact: V2beta1Artifact }) {
+  const metadata = artifact.metadata || {};
+  const confusionMatrix = metadata['confusionMatrix'];
+  const name = artifact.name || 'Unknown';
 
-  const confusionMatrix = customProperties
-    .get('confusionMatrix')
-    ?.getStructValue()
-    ?.toJavaScript();
-  if (confusionMatrix === undefined) {
+  if (!confusionMatrix) {
     return null;
   }
 
-  const { error } = validateConfusionMatrix(confusionMatrix.struct as any);
+  // Extract struct if present
+  const matrixData = confusionMatrix.struct || confusionMatrix;
+
+  const { error } = validateConfusionMatrix(matrixData as any);
 
   if (error) {
     const errorMsg = 'Error in ' + name + " artifact's confusionMatrix data format.";
     return <Banner message={errorMsg} mode='error' additionalInfo={error} />;
   }
+
   return (
     <div className={padding(40)}>
       <div className={padding(40, 'b')}>
@@ -768,7 +231,7 @@ export function ConfusionMatrixSection({ artifact }: ConfusionMatrixProps) {
           ></IconWithTooltip>
         </h3>
       </div>
-      <ConfusionMatrix configs={buildConfusionMatrixConfig(confusionMatrix.struct as any)} />
+      <ConfusionMatrix configs={buildConfusionMatrixConfig(matrixData as any)} />
     </div>
   );
 }
@@ -781,6 +244,7 @@ const ConfusionMatrixInputRunType = Record({
   ),
   rows: ArrayRunType(Record({ row: ArrayRunType(Number) })),
 });
+
 function validateConfusionMatrix(input: any): { error?: string } {
   if (!input) return { error: 'confusionMatrix does not exist.' };
   try {
@@ -820,23 +284,24 @@ function buildConfusionMatrixConfig(
   ];
 }
 
-interface ScalarMetricsSectionProps {
-  artifact: Artifact;
-}
-function ScalarMetricsSection({ artifact }: ScalarMetricsSectionProps) {
-  const customProperties = artifact.getCustomPropertiesMap();
-  const name = customProperties.get('display_name')?.getStringValue();
-  const data = customProperties
-    .getEntryList()
-    .map(([key]) => ({
+/**
+ * V2 version of ScalarMetricsSection using new V2beta1 API types
+ */
+function ScalarMetricsSectionV2({ artifact }: { artifact: V2beta1Artifact }) {
+  const metadata = artifact.metadata || {};
+  const name = artifact.name || 'Unknown';
+
+  const data = Object.entries(metadata)
+    .filter(([key]) => key !== 'display_name')
+    .map(([key, value]) => ({
       key,
-      value: JSON.stringify(getMetadataValue(customProperties.get(key))),
-    }))
-    .filter(metric => metric.key !== 'display_name');
+      value: JSON.stringify(value),
+    }));
 
   if (data.length === 0) {
     return null;
   }
+
   return (
     <div className={padding(40, 'lrt')}>
       <div className={padding(40, 'b')}>
@@ -855,71 +320,55 @@ function ScalarMetricsSection({ artifact }: ScalarMetricsSectionProps) {
   );
 }
 
-async function getViewConfig(
-  v1VisualizationArtifact: LinkedArtifact | undefined,
+// TODO(HumairAK): The following exports are kept for backward compatibility
+// but may need to be removed or updated once all consumers are migrated.
+
+export async function getHtmlViewerConfig(
+  htmlArtifacts: any[] | undefined,
   namespace: string | undefined,
-): Promise<ViewerConfig[]> {
-  if (v1VisualizationArtifact) {
-    return OutputArtifactLoader.load(
-      WorkflowParser.parseStoragePath(v1VisualizationArtifact.artifact.getUri()),
-      namespace,
-    );
-  }
+): Promise<HTMLViewerConfig[]> {
+  // TODO(HumairAK): Re-implement with new V2beta1 API types
   return [];
 }
 
-export async function getHtmlViewerConfig(
-  htmlArtifacts: LinkedArtifact[] | undefined,
-  namespace: string | undefined,
-): Promise<HTMLViewerConfig[]> {
-  if (!htmlArtifacts) {
-    return [];
-  }
-  const htmlViewerConfigs = htmlArtifacts.map(async linkedArtifact => {
-    const uri = linkedArtifact.artifact.getUri();
-    let storagePath: StoragePath | undefined;
-    if (!uri) {
-      throw new Error('HTML Artifact URI unknown');
-    }
-
-    storagePath = WorkflowParser.parseStoragePath(uri);
-    if (!storagePath) {
-      throw new Error('HTML Artifact storagePath unknown');
-    }
-
-    const providerInfo = getStoreSessionInfoFromArtifact(linkedArtifact);
-
-    // TODO(zijianjoy): Limit the size of HTML file fetching to prevent UI frozen.
-    let data = await Apis.readFile({ path: storagePath, providerInfo, namespace: namespace });
-    return { htmlContent: data, type: PlotType.WEB_APP } as HTMLViewerConfig;
-  });
-  return Promise.all(htmlViewerConfigs);
-}
-
 export async function getMarkdownViewerConfig(
-  markdownArtifacts: LinkedArtifact[] | undefined,
+  markdownArtifacts: any[] | undefined,
   namespace: string | undefined,
 ): Promise<MarkdownViewerConfig[]> {
-  if (!markdownArtifacts) {
-    return [];
-  }
-  const markdownViewerConfigs = markdownArtifacts.map(async linkedArtifact => {
-    const uri = linkedArtifact.artifact.getUri();
-    let storagePath: StoragePath | undefined;
-    if (!uri) {
-      throw new Error('Markdown Artifact URI unknown');
-    }
+  // TODO(HumairAK): Re-implement with new V2beta1 API types
+  return [];
+}
 
-    storagePath = WorkflowParser.parseStoragePath(uri);
-    if (!storagePath) {
-      throw new Error('Markdown Artifact storagePath unknown');
-    }
+// Legacy exports for backward compatibility
+// TODO(HumairAK): These are stubs for backward compatibility during MLMD removal.
+// They need to be reimplemented with new V2beta1 API types.
 
-    const providerInfo = getStoreSessionInfoFromArtifact(linkedArtifact);
+export function ConfidenceMetricsSection({
+  linkedArtifacts,
+  filter,
+}: {
+  linkedArtifacts?: any[];
+  filter?: ConfidenceMetricsFilter;
+}) {
+  return (
+    <Banner
+      message='ConfidenceMetricsSection is temporarily unavailable during API migration.'
+      mode='info'
+    />
+  );
+}
 
-    // TODO(zijianjoy): Limit the size of Markdown file fetching to prevent UI frozen.
-    let data = await Apis.readFile({ path: storagePath, providerInfo, namespace: namespace });
-    return { markdownContent: data, type: PlotType.MARKDOWN } as MarkdownViewerConfig;
-  });
-  return Promise.all(markdownViewerConfigs);
+interface ConfusionMatrixSectionLegacyProps {
+  artifact: any;
+}
+
+export function ConfusionMatrixSection({ artifact }: ConfusionMatrixSectionLegacyProps) {
+  // TODO(HumairAK): This is a stub for backward compatibility.
+  // The component needs to be reimplemented with new V2beta1 API types.
+  return (
+    <Banner
+      message='ConfusionMatrixSection is temporarily unavailable during API migration.'
+      mode='info'
+    />
+  );
 }

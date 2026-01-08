@@ -35,11 +35,11 @@ import LogViewer from 'src/components/LogViewer';
 import {getResourceStateText, ResourceType} from 'src/components/ResourceInfo';
 import {MetricsVisualizations} from 'src/components/viewers/MetricsVisualizations';
 import {ArtifactTitle} from 'src/components/tabs/ArtifactTitle';
-import InputOutputTab, {getArtifactParamList, ParamList,} from 'src/components/tabs/InputOutputTab';
+import InputOutputTab, {ParamList} from 'src/components/tabs/InputOutputTab';
 import {convertYamlToPlatformSpec, convertYamlToV2PipelineSpec} from 'src/lib/v2/WorkflowUtils';
 import {PlatformDeploymentConfig} from 'src/generated/pipeline_spec/pipeline_spec';
 import {getComponentSpec} from 'src/lib/v2/NodeUtils';
-import {PipelineTaskDetailTaskPodType, V2beta1PipelineTaskDetail} from "../../apisv2beta1/run";
+import {PipelineTaskDetailTaskPodType, PipelineTaskDetailTaskState, V2beta1PipelineTaskDetail} from "../../apisv2beta1/run";
 import {ArtifactWithTaskInfo, NodeInfo} from "../../lib/v2/DynamicFlow";
 
 export const LOGS_DETAILS = 'logs_details';
@@ -232,29 +232,28 @@ function getTaskDetailsFields(
       // Static execution info.
       details.push([
         'Task name',
-        task.display_name || task.name,]);
+        task.display_name || task.name || '-',]);
 
       // Runtime execution info.
       const stateText = getResourceStateText({
-        resourceType: ResourceType.EXECUTION,
+        resourceType: ResourceType.TASK,
         resource: task,
         typeName: 'Execution',
       });
       details.push(['Status', stateText || '-']);
 
-      const createdAt = new Date(task.getCreateTimeSinceEpoch()).toString();
+      const createdAt = task.create_time ? new Date(task.create_time).toString() : '-';
       details.push(['Created At', createdAt]);
 
-      const lastUpdatedTime = task.getLastUpdateTimeSinceEpoch();
       let finishedAt = '-';
       if (
-        lastUpdatedTime &&
-        (task.getLastKnownState() === Execution.State.COMPLETE ||
-          task.getLastKnownState() === Execution.State.FAILED ||
-          task.getLastKnownState() === Execution.State.CACHED ||
-          task.getLastKnownState() === Execution.State.CANCELED)
+        task.end_time &&
+        (task.state === PipelineTaskDetailTaskState.SUCCEEDED ||
+          task.state === PipelineTaskDetailTaskState.FAILED ||
+          task.state === PipelineTaskDetailTaskState.CACHED ||
+          task.state === PipelineTaskDetailTaskState.SKIPPED)
       ) {
-        finishedAt = new Date(lastUpdatedTime).toString();
+        finishedAt = new Date(task.end_time).toString();
       }
       details.push(['Finished At', finishedAt]);
     }
@@ -380,24 +379,28 @@ function ArtifactInfo({
   // Static Artifact information.
   const taskName = task.display_name || task.name
   const artifactName = artifactDetails.outputArtifactKey
-  let artifactTypeName = artifactDetails.artifact?.type
+  const artifactTypeName = artifactDetails.artifact?.type?.toString()
 
   // Runtime artifact information.
-  const createdAt = artifactDetails.artifact?.created_at;
+  const createdAt = artifactDetails.artifact?.created_at
+    ? new Date(artifactDetails.artifact.created_at).toString()
+    : '-';
 
   // Artifact info rows.
-  const artifactInfo = [
-    ['Upstream Task Name', taskName],
-    ['Artifact Name', artifactName],
-    ['Artifact Type', artifactTypeName],
+  const artifactInfo: Array<KeyValue<string>> = [
+    ['Upstream Task Name', taskName || '-'],
+    ['Artifact Name', artifactName || '-'],
+    ['Artifact Type', artifactTypeName || '-'],
     ['Created At', createdAt],
   ];
 
-  let artifactParamsWithSessionInfo = getArtifactParamList([linkedArtifact], artifactTypeName);
-  let artifactParams: ParamList = [];
-
-  if (artifactParamsWithSessionInfo) {
-    artifactParams = artifactParamsWithSessionInfo.params;
+  // TODO(HumairAK): Session info is stubbed out during MLMD removal.
+  // Once session info functionality is reimplemented, update this code.
+  const artifactUri = artifactDetails.artifact?.uri;
+  const artifactParams: ParamList = artifactUri ? [[artifactName || 'Artifact', artifactUri]] : [];
+  const sessionMap = new Map<string, string | undefined>();
+  if (artifactUri) {
+    sessionMap.set(artifactUri, undefined);
   }
 
   return (
@@ -409,18 +412,20 @@ function ArtifactInfo({
         </div>
       )}
 
-      <div>
-        <DetailsTable<string>
-          key={`artifact-url`}
-          title='Artifact URI'
-          fields={artifactParams}
-          valueComponent={ArtifactPreview}
-          valueComponentProps={{
-            namespace: namespace,
-            sessionMap: artifactParamsWithSessionInfo.sessionMap,
-          }}
-        />
-      </div>
+      {artifactParams.length > 0 && (
+        <div>
+          <DetailsTable<string>
+            key={`artifact-url`}
+            title='Artifact URI'
+            fields={artifactParams}
+            valueComponent={ArtifactPreview}
+            valueComponentProps={{
+              namespace: namespace,
+              sessionMap: sessionMap,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

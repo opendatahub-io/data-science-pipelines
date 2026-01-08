@@ -14,26 +14,19 @@
  * limitations under the License.
  */
 
-import { Execution } from 'src/third_party/mlmd';
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { commonCss } from 'src/Css';
-import { ExecutionHelpers } from 'src/mlmd/MlmdUtils';
-import { RoutePageFactory } from '../Router';
+import {V2beta1PipelineTaskDetail} from "../../apisv2beta1/run";
 
 interface ExecutionTitleProps {
-  execution: Execution;
+  task: V2beta1PipelineTaskDetail;
 }
 
-export function ExecutionTitle({ execution }: ExecutionTitleProps) {
+export function ExecutionTitle({ task }: ExecutionTitleProps) {
+  const taskName = task.display_name || task.name || 'Unknown Task';
   return (
     <>
       <div>
-        This step corresponds to execution{' '}
-        <Link className={commonCss.link} to={RoutePageFactory.executionDetails(execution.getId())}>
-          "{ExecutionHelpers.getName(execution)}"
-        </Link>
-        .
+        Task: "{taskName}"
       </div>
     </>
   );

@@ -384,7 +384,7 @@ const ArtifactRow: React.FC<{ id: number; name: string; type?: string; uri: stri
     <td className={css.tableCell}>{id}</td>
     <td className={css.tableCell}>
       {id ? (
-        <Link className={commonCss.link} to={RoutePageFactory.artifactDetails(id)}>
+        <Link className={commonCss.link} to={RoutePageFactory.artifactDetails(id?.toString())}>
           {name ? name : '(No name)'}
         </Link>
       ) : (

@@ -31,7 +31,7 @@ import { Apis } from 'src/lib/Apis';
 import Buttons, { ButtonKeys } from 'src/lib/Buttons';
 import { KeyValue } from 'src/lib/StaticGraphParser';
 import { hasFinishedV2, statusProtoMap } from 'src/lib/StatusUtils';
-import {formatDateString, getRunDurationV2, createScopeToTaskMap, logger} from 'src/lib/Utils';
+import {formatDateString, getRunDurationV2, createScopeToTaskMap} from 'src/lib/Utils';
 import {
   convertSubDagToRuntimeFlowElements,
   getNodeInfo, NodeInfo,
@@ -42,7 +42,6 @@ import * as WorkflowUtils from 'src/lib/v2/WorkflowUtils';
 import {
   LinkedArtifact,
 } from 'src/mlmd/MlmdUtils';
-import { Artifact, Event, Execution } from 'src/third_party/mlmd';
 import { classes } from 'typestyle';
 import { RunDetailsProps } from './RunDetails';
 import { statusToIcon } from './StatusV2';
@@ -50,8 +49,10 @@ import DagCanvas from './v2/DagCanvas';
 import { Edge, Node } from 'react-flow-renderer/dist/types';
 const TAB_NAMES = ['Graph', 'Detail', 'Pipeline Spec'];
 
+// TODO(HumairAK): This interface is deprecated during MLMD removal.
+// execution is now typed as 'any' for backward compatibility.
 export interface NodeMlmdInfo {
-  execution?: Execution;
+  execution?: any; // Was MLMD Execution type
   linkedArtifact?: LinkedArtifact;
 }
 

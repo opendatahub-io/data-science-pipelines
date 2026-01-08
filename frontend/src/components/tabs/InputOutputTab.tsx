@@ -15,17 +15,14 @@
  */
 
 import React from 'react';
-import { useQuery } from 'react-query';
-import { Link } from 'react-router-dom';
 import { ErrorBoundary } from 'src/atoms/ErrorBoundary';
 import { commonCss, padding } from 'src/Css';
 import { KeyValue } from 'src/lib/StaticGraphParser';
 import ArtifactPreview from '../ArtifactPreview';
 import Banner from '../Banner';
 import DetailsTable from '../DetailsTable';
-import { RoutePageFactory } from '../Router';
 import { ExecutionTitle } from './ExecutionTitle';
-import {V2beta1PipelineTaskDetail} from "../../apisv2beta1/run";
+import {V2beta1PipelineTaskDetail, InputOutputsIOParameter, InputOutputsIOArtifact} from "../../apisv2beta1/run";
 
 export type ParamList = Array<KeyValue<string>>;
 export type URIToSessionInfo = Map<string, string | undefined>;
@@ -39,92 +36,77 @@ export interface ArtifactLocation {
   store_session_info: string | undefined;
 }
 
+// New V2beta1 interface
 export interface IOTabProps {
   task: V2beta1PipelineTaskDetail;
   namespace: string | undefined;
 }
 
-export function InputOutputTab({ task, namespace }: IOTabProps) {
-  const executionId = execution.getId();
+// Legacy MLMD interface for backward compatibility
+interface IOTabPropsLegacy {
+  execution: any; // MLMD Execution type
+  namespace: string | undefined;
+}
 
-  // TODO(jlyaoyuli): Showing input/output parameter for unexecuted node (retrieves from PipelineSpec).
-  // TODO(jlyaoyuli): Display other information (container, args, image, command)
+type InputOutputTabProps = IOTabProps | IOTabPropsLegacy;
 
-  // Retrieves input and output artifacts from Metadata store.
-  const { isSuccess, error, data: linkedArtifacts } = useQuery<LinkedArtifact[], Error>(
-    ['execution_artifact', { id: executionId, state: execution.getLastKnownState() }],
-    () => getLinkedArtifactsByExecution(execution),
-    { staleTime: Infinity },
-  );
+function isNewInterface(props: InputOutputTabProps): props is IOTabProps {
+  return 'task' in props;
+}
 
-  const { data: artifactTypes } = useQuery<ArtifactType[], Error>(
-    ['artifact_types', { linkedArtifact: linkedArtifacts }],
-    () => getArtifactTypes(),
-    {},
-  );
+export function InputOutputTab(props: InputOutputTabProps) {
+  const { namespace } = props;
 
-  const artifactTypeNames =
-    linkedArtifacts && artifactTypes ? getArtifactTypeName(artifactTypes, linkedArtifacts) : [];
-
-  // Restructs artifacts and parameters for visualization.
-  const inputParams = extractInputFromExecution(execution);
-  const outputParams = extractOutputFromExecution(execution);
-  let inputArtifactsWithSessionInfo: ArtifactParamsWithSessionInfo | undefined;
-  let outputArtifactsWithSessionInfo: ArtifactParamsWithSessionInfo | undefined;
-  if (isSuccess && linkedArtifacts) {
-    inputArtifactsWithSessionInfo = getArtifactParamList(
-      filterEventWithInputArtifact(linkedArtifacts),
-      artifactTypeNames,
-    );
-    outputArtifactsWithSessionInfo = getArtifactParamList(
-      filterEventWithOutputArtifact(linkedArtifacts),
-      artifactTypeNames,
+  // Handle legacy MLMD interface
+  if (!isNewInterface(props)) {
+    // Legacy MLMD Execution type is not supported
+    // TODO(HumairAK): Re-implement MLMD Execution support or remove after full migration
+    return (
+      <ErrorBoundary>
+        <div className={commonCss.page}>
+          <div className={padding(20)}>
+            <Banner
+              message='Input/Output visualization is temporarily unavailable during API migration.'
+              mode='info'
+            />
+          </div>
+        </div>
+      </ErrorBoundary>
     );
   }
 
-  let inputArtifacts: ParamList = [];
-  let outputArtifacts: ParamList = [];
+  // New V2beta1 interface
+  const { task } = props;
+  const taskId = task.task_id || 'unknown';
 
-  if (inputArtifactsWithSessionInfo) {
-    inputArtifacts = inputArtifactsWithSessionInfo.params;
-  }
+  // Extract input and output parameters from the task
+  const inputParams = extractInputParameters(task);
+  const outputParams = extractOutputParameters(task);
 
-  if (outputArtifactsWithSessionInfo) {
-    outputArtifacts = outputArtifactsWithSessionInfo.params;
-  }
+  // Extract input and output artifacts from the task
+  const { params: inputArtifacts, sessionMap: inputSessionMap } = extractInputArtifacts(task);
+  const { params: outputArtifacts, sessionMap: outputSessionMap } = extractOutputArtifacts(task);
 
-  let isIoEmpty = false;
-  if (
+  const isIoEmpty =
     inputParams.length === 0 &&
     outputParams.length === 0 &&
     inputArtifacts.length === 0 &&
-    outputArtifacts.length === 0
-  ) {
-    isIoEmpty = true;
-  }
+    outputArtifacts.length === 0;
 
   return (
     <ErrorBoundary>
       <div className={commonCss.page}>
         <div className={padding(20)}>
-          <ExecutionTitle execution={execution} />
+          <ExecutionTitle task={task} />
 
-          {error && (
-            <Banner
-              message='Error in retrieving Artifacts.'
-              mode='error'
-              additionalInfo={error.message}
-            />
-          )}
-
-          {isSuccess && isIoEmpty && (
+          {isIoEmpty && (
             <Banner message='There is no input/output parameter or artifact.' mode='info' />
           )}
 
           {inputParams.length > 0 && (
             <div>
               <DetailsTable
-                key={`input-parameters-${executionId}`}
+                key={`input-parameters-${taskId}`}
                 title='Input Parameters'
                 fields={inputParams}
               />
@@ -134,13 +116,13 @@ export function InputOutputTab({ task, namespace }: IOTabProps) {
           {inputArtifacts.length > 0 && (
             <div>
               <DetailsTable<string>
-                key={`input-artifacts-${executionId}`}
+                key={`input-artifacts-${taskId}`}
                 title='Input Artifacts'
                 fields={inputArtifacts}
                 valueComponent={ArtifactPreview}
                 valueComponentProps={{
                   namespace: namespace,
-                  sessionMap: inputArtifactsWithSessionInfo?.sessionMap,
+                  sessionMap: inputSessionMap,
                 }}
               />
             </div>
@@ -149,7 +131,7 @@ export function InputOutputTab({ task, namespace }: IOTabProps) {
           {outputParams.length > 0 && (
             <div>
               <DetailsTable
-                key={`output-parameters-${executionId}`}
+                key={`output-parameters-${taskId}`}
                 title='Output Parameters'
                 fields={outputParams}
               />
@@ -159,13 +141,13 @@ export function InputOutputTab({ task, namespace }: IOTabProps) {
           {outputArtifacts.length > 0 && (
             <div>
               <DetailsTable<string>
-                key={`output-artifacts-${executionId}`}
+                key={`output-artifacts-${taskId}`}
                 title='Output Artifacts'
                 fields={outputArtifacts}
                 valueComponent={ArtifactPreview}
                 valueComponentProps={{
                   namespace: namespace,
-                  sessionMap: outputArtifactsWithSessionInfo?.sessionMap,
+                  sessionMap: outputSessionMap,
                 }}
               />
             </div>
@@ -178,59 +160,56 @@ export function InputOutputTab({ task, namespace }: IOTabProps) {
 
 export default InputOutputTab;
 
-function extractInputFromExecution(execution: Execution): KeyValue<string>[] {
-  return extractParamFromExecution(execution, 'inputs');
+function extractInputParameters(task: V2beta1PipelineTaskDetail): ParamList {
+  return extractParameters(task.inputs?.parameters);
 }
 
-function extractOutputFromExecution(execution: Execution): KeyValue<string>[] {
-  return extractParamFromExecution(execution, 'outputs');
+function extractOutputParameters(task: V2beta1PipelineTaskDetail): ParamList {
+  return extractParameters(task.outputs?.parameters);
 }
 
-function extractParamFromExecution(execution: Execution, name: string): KeyValue<string>[] {
-  const result: KeyValue<string>[] = [];
-  execution.getCustomPropertiesMap().forEach((value, key) => {
-    if (key === name) {
-      const param = getMetadataValue(value);
-      if (typeof param == 'object') {
-        Object.entries(param.toJavaScript()).forEach(parameter => {
-          result.push([parameter[0], JSON.stringify(parameter[1])]);
-        });
-      }
-    }
+function extractParameters(parameters?: InputOutputsIOParameter[]): ParamList {
+  if (!parameters) {
+    return [];
+  }
+  return parameters.map(param => {
+    const key = param.parameter_key || 'Unknown';
+    const value = param.value !== undefined ? JSON.stringify(param.value) : '-';
+    return [key, value] as KeyValue<string>;
   });
-  return result;
 }
 
-export function getArtifactParamList(
-  inputArtifacts: LinkedArtifact[],
-  artifactTypeNames: string[],
-): ArtifactParamsWithSessionInfo {
-  let sessMap: URIToSessionInfo = new Map<string, string | undefined>();
+function extractInputArtifacts(task: V2beta1PipelineTaskDetail): ArtifactParamsWithSessionInfo {
+  return extractArtifacts(task.inputs?.artifacts);
+}
 
-  let params = Object.values(inputArtifacts).map((linkedArtifact, index) => {
-    let key = getArtifactName(linkedArtifact);
-    if (
-      key &&
-      (artifactTypeNames[index] === 'system.Metrics' ||
-        artifactTypeNames[index] === 'system.ClassificationMetrics')
-    ) {
-      key += ' (This is an empty file by default)';
+function extractOutputArtifacts(task: V2beta1PipelineTaskDetail): ArtifactParamsWithSessionInfo {
+  return extractArtifacts(task.outputs?.artifacts);
+}
+
+function extractArtifacts(ioArtifacts?: InputOutputsIOArtifact[]): ArtifactParamsWithSessionInfo {
+  const params: ParamList = [];
+  const sessionMap: URIToSessionInfo = new Map<string, string | undefined>();
+
+  if (!ioArtifacts) {
+    return { params, sessionMap };
+  }
+
+  for (const ioArtifact of ioArtifacts) {
+    const artifactKey = ioArtifact.artifact_key || 'Unknown';
+    const artifacts = ioArtifact.artifacts || [];
+
+    for (const artifact of artifacts) {
+      const uri = artifact.uri || '-';
+      const displayName = artifact.name || artifactKey;
+
+      // TODO(HumairAK): Session info is stubbed out during MLMD removal.
+      // Set session info to undefined for now.
+      sessionMap.set(uri, undefined);
+
+      params.push([displayName, uri] as KeyValue<string>);
     }
-    const artifactId = linkedArtifact.artifact.getId();
-    const artifactElement = RoutePageFactory.artifactDetails(artifactId) ? (
-      <Link className={commonCss.link} to={RoutePageFactory.artifactDetails(artifactId)}>
-        {key}
-      </Link>
-    ) : (
-      key
-    );
+  }
 
-    const uri = linkedArtifact.artifact.getUri();
-    const sessInfo = getStoreSessionInfoFromArtifact(linkedArtifact);
-    sessMap.set(uri, sessInfo);
-
-    return [artifactElement, uri];
-  });
-
-  return { params: params, sessionMap: sessMap };
+  return { params, sessionMap };
 }

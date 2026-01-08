@@ -18,24 +18,24 @@ import * as React from 'react';
 import ErrorIcon from '@material-ui/icons/Error';
 import PendingIcon from '@material-ui/icons/Schedule';
 import RunningIcon from 'src/icons/statusRunning';
-import SkippedIcon from '@material-ui/icons/SkipNext';
 import SuccessIcon from '@material-ui/icons/CheckCircle';
 import CachedIcon from 'src/icons/statusCached';
 import TerminatedIcon from 'src/icons/statusTerminated';
+import PausedIcon from '@material-ui/icons/Pause';
 import Tooltip from '@material-ui/core/Tooltip';
 import UnknownIcon from '@material-ui/icons/Help';
 import { color } from 'src/Css';
 import { logger, formatDateString } from 'src/lib/Utils';
 import { checkIfTerminatedV2 } from 'src/lib/StatusUtils';
 import { V2beta1RuntimeState } from 'src/apisv2beta1/run';
-import { Execution } from 'src/third_party/mlmd/generated/ml_metadata/proto/metadata_store_pb';
+import { PipelineTaskDetailTaskState } from 'src/apisv2beta1/run';
 
 export function statusToIcon(
   state?: V2beta1RuntimeState,
   startDate?: Date | string,
   endDate?: Date | string,
   nodeMessage?: string,
-  mlmdState?: Execution.State,
+  taskState?: PipelineTaskDetailTaskState,
 ): JSX.Element {
   state = checkIfTerminatedV2(state, nodeMessage);
   // tslint:disable-next-line:variable-name
@@ -63,10 +63,6 @@ export function statusToIcon(
       iconColor = color.blue;
       title = 'Run is canceling';
       break;
-    case V2beta1RuntimeState.SKIPPED:
-      IconComponent = SkippedIcon;
-      title = 'Execution has been skipped for this resource';
-      break;
     case V2beta1RuntimeState.SUCCEEDED:
       IconComponent = SuccessIcon;
       iconColor = color.success;
@@ -77,13 +73,18 @@ export function statusToIcon(
       iconColor = color.terminated;
       title = 'Run was manually canceled';
       break;
+    case V2beta1RuntimeState.PAUSED:
+      IconComponent = PausedIcon;
+      iconColor = color.weak;
+      title = 'Run is paused';
+      break;
     case V2beta1RuntimeState.RUNTIMESTATEUNSPECIFIED:
       break;
     default:
       logger.verbose('Unknown state:', state);
   }
-  // TODO(jlyaoyuli): Additional changes is probably needed after Status IR integration.
-  if (mlmdState === Execution.State.CACHED) {
+  // Handle task-level CACHED state
+  if (taskState === PipelineTaskDetailTaskState.CACHED) {
     IconComponent = CachedIcon;
     iconColor = color.success;
     title = 'Execution was skipped and outputs were taken from cache';

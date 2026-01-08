@@ -174,7 +174,7 @@ export class ArtifactList extends Page<ArtifactListProps, ArtifactListState> {
       <Link
         onClick={e => e.stopPropagation()}
         className={commonCss.link}
-        to={RoutePageFactory.artifactDetails(Number(props.id))}
+        to={RoutePageFactory.artifactDetails(props.id)}
       >
         {props.value}
       </Link>

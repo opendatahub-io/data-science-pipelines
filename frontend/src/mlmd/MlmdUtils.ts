@@ -15,7 +15,7 @@
  */
 
 import { Struct } from 'google-protobuf/google/protobuf/struct_pb';
-import { getResourceStateText, ResourceType } from 'src/components/ResourceInfo';
+// getResourceStateText and ResourceType are no longer used after MLMD removal refactoring
 import { logger } from 'src/lib/Utils';
 import { isV2Pipeline } from 'src/lib/v2/WorkflowUtils';
 import {
@@ -163,11 +163,25 @@ export const ExecutionHelpers = {
       '(No name)'}`;
   },
   getState(execution: Execution): string | number | undefined {
-    return getResourceStateText({
-      resourceType: ResourceType.EXECUTION,
-      resource: execution,
-      typeName: 'Execution',
-    });
+    // TODO(HumairAK): Stubbed during MLMD removal.
+    // This function uses MLMD Execution type which is being removed.
+    const state = execution.getLastKnownState();
+    switch (state) {
+      case Execution.State.NEW:
+        return 'New';
+      case Execution.State.RUNNING:
+        return 'Running';
+      case Execution.State.COMPLETE:
+        return 'Complete';
+      case Execution.State.FAILED:
+        return 'Failed';
+      case Execution.State.CACHED:
+        return 'Cached';
+      case Execution.State.CANCELED:
+        return 'Canceled';
+      default:
+        return 'Unknown';
+    }
   },
   getKfpPod(execution: Execution): string | undefined {
     return (

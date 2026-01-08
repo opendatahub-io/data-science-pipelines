@@ -21,6 +21,7 @@ import {
   LineageResource,
   LineageView,
 } from 'src/mlmd/library';
+import { ArtifactHelpers } from 'src/mlmd/MlmdUtils';
 import {
   ArtifactType,
   Artifact,
@@ -85,7 +86,7 @@ class ArtifactDetails extends Page<{}, ArtifactDetailsState> {
     // the getUri() method.
     // TODO: switch to use typedResource
     if (typeof resource['getUri'] === 'function') {
-      return RoutePageFactory.artifactDetails(resource.getId());
+      return RoutePageFactory.artifactDetails(resource.getId()?.toString());
     } else {
       return RoutePageFactory.executionDetails(resource.getId());
     }

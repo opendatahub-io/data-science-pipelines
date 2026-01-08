@@ -47,7 +47,6 @@ export const statusProtoMap = new Map<V2beta1RuntimeState, string>([
   [V2beta1RuntimeState.PENDING, 'Pending'],
   [V2beta1RuntimeState.RUNNING, 'Running'],
   [V2beta1RuntimeState.SUCCEEDED, 'Succeeded'],
-  [V2beta1RuntimeState.SKIPPED, 'Skipped'],
   [V2beta1RuntimeState.FAILED, 'Failed'],
   [V2beta1RuntimeState.CANCELING, 'Canceling'],
   [V2beta1RuntimeState.CANCELED, 'Canceled'],
@@ -134,13 +133,13 @@ function wasNodeCached(node: NodeStatus): boolean {
 export function hasFinishedV2(state?: V2beta1RuntimeState): boolean {
   switch (state) {
     case V2beta1RuntimeState.SUCCEEDED: // Fall through
-    case V2beta1RuntimeState.SKIPPED: // Fall through
     case V2beta1RuntimeState.FAILED: // Fall through
     case V2beta1RuntimeState.CANCELED:
       return true;
     case V2beta1RuntimeState.PENDING: // Fall through
     case V2beta1RuntimeState.RUNNING: // Fall through
     case V2beta1RuntimeState.CANCELING: // Fall through
+    case V2beta1RuntimeState.PAUSED: // Fall through
     case V2beta1RuntimeState.RUNTIMESTATEUNSPECIFIED:
       return false;
     default:
@@ -162,10 +161,10 @@ export function statusToBgColorV2(state?: V2beta1RuntimeState, nodeMessage?: str
       return statusBgColors.running;
     case V2beta1RuntimeState.SUCCEEDED:
       return statusBgColors.succeeded;
-    case V2beta1RuntimeState.SKIPPED:
-    // fall through
     case V2beta1RuntimeState.CANCELED:
       return statusBgColors.terminatedOrSkipped;
+    case V2beta1RuntimeState.PAUSED:
+      return statusBgColors.notStarted;
     case V2beta1RuntimeState.RUNTIMESTATEUNSPECIFIED:
     // fall through
     default:

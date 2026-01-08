@@ -18,20 +18,27 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { commonCss } from 'src/Css';
 import { RoutePageFactory } from '../Router';
-import {V2beta1Artifact} from "../../apisv2beta1/artifact";
+import { ArtifactWithTaskInfo } from '../../lib/v2/DynamicFlow';
 
 interface ArtifactTitleProps {
-  artifact: V2beta1Artifact;
+  artifact: ArtifactWithTaskInfo;
 }
 
 export function ArtifactTitle({ artifact }: ArtifactTitleProps) {
+  const artifactId = artifact.artifact?.artifact_id;
+  const artifactName = artifact.artifact?.name || artifact.outputArtifactKey || 'Unknown Artifact';
+
   return (
     <>
       <div>
         This step corresponds to artifact{' '}
-        <Link className={commonCss.link} to={RoutePageFactory.artifactDetails(artifact.artifact_id)}>
-          "{artifact.name}"
-        </Link>
+        {artifactId ? (
+          <Link className={commonCss.link} to={RoutePageFactory.artifactDetails(artifactId)}>
+            "{artifactName}"
+          </Link>
+        ) : (
+          `"${artifactName}"`
+        )}
         .
       </div>
     </>

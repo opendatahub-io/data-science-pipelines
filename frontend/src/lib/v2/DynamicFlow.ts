@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {Elements, FlowElement, Node} from 'react-flow-renderer';
+import {Elements, FlowElement} from 'react-flow-renderer';
 import {
   ArtifactFlowElementData,
   ArtifactIconState,
@@ -173,9 +173,9 @@ export function getNodeInfo(
   const idToTask = createTaskIDToTaskMap(run)
   if (NodeTypeNames.ARTIFACT === elem.type) {
     const artifactElem = elem as ArtifactFlowElementData;
-    const producerTaskName = artifactElem.producerTaskName;
-    const producerTaskID = artifactElem.producerTaskID;
-    const outputArtifactKey = artifactElem.outputArtifactKey;
+    const producerTaskName = artifactElem.data.producerTaskName;
+    const producerTaskID = artifactElem.data.producerTaskID;
+    const outputArtifactKey = artifactElem.data.outputArtifactKey;
     if (!producerTaskName || !producerTaskID || !outputArtifactKey) {
       throw new Error("Producer task name, output artifact key, or ID not found for artifact: " + artifactElem.label);
     }
@@ -185,7 +185,7 @@ export function getNodeInfo(
     }
     const artifact = producerTask.outputs?.artifacts
       ?.flatMap(io => io.artifacts ?? [])
-      .find(a => a.artifact_id === artifactElem.artifactId);
+      .find(a => a.artifact_id === artifactElem.data.artifactId);
     if (!artifact) {
       throw new Error("Artifact not found for producer task: " + producerTaskName);
     }
@@ -199,12 +199,12 @@ export function getNodeInfo(
   }
   // If not an artifact then it's a task
   const taskElem = elem as TaskFlowElementData
-  if (!taskElem.taskID) {
-    throw new Error("Task ID not found for task: " + taskElem.label);
+  if (!taskElem.data.taskID) {
+    throw new Error("Task ID not found for task: " + taskElem.data.label);
   }
-  const task = idToTask.get(taskElem.taskID)
+  const task = idToTask.get(taskElem.data.taskID)
   if (!task) {
-    throw new Error("Task not found for task ID: " + taskElem.taskID);
+    throw new Error("Task not found for task ID: " + taskElem.data.taskID);
   }
   return { task: task };
 

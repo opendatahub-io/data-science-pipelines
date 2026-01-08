@@ -15,23 +15,32 @@
  */
 
 import * as React from 'react';
-import { useQuery } from 'react-query';
 import { ErrorBoundary } from 'src/atoms/ErrorBoundary';
 import { commonCss, padding } from 'src/Css';
-import {
-  getArtifactTypes,
-  getOutputLinkedArtifactsInExecution,
-  LinkedArtifact,
-} from 'src/mlmd/MlmdUtils';
-import { ArtifactType, Execution } from 'src/third_party/mlmd';
 import Banner from '../Banner';
 import { MetricsVisualizations } from '../viewers/MetricsVisualizations';
 import { ExecutionTitle } from './ExecutionTitle';
+import { V2beta1PipelineTaskDetail, PipelineTaskDetailTaskState } from '../../apisv2beta1/run';
+import { ArtifactWithTaskInfo } from '../../lib/v2/DynamicFlow';
 
-type MetricsTabProps = {
-  execution: Execution;
+// New V2beta1 interface
+type MetricsTabPropsNew = {
+  task: V2beta1PipelineTaskDetail;
+  artifactDetails?: ArtifactWithTaskInfo[];
   namespace: string | undefined;
 };
+
+// Legacy MLMD interface for backward compatibility
+type MetricsTabPropsLegacy = {
+  execution: any; // MLMD Execution type
+  namespace: string | undefined;
+};
+
+export type MetricsTabProps = MetricsTabPropsNew | MetricsTabPropsLegacy;
+
+function isNewInterface(props: MetricsTabProps): props is MetricsTabPropsNew {
+  return 'task' in props;
+}
 
 /**
  * Metrics tab renders metrics for the artifact of given execution.
@@ -39,85 +48,57 @@ type MetricsTabProps = {
  * Detail can be found in https://github.com/kubeflow/pipelines/blob/master/sdk/python/kfp/dsl/io_types.py
  * Note that these metrics are only available on KFP v2 mode.
  */
-export function MetricsTab({ execution, namespace }: MetricsTabProps) {
-  let executionCompleted = false;
-  const executionState = execution.getLastKnownState();
-  if (
-    !(
-      executionState === Execution.State.NEW ||
-      executionState === Execution.State.UNKNOWN ||
-      executionState === Execution.State.RUNNING
-    )
-  ) {
-    executionCompleted = true;
+export function MetricsTab(props: MetricsTabProps) {
+  const { namespace } = props;
+
+  // Handle legacy MLMD interface
+  if (!isNewInterface(props)) {
+    // Legacy MLMD Execution type is not supported
+    // TODO(HumairAK): Re-implement MLMD Execution support or remove after full migration
+    return (
+      <ErrorBoundary>
+        <div className={commonCss.page}>
+          <div className={padding(20)}>
+            <Banner
+              message='Metrics visualization is temporarily unavailable during API migration.'
+              mode='info'
+            />
+          </div>
+        </div>
+      </ErrorBoundary>
+    );
   }
 
-  const executionId = execution.getId();
-  // Retrieving a list of artifacts associated with this execution,
-  // so we can find the artifact for system metrics from there.
-  const {
-    isLoading: isLoadingArtifacts,
-    isSuccess: isSuccessArtifacts,
-    error: errorArtifacts,
-    data: artifacts,
-  } = useQuery<LinkedArtifact[], Error>(
-    ['execution_output_artifact', { id: executionId, state: executionState }],
-    () => getOutputLinkedArtifactsInExecution(execution),
-    { enabled: executionCompleted, staleTime: Infinity },
-  );
+  // New V2beta1 interface
+  const { task, artifactDetails } = props;
+  let taskCompleted = false;
+  const taskState = task.state;
+  if (
+    !(
+      taskState === PipelineTaskDetailTaskState.RUNTIMESTATEUNSPECIFIED ||
+      taskState === PipelineTaskDetailTaskState.RUNNING
+    )
+  ) {
+    taskCompleted = true;
+  }
 
-  // artifactTypes allows us to map from artifactIds to artifactTypeNames,
-  // so we can identify metrics artifact provided by system.
-  const {
-    isLoading: isLoadingArtifactTypes,
-    isSuccess: isSuccessArtifactTypes,
-    error: errorArtifactTypes,
-    data: artifactTypes,
-  } = useQuery<ArtifactType[], Error>(
-    ['artifact_types', { id: executionId, state: executionState }],
-    () => getArtifactTypes(),
-    {
-      enabled: executionCompleted,
-      staleTime: Infinity,
-    },
-  );
+  const taskStateUnknown = taskState === PipelineTaskDetailTaskState.RUNTIMESTATEUNSPECIFIED;
 
-  let executionStateUnknown = executionState === Execution.State.UNKNOWN;
-  // This react element produces banner message if query to MLMD is pending or has error.
-  // Once query is completed, it shows actual content of metrics visualization in MetricsSwitcher.
   return (
     <ErrorBoundary>
       <div className={commonCss.page}>
         <div className={padding(20)}>
-          <ExecutionTitle execution={execution} />
-          {executionStateUnknown && <Banner message='Task is in unknown state.' mode='info' />}
-          {!executionStateUnknown && !executionCompleted && (
+          <ExecutionTitle task={task} />
+          {taskStateUnknown && <Banner message='Task is in unknown state.' mode='info' />}
+          {!taskStateUnknown && !taskCompleted && (
             <Banner message='Task has not completed.' mode='info' />
           )}
-          {(isLoadingArtifactTypes || isLoadingArtifacts) && (
-            <Banner message='Metrics is loading.' mode='info' />
-          )}
-          {errorArtifacts && (
-            <Banner
-              message='Error in retrieving metrics information.'
-              mode='error'
-              additionalInfo={errorArtifacts.message}
-            />
-          )}
-          {!errorArtifacts && errorArtifactTypes && (
-            <Banner
-              message='Error in retrieving artifact types information.'
-              mode='error'
-              additionalInfo={errorArtifactTypes.message}
-            />
-          )}
-          {isSuccessArtifacts && isSuccessArtifactTypes && artifacts && artifactTypes && (
+          {taskCompleted && (
             <MetricsVisualizations
-              linkedArtifacts={artifacts}
-              artifactTypes={artifactTypes}
-              execution={execution}
+              artifactDetails={artifactDetails || []}
+              execution={task}
               namespace={namespace}
-            ></MetricsVisualizations>
+            />
           )}
         </div>
       </div>
