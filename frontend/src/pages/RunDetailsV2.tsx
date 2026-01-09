@@ -39,22 +39,12 @@ import {
 } from 'src/lib/v2/DynamicFlow';
 import { convertFlowElements } from 'src/lib/v2/StaticFlow';
 import * as WorkflowUtils from 'src/lib/v2/WorkflowUtils';
-import {
-  LinkedArtifact,
-} from 'src/mlmd/MlmdUtils';
 import { classes } from 'typestyle';
 import { RunDetailsProps } from './RunDetails';
 import { statusToIcon } from './StatusV2';
 import DagCanvas from './v2/DagCanvas';
 import { Edge, Node } from 'react-flow-renderer/dist/types';
 const TAB_NAMES = ['Graph', 'Detail', 'Pipeline Spec'];
-
-// TODO(HumairAK): This interface is deprecated during MLMD removal.
-// execution is now typed as 'any' for backward compatibility.
-export interface NodeMlmdInfo {
-  execution?: any; // Was MLMD Execution type
-  linkedArtifact?: LinkedArtifact;
-}
 
 interface RunDetailsV2Info {
   pipeline_job: string;
