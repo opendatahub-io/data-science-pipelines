@@ -15,6 +15,7 @@
 import * as portableFetch from 'portable-fetch';
 import { ExperimentServiceApi, FetchAPI } from 'src/apis/experiment';
 import { ExperimentServiceApi as ExperimentServiceApiV2 } from 'src/apisv2beta1/experiment';
+import { ArtifactServiceApi } from 'src/apisv2beta1/artifact';
 import { JobServiceApi } from 'src/apis/job';
 import { RecurringRunServiceApi } from 'src/apisv2beta1/recurringrun';
 import { ApiPipeline, ApiPipelineVersion, PipelineServiceApi } from 'src/apis/pipeline';
@@ -254,6 +255,17 @@ export class Apis {
       );
     }
     return this._visualizationServiceApi;
+  }
+
+  public static get artifactServiceApi(): ArtifactServiceApi {
+    if (!this._artifactServiceApi) {
+      this._artifactServiceApi = new ArtifactServiceApi(
+        { basePath: this.basePath },
+        undefined,
+        crossBrowserFetch,
+      );
+    }
+    return this._artifactServiceApi;
   }
 
   /**
@@ -519,6 +531,7 @@ export class Apis {
   private static _runServiceApiV1?: RunServiceApiV1;
   private static _runServiceApiV2?: RunServiceApiV2;
   private static _visualizationServiceApi?: VisualizationServiceApi;
+  private static _artifactServiceApi?: ArtifactServiceApi;
 
   /**
    * This function will call this._fetch() and parse the resulting JSON into an object of type T.

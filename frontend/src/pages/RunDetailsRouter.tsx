@@ -17,31 +17,31 @@
 import React from 'react';
 import * as JsYaml from 'js-yaml';
 import { useQuery } from 'react-query';
+import CircularProgress from '@material-ui/core/CircularProgress';
 import { V2beta1Run } from 'src/apisv2beta1/run';
 import { RouteParams } from 'src/components/Router';
 import { Apis } from 'src/lib/Apis';
+import { commonCss } from 'src/Css';
 import * as WorkflowUtils from 'src/lib/v2/WorkflowUtils';
-import EnhancedRunDetails, { RunDetailsProps } from 'src/pages/RunDetails';
 import { RunDetailsV2 } from 'src/pages/RunDetailsV2';
 
 // This is a router to determine whether to show V1 or V2 run detail page.
-export default function RunDetailsRouter(props: RunDetailsProps) {
+// Note: V1 pipelines are no longer supported - all runs use V2 RunDetailsV2.
+export default function RunDetailsRouter(props: any) {
   const runId = props.match.params[RouteParams.runId];
   let pipelineManifest: string | undefined;
 
   // Retrieves v2 run detail.
-    const {
-        isSuccess: getV2RunSuccess,
-        isFetching: runIsFetching,
-        data: v2Run,
-    } = useQuery<V2beta1Run, Error>({
-        queryKey: ['v2_run_detail', {id: runId}],
-        queryFn: () => Apis.runServiceApiV2.runServiceGetRun(
-            runId,
-            undefined,
-            'FULL'
-    ),
+  const {
+    isSuccess: getV2RunSuccess,
+    isFetching: runIsFetching,
+    data: v2Run,
+  } = useQuery<V2beta1Run, Error>({
+    queryKey: ['v2_run_detail', { id: runId }],
+    queryFn: () =>
+      Apis.runServiceApiV2.runServiceGetRun(runId, undefined, 'FULL'),
   });
+
   if (getV2RunSuccess && v2Run && v2Run.pipeline_spec) {
     pipelineManifest = JsYaml.safeDump(v2Run.pipeline_spec);
   }
@@ -70,12 +70,26 @@ export default function RunDetailsRouter(props: RunDetailsProps) {
 
   const templateString = pipelineManifest ?? templateStrFromPipelineVersion;
 
-  if (getV2RunSuccess && v2Run && templateString) {
-    const isV2Pipeline = WorkflowUtils.isPipelineSpec(templateString);
-    if (isV2Pipeline) {
-      return <RunDetailsV2 pipeline_job={templateString} run={v2Run} {...props} />;
-    }
+  // Show loading state while fetching run data
+  if (runIsFetching || templateStrIsFetching) {
+    return (
+      <div className={commonCss.page}>
+        <CircularProgress className={commonCss.absoluteCenter} />
+      </div>
+    );
   }
 
-  return <EnhancedRunDetails {...props} isLoading={runIsFetching || templateStrIsFetching} />;
+  // Show V2 run details page
+  if (getV2RunSuccess && v2Run && templateString) {
+    return <RunDetailsV2 pipeline_job={templateString} run={v2Run} {...props} />;
+  }
+
+  // If we couldn't get the run or template, show an error
+  return (
+    <div className={commonCss.page}>
+      <div className={commonCss.absoluteCenter}>
+        Unable to load run details. The run may not exist or the pipeline spec may be missing.
+      </div>
+    </div>
+  );
 }
