@@ -22,7 +22,6 @@ import { V2beta1Run } from 'src/apisv2beta1/run';
 import { RouteParams } from 'src/components/Router';
 import { Apis } from 'src/lib/Apis';
 import { commonCss } from 'src/Css';
-import * as WorkflowUtils from 'src/lib/v2/WorkflowUtils';
 import { RunDetailsV2 } from 'src/pages/RunDetailsV2';
 
 // This is a router to determine whether to show V1 or V2 run detail page.
@@ -34,7 +33,7 @@ export default function RunDetailsRouter(props: any) {
   // Retrieves v2 run detail.
   const {
     isSuccess: getV2RunSuccess,
-    isFetching: runIsFetching,
+    isLoading: runIsLoading,
     data: v2Run,
   } = useQuery<V2beta1Run, Error>({
     queryKey: ['v2_run_detail', { id: runId }],
@@ -49,7 +48,7 @@ export default function RunDetailsRouter(props: any) {
   const pipelineId = v2Run?.pipeline_version_reference?.pipeline_id;
   const pipelineVersionId = v2Run?.pipeline_version_reference?.pipeline_version_id;
 
-  const { isFetching: templateStrIsFetching, data: templateStrFromPipelineVersion } = useQuery<
+  const { isLoading: templateStrIsLoading, data: templateStrFromPipelineVersion } = useQuery<
     string,
     Error
   >(
@@ -70,8 +69,8 @@ export default function RunDetailsRouter(props: any) {
 
   const templateString = pipelineManifest ?? templateStrFromPipelineVersion;
 
-  // Show loading state while fetching run data
-  if (runIsFetching || templateStrIsFetching) {
+  // Show loading state only on initial load, not during background refetches
+  if (runIsLoading || templateStrIsLoading) {
     return (
       <div className={commonCss.page}>
         <CircularProgress className={commonCss.absoluteCenter} />
