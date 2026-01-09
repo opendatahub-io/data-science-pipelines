@@ -367,7 +367,7 @@ export class Apis {
     maxLines?: number;
   }): Promise<string> {
     const query = buildQuery({ peek: maxBytes + 1, lines: maxLines });
-    return this._fetch(`artifacts/${encodeURIComponent(artifactId)}/preview${query ? '?' + query : ''}`);
+    return this._fetch(`/artifacts/${encodeURIComponent(artifactId)}/preview${query ? '?' + query : ''}`);
   }
 
   /**

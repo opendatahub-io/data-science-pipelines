@@ -24,4 +24,12 @@ module.exports = function(app) {
             changeOrigin: true,
         })
     );
+
+    app.use(
+        '/artifacts/*',
+        createProxyMiddleware({
+            target,
+            changeOrigin: true,
+        })
+    );
 };
