@@ -57,16 +57,15 @@ function isNewInterface(props: InputOutputTabProps): props is IOTabProps {
 export function InputOutputTab(props: InputOutputTabProps) {
   const { namespace } = props;
 
-  // Handle legacy MLMD interface
+  // Handle legacy MLMD interface from V1 run details page
+  // TODO(HumairAK): Remove this once v1 is removed
   if (!isNewInterface(props)) {
-    // Legacy MLMD Execution type is not supported
-    // TODO(HumairAK): Re-implement MLMD Execution support or remove after full migration
     return (
       <ErrorBoundary>
         <div className={commonCss.page}>
           <div className={padding(20)}>
             <Banner
-              message='Input/Output visualization is temporarily unavailable during API migration.'
+              message='Input/Output visualization has been removed.'
               mode='info'
             />
           </div>
