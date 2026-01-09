@@ -59,19 +59,16 @@ export interface ArtifactPreviewProps extends ValueComponentProps<string> {
 
 /**
  * A component that renders a preview to an artifact with a link to the full content.
- * When artifactId is provided (directly or via artifactIdMap), it uses the new artifact
- * ID-based API which handles authorization through the backend. Otherwise, it falls
- * back to the legacy URI-based API.
+ * Uses the artifact ID-based API which handles authorization through the backend.
  */
 const ArtifactPreview: React.FC<ArtifactPreviewProps> = ({
   value,
   artifactId: directArtifactId,
   artifactIdMap,
-  namespace,
   maxbytes = 255,
   maxlines = 20,
 }) => {
-  // Parse storage path from URI for display purposes and fallback
+  // Parse storage path from URI for display purposes
   let storage: StoragePath | undefined;
   if (value) {
     try {
@@ -84,47 +81,28 @@ const ArtifactPreview: React.FC<ArtifactPreviewProps> = ({
   // Resolve artifact ID: prefer direct prop, then look up from map using URI
   const artifactId = directArtifactId || (value && artifactIdMap?.get(value)) || undefined;
 
-  // Use artifact ID-based API when available, otherwise fall back to URI-based
-  const useArtifactIdApi = !!artifactId;
-
   const { isSuccess, isError, data, error } = useQuery<string, Error>(
-    ['artifact_preview', { artifactId, value, namespace, maxbytes, maxlines }],
-    () => {
-      if (useArtifactIdApi) {
-        return getPreviewByArtifactId(artifactId!, maxbytes, maxlines);
-      } else {
-        return getPreviewByUri(storage, namespace, maxbytes, maxlines);
-      }
-    },
+    ['artifact_preview', { artifactId, maxbytes, maxlines }],
+    () => getPreview(artifactId!, maxbytes, maxlines),
     {
       staleTime: Infinity,
-      enabled: useArtifactIdApi ? !!artifactId : !!storage,
+      enabled: !!artifactId,
     },
   );
 
   // Determine the link text to display
   const linkText = storage ? Apis.buildArtifactLinkText(storage) : (value || artifactId || 'Artifact');
 
-  // Build URLs based on whether we have artifact ID
-  let artifactDownloadUrl: string;
-  let artifactViewUrl: string;
-
-  if (useArtifactIdApi) {
-    artifactDownloadUrl = Apis.buildArtifactDownloadUrlById(artifactId!);
-    artifactViewUrl = Apis.buildArtifactViewUrlById(artifactId!);
-  } else if (storage) {
-    artifactDownloadUrl = Apis.buildReadFileUrl({
-      path: storage,
-      namespace,
-      isDownload: true,
-    });
-    artifactViewUrl = Apis.buildReadFileUrl({ path: storage, namespace });
-  } else {
-    // No storage info available
+  // If no artifact ID available, show info banner
+  if (!artifactId) {
     return (
-      <Banner message={'Cannot retrieve storage path from artifact uri: ' + value} mode='info' />
+      <Banner message={'Artifact ID not available for preview: ' + value} mode='info' />
     );
   }
+
+  // Build URLs using artifact ID
+  const artifactDownloadUrl = Apis.buildArtifactDownloadUrlById(artifactId);
+  const artifactViewUrl = Apis.buildArtifactViewUrlById(artifactId);
 
   return (
     <div className={css.root}>
@@ -158,9 +136,9 @@ const ArtifactPreview: React.FC<ArtifactPreviewProps> = ({
 export default ArtifactPreview;
 
 /**
- * Fetches artifact preview using the new artifact ID-based API.
+ * Fetches artifact preview using the artifact ID-based API.
  */
-async function getPreviewByArtifactId(
+async function getPreview(
   artifactId: string,
   maxbytes: number,
   maxlines?: number,
@@ -177,43 +155,6 @@ async function getPreviewByArtifactId(
   }
 
   // Truncate and add ellipsis
-  data = data.slice(0, maxbytes);
-  if (maxlines) {
-    data = data
-      .split('\n')
-      .slice(0, maxlines)
-      .join('\n')
-      .trim();
-  }
-  return `${data}\n...`;
-}
-
-/**
- * Fetches artifact preview using the legacy URI-based API.
- * This is kept for backward compatibility.
- */
-async function getPreviewByUri(
-  storagePath: StoragePath | undefined,
-  namespace: string | undefined,
-  maxbytes: number,
-  maxlines?: number,
-): Promise<string> {
-  if (!storagePath) {
-    return '';
-  }
-
-  let data = await Apis.readFile({
-    path: storagePath,
-    namespace: namespace,
-    peek: maxbytes + 1,
-  });
-
-  // Process preview data
-  if (data.length <= maxbytes && (!maxlines || data.split('\n').length < maxlines)) {
-    return data;
-  }
-
-  // Remove extra byte at the end (we requested maxbytes + 1)
   data = data.slice(0, maxbytes);
   if (maxlines) {
     data = data
