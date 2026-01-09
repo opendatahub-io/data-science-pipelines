@@ -26,7 +26,7 @@ export function ExecutionTitle({ task }: ExecutionTitleProps) {
   return (
     <>
       <div>
-        Task: "{taskName}"
+        Task: {taskName}
       </div>
     </>
   );

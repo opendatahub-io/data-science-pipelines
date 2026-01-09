@@ -195,7 +195,7 @@ export function getNodeInfo(
       producerTaskID: producerTaskID,
       outputArtifactKey: outputArtifactKey
     };
-    return { artifactWithTaskInfo: artifactDetails};
+    return { task: producerTask, artifactWithTaskInfo: artifactDetails };
   }
   // If not an artifact then it's a task
   const taskElem = elem as TaskFlowElementData
