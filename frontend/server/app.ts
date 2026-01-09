@@ -24,6 +24,11 @@ import {
   getArtifactsProxyHandler,
   getArtifactServiceGetter,
 } from './handlers/artifacts';
+import {
+  getArtifactPreviewHandler,
+  getArtifactDownloadHandler,
+  getArtifactViewHandler,
+} from './handlers/artifact-preview';
 import { getTensorboardHandlers } from './handlers/tensorboard';
 import { getAuthorizeFn } from './helpers/auth';
 import { getPodLogsHandler } from './handlers/pod-logs';
@@ -125,7 +130,24 @@ function createUIServer(options: UIConfigs) {
     }),
   );
 
-  /** Artifact */
+  /** Artifact - New artifact ID-based endpoints (must be before wildcard routes) */
+  registerHandler(
+    app.get,
+    '/artifacts/:artifactId/preview',
+    getArtifactPreviewHandler({ options }),
+  );
+  registerHandler(
+    app.get,
+    '/artifacts/:artifactId/download',
+    getArtifactDownloadHandler({ options }),
+  );
+  registerHandler(
+    app.get,
+    '/artifacts/:artifactId/view',
+    getArtifactViewHandler({ options }),
+  );
+
+  /** Artifact - Legacy endpoints */
   registerHandler(
     app.get,
     '/artifacts/*',

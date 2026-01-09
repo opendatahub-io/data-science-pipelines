@@ -25,15 +25,18 @@ import { ExecutionTitle } from './ExecutionTitle';
 import {V2beta1PipelineTaskDetail, InputOutputsIOParameter, InputOutputsIOArtifact} from "../../apisv2beta1/run";
 
 export type ParamList = Array<KeyValue<string>>;
-export type URIToSessionInfo = Map<string, string | undefined>;
-export interface ArtifactParamsWithSessionInfo {
-  params: ParamList;
-  sessionMap: URIToSessionInfo;
-}
 
-export interface ArtifactLocation {
-  uri: string;
-  store_session_info: string | undefined;
+/**
+ * Map from artifact URI to artifact ID for lookup in ArtifactPreview component.
+ */
+export type URIToArtifactId = Map<string, string | undefined>;
+
+/**
+ * Contains artifact params (for display) and a map to look up artifact IDs by URI.
+ */
+export interface ArtifactParamsWithIds {
+  params: ParamList;
+  artifactIdMap: URIToArtifactId;
 }
 
 // New V2beta1 interface
@@ -83,8 +86,8 @@ export function InputOutputTab(props: InputOutputTabProps) {
   const outputParams = extractOutputParameters(task);
 
   // Extract input and output artifacts from the task
-  const { params: inputArtifacts, sessionMap: inputSessionMap } = extractInputArtifacts(task);
-  const { params: outputArtifacts, sessionMap: outputSessionMap } = extractOutputArtifacts(task);
+  const { params: inputArtifacts, artifactIdMap: inputArtifactIdMap } = extractInputArtifacts(task);
+  const { params: outputArtifacts, artifactIdMap: outputArtifactIdMap } = extractOutputArtifacts(task);
 
   const isIoEmpty =
     inputParams.length === 0 &&
@@ -121,7 +124,7 @@ export function InputOutputTab(props: InputOutputTabProps) {
                 valueComponent={ArtifactPreview}
                 valueComponentProps={{
                   namespace: namespace,
-                  sessionMap: inputSessionMap,
+                  artifactIdMap: inputArtifactIdMap,
                 }}
               />
             </div>
@@ -146,7 +149,7 @@ export function InputOutputTab(props: InputOutputTabProps) {
                 valueComponent={ArtifactPreview}
                 valueComponentProps={{
                   namespace: namespace,
-                  sessionMap: outputSessionMap,
+                  artifactIdMap: outputArtifactIdMap,
                 }}
               />
             </div>
@@ -178,20 +181,24 @@ function extractParameters(parameters?: InputOutputsIOParameter[]): ParamList {
   });
 }
 
-function extractInputArtifacts(task: V2beta1PipelineTaskDetail): ArtifactParamsWithSessionInfo {
+function extractInputArtifacts(task: V2beta1PipelineTaskDetail): ArtifactParamsWithIds {
   return extractArtifacts(task.inputs?.artifacts);
 }
 
-function extractOutputArtifacts(task: V2beta1PipelineTaskDetail): ArtifactParamsWithSessionInfo {
+function extractOutputArtifacts(task: V2beta1PipelineTaskDetail): ArtifactParamsWithIds {
   return extractArtifacts(task.outputs?.artifacts);
 }
 
-function extractArtifacts(ioArtifacts?: InputOutputsIOArtifact[]): ArtifactParamsWithSessionInfo {
+/**
+ * Extracts artifact display information from IO artifacts.
+ * Returns params (for display) and a map from URI to artifact ID (for preview API).
+ */
+function extractArtifacts(ioArtifacts?: InputOutputsIOArtifact[]): ArtifactParamsWithIds {
   const params: ParamList = [];
-  const sessionMap: URIToSessionInfo = new Map<string, string | undefined>();
+  const artifactIdMap: URIToArtifactId = new Map<string, string | undefined>();
 
   if (!ioArtifacts) {
-    return { params, sessionMap };
+    return { params, artifactIdMap };
   }
 
   for (const ioArtifact of ioArtifacts) {
@@ -201,14 +208,14 @@ function extractArtifacts(ioArtifacts?: InputOutputsIOArtifact[]): ArtifactParam
     for (const artifact of artifacts) {
       const uri = artifact.uri || '-';
       const displayName = artifact.name || artifactKey;
+      const artifactId = artifact.artifact_id;
 
-      // TODO(HumairAK): Session info is stubbed out during MLMD removal.
-      // Set session info to undefined for now.
-      sessionMap.set(uri, undefined);
+      // Map URI to artifact ID for lookup in ArtifactPreview
+      artifactIdMap.set(uri, artifactId);
 
       params.push([displayName, uri] as KeyValue<string>);
     }
   }
 
-  return { params, sessionMap };
+  return { params, artifactIdMap };
 }

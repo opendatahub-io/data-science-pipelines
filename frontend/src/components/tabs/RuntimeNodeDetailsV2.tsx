@@ -394,13 +394,15 @@ function ArtifactInfo({
     ['Created At', createdAt],
   ];
 
-  // TODO(HumairAK): Session info is stubbed out during MLMD removal.
-  // Once session info functionality is reimplemented, update this code.
+  // Get artifact URI and ID for preview
   const artifactUri = artifactDetails.artifact?.uri;
+  const artifactId = artifactDetails.artifact?.artifact_id;
   const artifactParams: ParamList = artifactUri ? [[artifactName || 'Artifact', artifactUri]] : [];
-  const sessionMap = new Map<string, string | undefined>();
+
+  // Create artifact ID map for lookup in ArtifactPreview
+  const artifactIdMap = new Map<string, string | undefined>();
   if (artifactUri) {
-    sessionMap.set(artifactUri, undefined);
+    artifactIdMap.set(artifactUri, artifactId);
   }
 
   return (
@@ -421,7 +423,7 @@ function ArtifactInfo({
             valueComponent={ArtifactPreview}
             valueComponentProps={{
               namespace: namespace,
-              sessionMap: sessionMap,
+              artifactIdMap: artifactIdMap,
             }}
           />
         </div>

@@ -350,6 +350,43 @@ export class Apis {
   }
 
   /**
+   * Fetches artifact preview content using the artifact ID.
+   * This uses the new artifact ID-based endpoint which handles authorization
+   * through the backend API.
+   * @param artifactId The ID of the artifact to preview
+   * @param maxBytes Maximum bytes to return (default: 256)
+   * @param maxLines Maximum lines to return (default: 20)
+   */
+  public static async getArtifactPreview({
+    artifactId,
+    maxBytes = 256,
+    maxLines = 20,
+  }: {
+    artifactId: string;
+    maxBytes?: number;
+    maxLines?: number;
+  }): Promise<string> {
+    const query = buildQuery({ peek: maxBytes + 1, lines: maxLines });
+    return this._fetch(`artifacts/${encodeURIComponent(artifactId)}/preview${query ? '?' + query : ''}`);
+  }
+
+  /**
+   * Builds an URL to download an artifact using its ID.
+   * @param artifactId The ID of the artifact to download
+   */
+  public static buildArtifactDownloadUrlById(artifactId: string): string {
+    return `${this.basePath}/artifacts/${encodeURIComponent(artifactId)}/download`;
+  }
+
+  /**
+   * Builds an URL to view an artifact using its ID.
+   * @param artifactId The ID of the artifact to view
+   */
+  public static buildArtifactViewUrlById(artifactId: string): string {
+    return `${this.basePath}/artifacts/${encodeURIComponent(artifactId)}/view`;
+  }
+
+  /**
    * Gets the address (IP + port) of a Tensorboard service given the logdir and tfversion
    */
   public static getTensorboardApp(

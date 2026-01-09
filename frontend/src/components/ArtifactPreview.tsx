@@ -24,7 +24,7 @@ import { stylesheet } from 'typestyle';
 import Banner from './Banner';
 import { ValueComponentProps } from './DetailsTable';
 import { logger } from 'src/lib/Utils';
-import { URIToSessionInfo } from './tabs/InputOutputTab';
+import { URIToArtifactId } from './tabs/InputOutputTab';
 
 const css = stylesheet({
   root: {
@@ -50,53 +50,81 @@ const css = stylesheet({
 });
 
 export interface ArtifactPreviewProps extends ValueComponentProps<string> {
+  artifactId?: string;
+  artifactIdMap?: URIToArtifactId;
   namespace?: string;
-  sessionMap?: URIToSessionInfo;
   maxbytes?: number;
   maxlines?: number;
 }
 
 /**
  * A component that renders a preview to an artifact with a link to the full content.
+ * When artifactId is provided (directly or via artifactIdMap), it uses the new artifact
+ * ID-based API which handles authorization through the backend. Otherwise, it falls
+ * back to the legacy URI-based API.
  */
 const ArtifactPreview: React.FC<ArtifactPreviewProps> = ({
   value,
+  artifactId: directArtifactId,
+  artifactIdMap,
   namespace,
-  sessionMap,
   maxbytes = 255,
   maxlines = 20,
 }) => {
+  // Parse storage path from URI for display purposes and fallback
   let storage: StoragePath | undefined;
-  let providerInfo: string | undefined;
-
   if (value) {
     try {
-      providerInfo = sessionMap?.get(value);
       storage = WorkflowParser.parseStoragePath(value);
     } catch (error) {
       logger.error(error);
     }
   }
 
+  // Resolve artifact ID: prefer direct prop, then look up from map using URI
+  const artifactId = directArtifactId || (value && artifactIdMap?.get(value)) || undefined;
+
+  // Use artifact ID-based API when available, otherwise fall back to URI-based
+  const useArtifactIdApi = !!artifactId;
+
   const { isSuccess, isError, data, error } = useQuery<string, Error>(
-    ['artifact_preview', { value, namespace, maxbytes, maxlines }],
-    () => getPreview(storage, providerInfo, namespace, maxbytes, maxlines),
-    { staleTime: Infinity },
+    ['artifact_preview', { artifactId, value, namespace, maxbytes, maxlines }],
+    () => {
+      if (useArtifactIdApi) {
+        return getPreviewByArtifactId(artifactId!, maxbytes, maxlines);
+      } else {
+        return getPreviewByUri(storage, namespace, maxbytes, maxlines);
+      }
+    },
+    {
+      staleTime: Infinity,
+      enabled: useArtifactIdApi ? !!artifactId : !!storage,
+    },
   );
 
-  if (!storage) {
+  // Determine the link text to display
+  const linkText = storage ? Apis.buildArtifactLinkText(storage) : (value || artifactId || 'Artifact');
+
+  // Build URLs based on whether we have artifact ID
+  let artifactDownloadUrl: string;
+  let artifactViewUrl: string;
+
+  if (useArtifactIdApi) {
+    artifactDownloadUrl = Apis.buildArtifactDownloadUrlById(artifactId!);
+    artifactViewUrl = Apis.buildArtifactViewUrlById(artifactId!);
+  } else if (storage) {
+    artifactDownloadUrl = Apis.buildReadFileUrl({
+      path: storage,
+      namespace,
+      isDownload: true,
+    });
+    artifactViewUrl = Apis.buildReadFileUrl({ path: storage, namespace });
+  } else {
+    // No storage info available
     return (
-      <Banner message={'Can not retrieve storage path from artifact uri: ' + value} mode='info' />
+      <Banner message={'Cannot retrieve storage path from artifact uri: ' + value} mode='info' />
     );
   }
-
-  const linkText = Apis.buildArtifactLinkText(storage);
-  const artifactDownloadUrl = Apis.buildReadFileUrl({
-    path: storage,
-    namespace,
-    isDownload: true,
-  });
-  const artifactViewUrl = Apis.buildReadFileUrl({ path: storage, namespace });
 
   return (
     <div className={css.root}>
@@ -113,7 +141,7 @@ const ArtifactPreview: React.FC<ArtifactPreviewProps> = ({
         <Banner
           message='Error in retrieving artifact preview.'
           mode='error'
-          additionalInfo={error ? error.message : 'No error message'}
+          additionalInfo={getErrorMessage(error)}
         />
       )}
       {isSuccess && data && (
@@ -129,30 +157,27 @@ const ArtifactPreview: React.FC<ArtifactPreviewProps> = ({
 
 export default ArtifactPreview;
 
-async function getPreview(
-  storagePath: StoragePath | undefined,
-  providerInfo: string | undefined,
-  namespace: string | undefined,
+/**
+ * Fetches artifact preview using the new artifact ID-based API.
+ */
+async function getPreviewByArtifactId(
+  artifactId: string,
   maxbytes: number,
   maxlines?: number,
 ): Promise<string> {
-  if (!storagePath) {
-    return ``;
-  }
-  // TODO how to handle binary data (can probably use magic number to id common mime types)
-  let data = await Apis.readFile({
-    path: storagePath,
-    providerInfo: providerInfo,
-    namespace: namespace,
-    peek: maxbytes + 1,
+  let data = await Apis.getArtifactPreview({
+    artifactId,
+    maxBytes: maxbytes,
+    maxLines: maxlines,
   });
-  // is preview === data and no maxlines
+
+  // Process preview data
   if (data.length <= maxbytes && (!maxlines || data.split('\n').length < maxlines)) {
     return data;
   }
-  // remove extra byte at the end (we requested maxbytes +1)
+
+  // Truncate and add ellipsis
   data = data.slice(0, maxbytes);
-  // check num lines
   if (maxlines) {
     data = data
       .split('\n')
@@ -161,4 +186,64 @@ async function getPreview(
       .trim();
   }
   return `${data}\n...`;
+}
+
+/**
+ * Fetches artifact preview using the legacy URI-based API.
+ * This is kept for backward compatibility.
+ */
+async function getPreviewByUri(
+  storagePath: StoragePath | undefined,
+  namespace: string | undefined,
+  maxbytes: number,
+  maxlines?: number,
+): Promise<string> {
+  if (!storagePath) {
+    return '';
+  }
+
+  let data = await Apis.readFile({
+    path: storagePath,
+    namespace: namespace,
+    peek: maxbytes + 1,
+  });
+
+  // Process preview data
+  if (data.length <= maxbytes && (!maxlines || data.split('\n').length < maxlines)) {
+    return data;
+  }
+
+  // Remove extra byte at the end (we requested maxbytes + 1)
+  data = data.slice(0, maxbytes);
+  if (maxlines) {
+    data = data
+      .split('\n')
+      .slice(0, maxlines)
+      .join('\n')
+      .trim();
+  }
+  return `${data}\n...`;
+}
+
+/**
+ * Maps error types to user-friendly messages.
+ */
+function getErrorMessage(error: Error | null): string {
+  if (!error) {
+    return 'No error message';
+  }
+
+  const message = error.message.toLowerCase();
+
+  if (message.includes('401') || message.includes('authentication')) {
+    return 'You must be logged in to view this artifact.';
+  }
+  if (message.includes('403') || message.includes('access denied') || message.includes('permission')) {
+    return 'You do not have permission to view this artifact.';
+  }
+  if (message.includes('404') || message.includes('not found')) {
+    return 'Artifact not found. It may have been deleted.';
+  }
+
+  return error.message;
 }
