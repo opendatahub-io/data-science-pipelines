@@ -162,7 +162,7 @@ function TaskNodeDetail({
       if (!executorPodName) {
         return new Map<string, string>();
       }
-      return await getLogsInfo(executorPodName, runId);
+      return await getLogsInfo(executorPodName, runId, task, namespace);
     },
     // Only fetch logs when we have a task.
     { enabled: !!task },
@@ -298,21 +298,30 @@ function getNodeVolumeMounts(
   return volumeMounts;
 }
 
-async function getLogsInfo(podName: string, runId?: string): Promise<Map<string, string>> {
+async function getLogsInfo(
+  podName: string,
+  runId?: string,
+  task?: V2beta1PipelineTaskDetail,
+  namespace?: string,
+): Promise<Map<string, string>> {
   const logsInfo = new Map<string, string>();
-  let podNameSpace = '';
-  let cachedExecutionId = '';
   let logsDetails = '';
   let logsBannerMessage = '';
   let logsBannerAdditionalInfo = '';
 
-  // TODO(jlyaoyuli): Consider to link to the cached execution.
-  if (cachedExecutionId) {
+  // Check if execution is cached
+  if (task?.state === PipelineTaskDetailTaskState.CACHED) {
     logsInfo.set(LOGS_DETAILS, 'This step output is taken from cache.');
-    return logsInfo; // Early return if it is from cache.
+    return logsInfo;
   }
+
+  // Format creation date as YYYY-MM-DD for archive log retrieval
+  const createdAt = task?.create_time
+    ? new Date(task.create_time).toISOString().split('T')[0]
+    : '';
+
   try {
-    logsDetails = await Apis.getPodLogs(runId!, podName, podNameSpace, '');
+    logsDetails = await Apis.getPodLogs(runId!, podName, namespace || '', createdAt);
     logsInfo.set(LOGS_DETAILS, logsDetails);
   } catch (err) {
     let errMsg = await errorToMessage(err);

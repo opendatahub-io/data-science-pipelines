@@ -11,6 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+// Load .env file before any other imports that may read environment variables
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import { UIServer } from './app';
 import { loadConfigs } from './configs';
 
