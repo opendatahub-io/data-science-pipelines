@@ -993,6 +993,9 @@ class DSPDeployer:
                 # Deploy SeaweedFS if using seaweedfs storage (like tests.sh approach)
                 self.deploy_seaweedfs()
 
+                # Create operator-expected certificates before deploying DSPA
+                self._create_operator_expected_certificates()
+
                 # Deploy DSP via operator
                 self.deploy_dsp_via_operator()
 
@@ -1063,6 +1066,121 @@ class DSPDeployer:
             print('✅ Created openshift-service-ca ConfigMap successfully')
         except Exception as e:
             print(f'❌ Failed to create openshift-service-ca ConfigMap: {e}')
+
+    def _create_operator_expected_certificates(self):
+        """Create certificates with operator-expected names by reading existing
+        manifests.
+
+        Reads existing TLS certificate manifests and creates new ones
+        with names that the DSPO operator expects for various
+        components.
+        """
+        if not self.args.pod_to_pod_tls_enabled:
+            return
+
+        print('🔐 Creating operator-expected certificates...')
+
+        # Path to the base TLS certificates manifest directory
+        base_cert_dir = './manifests/kustomize/env/cert-manager/base-tls-certs'
+        cert_files = ['kfp-api-cert.yaml', 'kfp-api-cert-issuer.yaml']
+
+        temp_cert_files = []
+
+        try:
+            for cert_file in cert_files:
+                cert_path = os.path.join(base_cert_dir, cert_file)
+                if not os.path.exists(cert_path):
+                    print(f'⚠️  Certificate file not found: {cert_path}')
+                    continue
+
+                print(f'📄 Reading certificate manifest: {cert_path}')
+                with open(cert_path, 'r') as f:
+                    cert_documents = list(yaml.safe_load_all(f))
+
+                # Process each document in the YAML file
+                for doc in cert_documents:
+                    if not doc:
+                        continue
+
+                    # Create MariaDB TLS certificate based on the main certificate
+                    if doc.get('kind') == 'Certificate' and doc.get(
+                            'metadata', {}).get('name') == 'kfp-api-tls-cert':
+                        mariadb_cert = self._create_mariadb_certificate(doc)
+                        if mariadb_cert:
+                            # Write to temporary file
+                            temp_file = os.path.join(
+                                self.temp_dir,
+                                f'mariadb-tls-cert-{self.dspa_name}.yaml')
+                            with open(temp_file, 'w') as f:
+                                yaml.dump(
+                                    mariadb_cert, f, default_flow_style=False)
+                            temp_cert_files.append(temp_file)
+                            print(
+                                f'📝 Created MariaDB certificate manifest: {temp_file}'
+                            )
+
+                    # Apply issuer if found
+                    elif doc.get('kind') == 'Issuer':
+                        temp_file = os.path.join(
+                            self.temp_dir, f'cert-issuer-{self.dspa_name}.yaml')
+                        with open(temp_file, 'w') as f:
+                            yaml.dump(doc, f, default_flow_style=False)
+                        temp_cert_files.append(temp_file)
+                        print(
+                            f'📝 Created certificate issuer manifest: {temp_file}'
+                        )
+
+            # Apply all certificate manifests
+            for temp_file in temp_cert_files:
+                print(f'🚀 Applying certificate manifest: {temp_file}')
+                self.run_command([
+                    'kubectl', 'apply', '-f', temp_file, '-n',
+                    self.deployment_namespace
+                ])
+
+            print('✅ Operator-expected certificates created successfully')
+
+        except Exception as e:
+            print(f'❌ Failed to create operator-expected certificates: {e}')
+            raise
+
+    def _create_mariadb_certificate(
+            self, base_cert: Dict[str, Any]) -> Dict[str, Any]:
+        """Create MariaDB TLS certificate based on the main certificate.
+
+        Args:
+            base_cert: The base certificate dictionary to clone
+
+        Returns:
+            Dictionary containing the MariaDB certificate manifest
+        """
+        # Expected secret name format: ds-pipelines-mariadb-tls-{dspa-name}
+        mariadb_secret_name = f'ds-pipelines-mariadb-tls-{self.dspa_name}'
+        mariadb_cert_name = f'mariadb-tls-cert-{self.dspa_name}'
+
+        print(
+            f'🔧 Creating MariaDB certificate with secret name: {mariadb_secret_name}'
+        )
+
+        # Clone the base certificate
+        mariadb_cert = yaml.safe_load(yaml.dump(base_cert))
+
+        # Update metadata
+        mariadb_cert['metadata']['name'] = mariadb_cert_name
+
+        # Update spec for MariaDB-specific settings
+        mariadb_cert['spec']['commonName'] = f'ds-pipeline-db-{self.dspa_name}'
+        mariadb_cert['spec']['secretName'] = mariadb_secret_name
+
+        # Update DNS names for MariaDB service
+        mariadb_cert['spec']['dnsNames'] = [
+            f'ds-pipeline-db-{self.dspa_name}',
+            f'ds-pipeline-db-{self.dspa_name}.{self.deployment_namespace}',
+            f'ds-pipeline-db-{self.dspa_name}.{self.deployment_namespace}.svc.cluster.local',
+            'localhost'
+        ]
+
+        return mariadb_cert
 
 
 def main():
