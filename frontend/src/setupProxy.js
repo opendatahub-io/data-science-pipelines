@@ -32,4 +32,12 @@ module.exports = function(app) {
             changeOrigin: true,
         })
     );
+
+    app.use(
+        '/k8s/*',
+        createProxyMiddleware({
+            target,
+            changeOrigin: true,
+        })
+    );
 };

@@ -223,19 +223,6 @@ function createUIServer(options: UIConfigs) {
     getAllowCustomVisualizationsHandler(options.visualizations.allowCustomVisualizations),
   );
 
-  /** Proxy metadata requests to the Envoy instance which will handle routing to the metadata gRPC server */
-  app.all(
-    '/ml_metadata.*',
-    createProxyMiddleware({
-      changeOrigin: true,
-      onProxyReq: proxyReq => {
-        console.log('Metadata proxied request: ', (proxyReq as any).path);
-      },
-      headers: HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS,
-      target: envoyServiceAddress,
-    }),
-  );
-
   registerHandler(
     app.use,
     [
