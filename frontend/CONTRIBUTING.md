@@ -152,6 +152,23 @@ make kind-cluster-agnostic
     npm run build
     ```
 
+### Environment variables for local development
+
+When running the frontend locally (outside of a Kubernetes pod), certain environment variables can be configured to customize behavior:
+
+| Variable                    | Default    | Description                                                                                                                                                                      |
+|-----------------------------|------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `FRONTEND_SERVER_NAMESPACE` | `kubeflow` | The namespace used as a fallback when querying Kubernetes resources (e.g., pod logs). In production, this is read from the service account, but locally this file doesn't exist. |
+| `REACT_APP_BACKEND_PORT`    | `3001`     | The port where the backend server is running. The webpack dev server proxies API requests to this port.                                                                          |
+
+You can set these in a `.env` file in the `frontend/` directory or export them in your shell before running the dev server.
+
+Example `.env` file:
+```bash
+FRONTEND_SERVER_NAMESPACE=my-namespace
+REACT_APP_BACKEND_PORT=3001
+```
+
 ## Unit testing FAQ
 
 There are a few types of tests during pre-submit:

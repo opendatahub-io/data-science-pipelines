@@ -49,6 +49,9 @@ export const defaultPodTemplateSpec = {
 // The file path contains pod namespace when in Kubernetes cluster.
 if (fs.existsSync(namespaceFilePath)) {
   serverNamespace = fs.readFileSync(namespaceFilePath, 'utf-8');
+} else {
+  // Fallback for local development
+  serverNamespace = process.env.FRONTEND_SERVER_NAMESPACE;
 }
 const kc = new KubeConfig();
 // This loads kubectl config when not in cluster.
