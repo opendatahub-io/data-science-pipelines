@@ -234,3 +234,4 @@ fi
 collect_artifacts kubeflow
 
 echo "Finished KFP deployment."
+exit 0
