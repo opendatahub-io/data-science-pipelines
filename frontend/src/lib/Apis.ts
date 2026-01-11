@@ -387,6 +387,15 @@ export class Apis {
   }
 
   /**
+   * Fetches the full content of an artifact using its ID.
+   * This uses the artifact view endpoint which handles authorization through the backend API.
+   * @param artifactId The ID of the artifact to fetch
+   */
+  public static async getArtifactContent(artifactId: string): Promise<string> {
+    return this._fetch(`/artifacts/${encodeURIComponent(artifactId)}/view`);
+  }
+
+  /**
    * Gets the address (IP + port) of a Tensorboard service given the logdir and tfversion
    */
   public static getTensorboardApp(

@@ -182,32 +182,6 @@ function createUIServer(options: UIConfigs) {
     );
   }
 
-  if (options.artifacts.streamLogsFromServerApi) {
-    app.all(
-      '/k8s/pod/logs',
-      createProxyMiddleware({
-        changeOrigin: true,
-        onProxyReq: proxyReq => {
-          console.log('Proxied log request: ', proxyReq.path);
-        },
-        headers: HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS,
-        pathRewrite: (pathStr: string, req: any) => {
-          /** Argo nodeId is just POD name */
-          const nodeId = req.query.podname;
-          const runId = req.query.runid;
-          return `/${apiVersion2Prefix}/runs/${runId}/nodes/${nodeId}/log`;
-        },
-        target: apiServerAddress,
-      }),
-    );
-  } else {
-    registerHandler(
-      app.get,
-      '/k8s/pod/logs',
-      getPodLogsHandler(options.argo, options.artifacts, options.pod.logContainerName),
-    );
-  }
-
   /** Pod info */
   registerHandler(app.get, '/k8s/pod', podInfoHandler);
   registerHandler(app.get, '/k8s/pod/events', podEventsHandler);

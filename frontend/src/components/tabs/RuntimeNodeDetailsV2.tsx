@@ -298,6 +298,28 @@ function getNodeVolumeMounts(
   return volumeMounts;
 }
 
+const EXECUTOR_LOGS_ARTIFACT_KEY = 'executor-logs';
+
+/**
+ * Finds the executor-logs artifact ID from task outputs.
+ */
+function getExecutorLogsArtifactId(task?: V2beta1PipelineTaskDetail): string | undefined {
+  const outputArtifacts = task?.outputs?.artifacts;
+  if (!outputArtifacts) {
+    return undefined;
+  }
+
+  const executorLogsArtifact = outputArtifacts.find(
+    artifact => artifact.artifact_key === EXECUTOR_LOGS_ARTIFACT_KEY,
+  );
+
+  if (!executorLogsArtifact?.artifacts || executorLogsArtifact.artifacts.length === 0) {
+    return undefined;
+  }
+
+  return executorLogsArtifact.artifacts[0]?.artifact_id;
+}
+
 async function getLogsInfo(
   podName: string,
   runId?: string,
@@ -315,6 +337,20 @@ async function getLogsInfo(
     return logsInfo;
   }
 
+  // First, try to fetch logs from the executor-logs artifact (if available)
+  const executorLogsArtifactId = getExecutorLogsArtifactId(task);
+  if (executorLogsArtifactId) {
+    try {
+      logsDetails = await Apis.getArtifactContent(executorLogsArtifactId);
+      logsInfo.set(LOGS_DETAILS, logsDetails);
+      return logsInfo;
+    } catch (err) {
+      // Fall through to try other methods
+      console.log('Failed to fetch executor-logs artifact, falling back to pod logs:', err);
+    }
+  }
+
+  // Fall back to fetching logs from k8s/archive
   // Format creation date as YYYY-MM-DD for archive log retrieval
   const createdAt = task?.create_time
     ? new Date(task.create_time).toISOString().split('T')[0]
