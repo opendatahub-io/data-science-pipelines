@@ -86,7 +86,9 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
   let dynamicFlowElements = flowElements;
   if (run) {
     let scopePathToTasksMap = createScopeToTaskMap(run)
-    dynamicFlowElements = updateFlowElementsState(layers, flowElements, scopePathToTasksMap);
+    if (scopePathToTasksMap.size > 0) {
+      dynamicFlowElements = updateFlowElementsState(layers, flowElements, scopePathToTasksMap);
+    }
   }
 
   const layerChange = (layers: string[]) => {

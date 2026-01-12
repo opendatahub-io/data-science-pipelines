@@ -28,7 +28,7 @@ import {
   PipelineFlowElement,
 } from 'src/lib/v2/StaticFlow';
 import {PipelineTaskDetailTaskType, V2beta1PipelineTaskDetail, V2beta1Run, V2beta1Artifact} from "../../apisv2beta1/run";
-import {logger, createScopeToTaskMap, createTaskIDToTaskMap} from "../Utils";
+import {createScopeToTaskMap, createTaskIDToTaskMap} from "../Utils";
 
 export const TASK_NAME_KEY = 'task_name';
 
@@ -114,36 +114,34 @@ export function updateFlowElementsState(
       const taskNodeKey = elem.data?.taskKey;
       const scopeKey = [...layers, taskNodeKey].join(".")
       const scopeTask = scopePathToTasksMap.get(scopeKey)
-      if (scopeTask === undefined) {
-        console.warn("Scope task not found for scope key: " + scopeKey)
-      } else {
+      if (scopeTask !== undefined) {
+        // Update the state of the task if it has been executed.
         (updatedElem.data as TaskFlowElementData).state = scopeTask.state;
         (updatedElem.data as TaskFlowElementData).taskID = scopeTask.task_id;
         (updatedElem.data as TaskFlowElementData).label = scopeTask.display_name || scopeTask.name || taskNodeKey;
       }
+      // Always include the element, even if the task hasn't started yet.
     } else if (NodeTypeNames.ARTIFACT === elem.type) {
       const scopeKey = [...layers, updatedElem.data?.task].join(".")
       const scopeTask = scopePathToTasksMap.get(scopeKey);
-      if (!scopeTask) {
-        logger.error("Scope task not found for scope key: " + scopeKey);
-        continue;
+      if (scopeTask) {
+        // Update the artifact state if the producer task has been executed.
+        const taskOutputArtifacts = scopeTask.outputs?.artifacts ?? [];
+        const matchingArtifactIO = taskOutputArtifacts.find(
+          artifactIO => artifactIO.artifact_key === updatedElem.data?.label
+        );
+        if (matchingArtifactIO?.artifacts?.length) {
+          // TODO(HumairAK): Do we support list outputs in UI?
+          // for now just get the first artifact.
+          const artifact = matchingArtifactIO.artifacts[0];
+          (updatedElem.data as ArtifactFlowElementData).artifactId = artifact.artifact_id;
+          (updatedElem.data as ArtifactFlowElementData).outputArtifactKey = matchingArtifactIO.artifact_key;
+          (updatedElem.data as ArtifactFlowElementData).producerTaskName = matchingArtifactIO.producer?.task_name;
+          (updatedElem.data as ArtifactFlowElementData).producerTaskID = scopeTask.task_id;
+          (updatedElem.data as ArtifactFlowElementData).state = ArtifactIconState.LIVE;
+        }
       }
-      const taskOutputArtifacts = scopeTask.outputs?.artifacts ?? [];
-      const matchingArtifactIO = taskOutputArtifacts.find(
-        artifactIO => artifactIO.artifact_key === updatedElem.data?.label
-      );
-      if (!matchingArtifactIO?.artifacts?.length) {
-        logger.error("No artifacts found for task: " + scopeKey);
-        continue;
-      }
-      // TODO(HumairAK): Do we support list outputs in UI?
-      // for now just get the first artifact.
-      const artifact = matchingArtifactIO.artifacts[0];
-      (updatedElem.data as ArtifactFlowElementData).artifactId = artifact.artifact_id;
-      (updatedElem.data as ArtifactFlowElementData).outputArtifactKey = matchingArtifactIO.artifact_key;
-      (updatedElem.data as ArtifactFlowElementData).producerTaskName = matchingArtifactIO.producer?.task_name;
-      (updatedElem.data as ArtifactFlowElementData).producerTaskID = scopeTask.task_id;
-      (updatedElem.data as ArtifactFlowElementData).state = ArtifactIconState.LIVE;
+      // Always include the element, even if the producer task hasn't started yet.
     }
     flowGraph.push(updatedElem);
   }
