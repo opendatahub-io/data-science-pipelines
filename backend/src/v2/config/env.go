@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	"sigs.k8s.io/yaml"
 
@@ -43,6 +44,10 @@ const (
 	minioArtifactAccessKeyKey = "accesskey"
 )
 
+const (
+	mlPipelineGrpcServicePort = "8887"
+)
+
 type BucketProviders struct {
 	Minio *MinioProviderConfig `json:"minio"`
 	S3    *S3ProviderConfig    `json:"s3"`
@@ -56,6 +61,11 @@ type SessionInfoProvider interface {
 // Config is the KFP runtime configuration.
 type Config struct {
 	data map[string]string
+}
+
+type ServerConfig struct {
+	Address string
+	Port    string
 }
 
 // FromConfigMap loads config from a kfp-launcher Kubernetes config map.
@@ -94,6 +104,9 @@ func InPodNamespace() (string, error) {
 
 // InPodName gets the pod name from inside a Kubernetes Pod.
 func InPodName() (string, error) {
+	if podName, exists := os.LookupEnv("ARGO_POD_NAME"); exists && podName != "" {
+		return podName, nil
+	}
 	podName, err := os.ReadFile("/etc/hostname")
 	if err != nil {
 		return "", fmt.Errorf("failed to get pod name in Pod: %w", err)
@@ -177,4 +190,11 @@ func getDefaultMinioSessionInfo() (objectstore.SessionInfo, error) {
 		},
 	}
 	return sess, nil
+}
+
+func GetMLPipelineServerConfig() *ServerConfig {
+	return &ServerConfig{
+		Address: common.GetMLPipelineServiceName() + "." + common.GetPodNamespace(),
+		Port:    mlPipelineGrpcServicePort,
+	}
 }

@@ -54,10 +54,11 @@ const (
 
 const DefaultTokenReviewAudience string = "pipelines.kubeflow.org"
 
+const DefaultMetadataTLSEnabled = false
+
 const (
 	DefaultMetadataGrpcServiceServiceHost = "metadata-grpc-service"
 	DefaultMetadataGrpcServiceServicePort = "8080"
-	DefaultMetadataTLSEnabled             = false
 )
 
 const (
@@ -72,4 +73,18 @@ const DefaultSignedURLExpiryTimeSeconds = 15
 const (
 	MaxFileNameLength = 100
 	MaxFileLength     = 32 << 20 // 32Mb
+)
+
+const (
+	CustomCaCertPath = "/kfp/certs/ca.crt"
+	CABundleDir      = "/kfp/certs"
+)
+
+const (
+	DefaultPodNamespace string = "kubeflow"
+)
+
+const (
+	DefaultMLPipelineServiceName string = "ml-pipeline"
+	DefaultMetadataServiceName   string = "metadata-grpc-service"
 )
