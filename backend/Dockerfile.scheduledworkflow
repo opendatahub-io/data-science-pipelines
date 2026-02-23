@@ -29,6 +29,8 @@ ARG TARGETARCH
 ## Switch to root as required for some operations
 USER root
 
+ENV GOTOOLCHAIN=auto
+
 RUN dnf upgrade -y && \
     dnf install -y bash \
                    git \

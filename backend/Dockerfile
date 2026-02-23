@@ -26,6 +26,8 @@ ARG TARGETARCH
 
 USER root
 
+ENV GOTOOLCHAIN=auto
+
 RUN dnf install -y cmake clang openssl
 
 COPY ${SOURCE_CODE}/go.mod ./

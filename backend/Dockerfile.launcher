@@ -32,6 +32,8 @@ ARG TARGETARCH
 ## Switch to root as required for some operations
 USER root
 
+ENV GOTOOLCHAIN=auto
+
 COPY ${SOURCE_CODE}/go.mod ./
 COPY ${SOURCE_CODE}/go.sum ./
 COPY ${SOURCE_CODE}/kubernetes_platform/go.mod ./kubernetes_platform/go.mod

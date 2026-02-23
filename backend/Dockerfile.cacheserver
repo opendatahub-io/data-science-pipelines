@@ -20,6 +20,8 @@ RUN apk update && apk upgrade && \
 
 WORKDIR /go/src/github.com/kubeflow/pipelines
 
+ENV GOTOOLCHAIN=auto
+
 COPY ./go.mod ./
 COPY ./go.sum ./
 COPY ./kubernetes_platform/go.mod ./kubernetes_platform/go.mod

@@ -19,6 +19,8 @@ RUN apk add --no-cache git gcc musl-dev
 
 WORKDIR /src/github.com/kubeflow/pipelines
 
+ENV GOTOOLCHAIN=auto
+
 COPY ./go.mod ./
 COPY ./go.sum ./
 COPY ./kubernetes_platform/go.mod ./kubernetes_platform/go.mod
