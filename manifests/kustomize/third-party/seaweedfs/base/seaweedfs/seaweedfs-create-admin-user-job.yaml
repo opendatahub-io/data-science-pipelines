@@ -13,7 +13,7 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: init-seaweedfs
-        image: 'chrislusf/seaweedfs:3.85'
+        image: 'chrislusf/seaweedfs:3.92'
         env:
         - name: WEED_CLUSTER_DEFAULT
           value: "sw"
@@ -30,7 +30,7 @@ spec:
             local url=$1
             local max_attempts=60  # 5 minutes total (5s * 60)
             local attempt=1
-          
+
             echo "Waiting for service at $url..."
             while [ $attempt -le $max_attempts ]; do
               if wget -q --spider "$url" >/dev/null 2>&1; then

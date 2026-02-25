@@ -14,6 +14,12 @@ spec:
     ports:
     - port: 8333
   - from:
+    - podSelector: {}
+    ports:
+    - port: 8333
+    - port: 8888
+    - port: 9333
+  - from:
     - namespaceSelector:
         matchExpressions:
         - key: kubernetes.io/metadata.name
