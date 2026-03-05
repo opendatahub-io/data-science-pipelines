@@ -31,7 +31,7 @@ charset-normalizer==3.4.3
     # via requests
 comm==0.2.3
     # via ipykernel
-debugpy==1.8.16
+debugpy==1.8.20
     # via ipykernel
 decorator==5.2.1
     # via
