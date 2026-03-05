@@ -41,7 +41,7 @@ defusedxml==0.7.1
     # via nbconvert
 fastjsonschema==2.21.2
     # via nbformat
-flatbuffers==25.2.10
+flatbuffers==25.12.19
     # via tensorflow
 gast==0.6.0
     # via tensorflow
