@@ -167,7 +167,7 @@ packaging==25.0
     #   nbconvert
     #   tensorflow
     #   wheel
-pandas==2.3.2
+pandas==2.3.3
     # via itables
 pandocfilters==1.5.1
     # via nbconvert
