@@ -118,7 +118,7 @@ keras==2.15.0
     # via tensorflow
 libclang==18.1.1
     # via tensorflow
-markdown==3.9
+markdown==3.10.2
     # via tensorboard
 markupsafe==3.0.2
     # via
