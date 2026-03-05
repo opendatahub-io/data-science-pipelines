@@ -125,7 +125,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
-	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
+	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/evilmonkeyinc/jsonpath v0.8.1 // indirect
 	github.com/expr-lang/expr v1.17.7 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
