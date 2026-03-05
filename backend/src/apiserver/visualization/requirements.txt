@@ -45,7 +45,7 @@ flatbuffers==25.2.10
     # via tensorflow
 gast==0.6.0
     # via tensorflow
-gcsfs==0.2.3
+gcsfs==0.8.0
     # via -r requirements.in
 google-api-python-client==1.7.12
     # via -r requirements.in
