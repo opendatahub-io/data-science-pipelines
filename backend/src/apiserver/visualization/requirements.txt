@@ -56,7 +56,7 @@ google-auth==2.40.3
     #   google-auth-httplib2
     #   google-auth-oauthlib
     #   tensorboard
-google-auth-httplib2==0.2.0
+google-auth-httplib2==0.3.0
     # via google-api-python-client
 google-auth-oauthlib==1.2.2
     # via
