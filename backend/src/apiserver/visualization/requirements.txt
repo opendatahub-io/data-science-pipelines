@@ -47,7 +47,7 @@ gast==0.6.0
     # via tensorflow
 gcsfs==0.2.3
     # via -r requirements.in
-google-api-python-client==1.7.12
+google-api-python-client==1.12.11
     # via -r requirements.in
 google-auth==2.40.3
     # via
