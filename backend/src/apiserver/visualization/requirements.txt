@@ -21,7 +21,7 @@ beautifulsoup4==4.13.5
     # via nbconvert
 bleach[css]==6.2.0
     # via nbconvert
-bokeh==1.2.0
+bokeh==1.4.0
     # via -r requirements.in
 cachetools==5.5.2
     # via google-auth
