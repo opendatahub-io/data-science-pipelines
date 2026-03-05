@@ -11,7 +11,7 @@ click==8.1.8
     # via
     #   -r requirements.in
     #   click-option-group
-click-option-group==0.5.7
+click-option-group==0.5.9
     # via -r requirements.in
 docstring-parser==0.17.0
     # via -r requirements.in
