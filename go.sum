@@ -541,8 +541,8 @@ github.com/pelletier/go-toml v1.4.0/go.mod h1:PN7xzY2wHTK0K9p34ErDQMlFxa51Fk0OUr
 github.com/pelletier/go-toml v1.7.0/go.mod h1:vwGMzjaWMwyfHwgIBhI2YUM4fB6nL6lVAvS1LBMMhTE=
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=
 github.com/pelletier/go-toml/v2 v2.2.4/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
-github.com/peterhellberg/duration v0.0.0-20191119133758-ec6baeebcd10 h1:Jf08dx6hxr6aNpHzUmYitsKGm6BmCFbwDGPb27/Boyc=
-github.com/peterhellberg/duration v0.0.0-20191119133758-ec6baeebcd10/go.mod h1:x5xjkH61fUOJVgCCDgqNzlJvdLXiYpmMzSuum2FBOaw=
+github.com/peterhellberg/duration v0.0.2 h1:J/ELSSpXCuHInfYJ/hGVYe0enoGsD8buoRzbsdQJW5o=
+github.com/peterhellberg/duration v0.0.2/go.mod h1:n3Pkw/vId7ZwR2ITRQlLeIjETlGEtUa7zQw49dED6ew=
 github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c h1:dAMKvw0MlJT1GshSTtih8C2gDs04w8dReiOGXrGLNoY=
 github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c/go.mod h1:RqIHx9QI14HlwKwm98g9Re5prTQ6LdeRQn+gXJFxsJM=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=

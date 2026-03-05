@@ -34,7 +34,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.94
 	github.com/onsi/ginkgo/v2 v2.21.0
 	github.com/onsi/gomega v1.35.1
-	github.com/peterhellberg/duration v0.0.0-20191119133758-ec6baeebcd10
+	github.com/peterhellberg/duration v0.0.2
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/client_model v0.6.2
