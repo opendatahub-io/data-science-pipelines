@@ -1,6 +1,6 @@
 docformatter==1.4
 isort==5.10.1
-mypy==0.941
+mypy==0.991
 pre-commit==2.19.0
 pycln==2.1.1
 pytest==7.1.2
