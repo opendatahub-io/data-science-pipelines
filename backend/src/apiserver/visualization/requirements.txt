@@ -105,7 +105,7 @@ jupyter-client==8.6.3
     #   -r requirements.in
     #   ipykernel
     #   nbclient
-jupyter-core==5.8.1
+jupyter-core==5.9.1
     # via
     #   ipykernel
     #   jupyter-client
