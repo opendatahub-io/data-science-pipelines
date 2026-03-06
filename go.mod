@@ -52,13 +52,13 @@ require (
 	// The tags are misleading, they are actual releases:
 	// https://pkg.go.dev/google.golang.org/genproto/googleapis/api?tab=versions
 	// https://pkg.go.dev/google.golang.org/genproto/googleapis/rpc?tab=versions
-	google.golang.org/genproto/googleapis/api v0.0.0-20250715232539-7130f93afb79
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250715232539-7130f93afb79
+	google.golang.org/genproto/googleapis/api v0.0.0-20250922171735-9219d122eba9
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250908214217-97024824d090
 	google.golang.org/grpc v1.73.0
 	// These runtime protoc-gen-go-grpc & protobuf versions should be identical to the package versions
 	// used for the generated code (see PROTOC_GEN_GO_GRPC & PROTOBUF_GO in backend/api/Dockerfile)
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.9
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.33.1
 	k8s.io/apimachinery v0.33.1
@@ -94,7 +94,7 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.28.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.52.0 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.52.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.3.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
