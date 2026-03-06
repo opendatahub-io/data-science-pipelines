@@ -266,7 +266,7 @@ tensorflow-estimator==2.15.0
     # via tensorflow
 tensorflow-io-gcs-filesystem==0.37.1
     # via tensorflow
-tensorflow-metadata==1.16.0
+tensorflow-metadata==1.17.3
     # via -r requirements.in
 tensorflow-serving-api==2.15.1
     # via -r requirements.in
