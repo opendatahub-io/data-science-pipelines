@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM gcr.io/tfx-oss-public/ml_metadata_store_server:1.14.0
+FROM gcr.io/tfx-oss-public/ml_metadata_store_server:1.17.1
