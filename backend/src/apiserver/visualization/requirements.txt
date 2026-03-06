@@ -258,7 +258,7 @@ tensorboard==2.15.2
     # via tensorflow
 tensorboard-data-server==0.7.2
     # via tensorboard
-tensorflow==2.15.1
+tensorflow==2.21.0
     # via
     #   -r requirements.in
     #   tensorflow-serving-api
