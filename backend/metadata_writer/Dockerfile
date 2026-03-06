@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.14-slim
 COPY backend/metadata_writer/requirements.txt /kfp/metadata_writer/
 RUN python3 -m pip install -r /kfp/metadata_writer/requirements.txt
 
