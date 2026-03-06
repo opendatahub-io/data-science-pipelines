@@ -71,7 +71,7 @@ grpcio==1.74.0
     #   tensorboard
     #   tensorflow
     #   tensorflow-serving-api
-h5py==3.14.0
+h5py==3.16.0
     # via tensorflow
 httplib2==0.30.2
     # via
