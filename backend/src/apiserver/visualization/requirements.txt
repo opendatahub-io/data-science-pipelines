@@ -207,7 +207,7 @@ pygments==2.19.2
     # via
     #   ipython
     #   nbconvert
-pyparsing==3.2.3
+pyparsing==3.3.2
     # via httplib2
 python-dateutil==2.9.0.post0
     # via
