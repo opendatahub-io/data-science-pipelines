@@ -303,7 +303,7 @@ uritemplate==3.0.1
     # via google-api-python-client
 urllib3==2.6.3
     # via requests
-wcwidth==0.2.13
+wcwidth==0.6.0
     # via prompt-toolkit
 webencodings==0.5.1
     # via
