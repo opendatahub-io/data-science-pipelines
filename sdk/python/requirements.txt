@@ -51,7 +51,7 @@ oauthlib==3.3.1
     # via
     #   kubernetes
     #   requests-oauthlib
-proto-plus==1.26.1
+proto-plus==1.27.1
     # via google-api-core
 protobuf==6.33.5
     # via
