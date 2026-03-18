@@ -29,7 +29,7 @@ google-auth==2.43.0
     #   kubernetes
 google-cloud-core==2.5.0
     # via google-cloud-storage
-google-cloud-storage==3.6.0
+google-cloud-storage==3.10.0
     # via kfp
 google-crc32c==1.7.1
     # via
