@@ -4,9 +4,9 @@ go 1.25.7
 
 require (
 	github.com/kubeflow/pipelines/api v0.0.0-00010101000000-000000000000
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.11
 )
 
-require google.golang.org/genproto v0.0.0-20211026145609-4688e4c4e024 // indirect
+require google.golang.org/genproto/googleapis/rpc v0.0.0-20260311181403-84a4fc48630c // indirect
 
 replace github.com/kubeflow/pipelines/api => ../api
