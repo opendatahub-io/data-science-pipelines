@@ -92,6 +92,9 @@ jobs:
         uses: docker/build-push-action@v6
         if: ${{ steps.setup-buildx.outcome == 'success' }}
         id: save-image
+        env:
+          # Disable the job summary report in the GitHub Actions UI
+          DOCKER_BUILD_SUMMARY: false
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -104,6 +107,9 @@ jobs:
         uses: docker/build-push-action@v6
         if: ${{ steps.save-image.outcome != 'success' && steps.setup-buildx.outcome == 'success' }}
         id: rebuild
+        env:
+          # Disable the job summary report in the GitHub Actions UI
+          DOCKER_BUILD_SUMMARY: false
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
