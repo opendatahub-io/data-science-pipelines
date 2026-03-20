@@ -5,7 +5,7 @@
   "private": true,
   "dependencies": {
     "@material-ui/core": "^4.12.4",
-    "@material-ui/icons": "^4.11.3",
+    "@mui/icons-material": "^5.0.0",
     "@types/lodash.groupby": "^4.6.6",
     "@types/pako": "^1.0.3",
     "ace-builds": "^1.4.14",
