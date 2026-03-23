@@ -372,6 +372,7 @@ func startHTTPProxy(resourceManager *resource.ResourceManager, usePipelinesKuber
 	register(apiv2beta1.RegisterRecurringRunServiceHandlerFromEndpoint, "RecurringRunService")
 	register(apiv2beta1.RegisterRunServiceHandlerFromEndpoint, "RunService")
 	register(apiv2beta1.RegisterReportServiceHandlerFromEndpoint, "ReportService")
+	register(apiv2beta1.RegisterArtifactServiceHandlerFromEndpoint, "ArtifactService")
 
 	// Create a top level mux to include both pipeline upload server and gRPC servers.
 	topMux := mux.NewRouter()
