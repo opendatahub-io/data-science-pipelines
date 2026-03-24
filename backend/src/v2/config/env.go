@@ -196,7 +196,7 @@ func getDefaultMinioSessionInfo() (objectstore.SessionInfo, error) {
 }
 
 func getDefaultMinioHost() string {
-	endpoint := objectstore.DefaultMinioEndpointInMultiUserMode
+	endpoint := objectstore.DefaultEndpointInMultiUserMode
 	var host, port string
 	if os.Getenv("OBJECT_STORE_HOST") != "" {
 		host = os.Getenv("OBJECT_STORE_HOST")
@@ -213,7 +213,7 @@ func getDefaultMinioHost() string {
 
 func GetMLPipelineServerConfig() *ServerConfig {
 	return &ServerConfig{
-		Address: common.GetMLPipelineServiceName() + "." + common.GetPodNamespace(),
+		Address: common.GetMLPipelineServiceName() + "." + common.GetPodNamespace() + ".svc." + common.GetClusterDomain(),
 		Port:    mlPipelineGrpcServicePort,
 	}
 }

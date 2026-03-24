@@ -18,30 +18,38 @@ import (
 	"testing"
 
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
+	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
+	"github.com/kubeflow/pipelines/backend/src/v2/driver/common"
 	"github.com/stretchr/testify/assert"
 )
 
 func Test_validateRootDAG(t *testing.T) {
+	validOpts := func() common.Options {
+		return common.Options{
+			PipelineName:   "pipeline-1",
+			Run:            &apiv2beta1.Run{RunId: "run-1"},
+			Component:      &pipelinespec.ComponentSpec{},
+			RuntimeConfig:  &pipelinespec.PipelineJob_RuntimeConfig{},
+			Namespace:      "default",
+			IterationIndex: -1,
+		}
+	}
 	tests := []struct {
 		name    string
-		opts    Options
+		opts    common.Options
 		wantErr bool
 		errMsg  string
 	}{
 		{
-			name: "missing pipeline name returns error",
-			opts: Options{
-				PipelineName:   "",
-				IterationIndex: -1,
-			},
+			name:    "missing pipeline name returns error",
+			opts:    common.Options{IterationIndex: -1},
 			wantErr: true,
 			errMsg:  "pipeline name is required",
 		},
 		{
 			name: "missing run ID returns error",
-			opts: Options{
+			opts: common.Options{
 				PipelineName:   "pipeline-1",
-				RunID:          "",
 				IterationIndex: -1,
 			},
 			wantErr: true,
@@ -49,10 +57,9 @@ func Test_validateRootDAG(t *testing.T) {
 		},
 		{
 			name: "nil component spec returns error",
-			opts: Options{
+			opts: common.Options{
 				PipelineName:   "pipeline-1",
-				RunID:          "run-1",
-				Component:      nil,
+				Run:            &apiv2beta1.Run{RunId: "run-1"},
 				IterationIndex: -1,
 			},
 			wantErr: true,
@@ -60,11 +67,10 @@ func Test_validateRootDAG(t *testing.T) {
 		},
 		{
 			name: "nil runtime config returns error",
-			opts: Options{
+			opts: common.Options{
 				PipelineName:   "pipeline-1",
-				RunID:          "run-1",
+				Run:            &apiv2beta1.Run{RunId: "run-1"},
 				Component:      &pipelinespec.ComponentSpec{},
-				RuntimeConfig:  nil,
 				IterationIndex: -1,
 			},
 			wantErr: true,
@@ -72,12 +78,11 @@ func Test_validateRootDAG(t *testing.T) {
 		},
 		{
 			name: "missing namespace returns error",
-			opts: Options{
+			opts: common.Options{
 				PipelineName:   "pipeline-1",
-				RunID:          "run-1",
+				Run:            &apiv2beta1.Run{RunId: "run-1"},
 				Component:      &pipelinespec.ComponentSpec{},
 				RuntimeConfig:  &pipelinespec.PipelineJob_RuntimeConfig{},
-				Namespace:      "",
 				IterationIndex: -1,
 			},
 			wantErr: true,
@@ -85,71 +90,47 @@ func Test_validateRootDAG(t *testing.T) {
 		},
 		{
 			name: "task spec present returns error",
-			opts: Options{
-				PipelineName:   "pipeline-1",
-				RunID:          "run-1",
-				Component:      &pipelinespec.ComponentSpec{},
-				RuntimeConfig:  &pipelinespec.PipelineJob_RuntimeConfig{},
-				Namespace:      "default",
-				Task:           &pipelinespec.PipelineTaskSpec{TaskInfo: &pipelinespec.PipelineTaskInfo{Name: "some-task"}},
-				IterationIndex: -1,
-			},
+			opts: func() common.Options {
+				opts := validOpts()
+				opts.Task = &pipelinespec.PipelineTaskSpec{TaskInfo: &pipelinespec.PipelineTaskInfo{Name: "some-task"}}
+				return opts
+			}(),
 			wantErr: true,
 			errMsg:  "task spec is unnecessary",
 		},
 		{
-			name: "non-zero DAG execution ID returns error",
-			opts: Options{
-				PipelineName:   "pipeline-1",
-				RunID:          "run-1",
-				Component:      &pipelinespec.ComponentSpec{},
-				RuntimeConfig:  &pipelinespec.PipelineJob_RuntimeConfig{},
-				Namespace:      "default",
-				DAGExecutionID: 42,
-				IterationIndex: -1,
-			},
+			name: "parent task without id returns error",
+			opts: func() common.Options {
+				opts := validOpts()
+				opts.ParentTask = &apiv2beta1.PipelineTaskDetail{}
+				return opts
+			}(),
 			wantErr: true,
-			errMsg:  "DAG execution ID is unnecessary",
+			errMsg:  "parent task is required",
 		},
 		{
 			name: "container spec present returns error",
-			opts: Options{
-				PipelineName:  "pipeline-1",
-				RunID:         "run-1",
-				Component:     &pipelinespec.ComponentSpec{},
-				RuntimeConfig: &pipelinespec.PipelineJob_RuntimeConfig{},
-				Namespace:     "default",
-				Container: &pipelinespec.PipelineDeploymentConfig_PipelineContainerSpec{
-					Image: "test-image",
-				},
-				IterationIndex: -1,
-			},
+			opts: func() common.Options {
+				opts := validOpts()
+				opts.Container = &pipelinespec.PipelineDeploymentConfig_PipelineContainerSpec{Image: "test-image"}
+				return opts
+			}(),
 			wantErr: true,
 			errMsg:  "container spec is unnecessary",
 		},
 		{
 			name: "non-negative iteration index returns error",
-			opts: Options{
-				PipelineName:   "pipeline-1",
-				RunID:          "run-1",
-				Component:      &pipelinespec.ComponentSpec{},
-				RuntimeConfig:  &pipelinespec.PipelineJob_RuntimeConfig{},
-				Namespace:      "default",
-				IterationIndex: 0,
-			},
+			opts: func() common.Options {
+				opts := validOpts()
+				opts.IterationIndex = 0
+				return opts
+			}(),
 			wantErr: true,
 			errMsg:  "iteration index is unnecessary",
 		},
 		{
-			name: "valid minimal root DAG options pass validation",
-			opts: Options{
-				PipelineName:   "pipeline-1",
-				RunID:          "run-1",
-				Component:      &pipelinespec.ComponentSpec{},
-				RuntimeConfig:  &pipelinespec.PipelineJob_RuntimeConfig{},
-				Namespace:      "default",
-				IterationIndex: -1,
-			},
+			name:    "valid minimal root DAG options pass validation",
+			opts:    validOpts(),
 			wantErr: false,
 		},
 	}

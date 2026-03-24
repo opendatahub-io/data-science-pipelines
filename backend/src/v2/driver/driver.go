@@ -507,6 +507,18 @@ func addModelcarsToPodSpec(
 
 		image := strings.TrimPrefix(inputArtifact.Uri, "oci://")
 
+		// Match the main container hardening so /proc/<pid>/root access works under shareProcessNamespace.
+		allowPrivilegeEscalation := false
+		modelcarSecurityContext := &k8score.SecurityContext{
+			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+			Capabilities: &k8score.Capabilities{
+				Drop: []k8score.Capability{"ALL"},
+			},
+			SeccompProfile: &k8score.SeccompProfile{
+				Type: k8score.SeccompProfileTypeRuntimeDefault,
+			},
+		}
+
 		podSpec.InitContainers = append(
 			podSpec.InitContainers,
 			k8score.Container{
@@ -524,6 +536,7 @@ func addModelcarsToPodSpec(
 						" exit 1)",
 				},
 				Env:                      userEnvVar,
+				SecurityContext:          modelcarSecurityContext,
 				TerminationMessagePolicy: k8score.TerminationMessageFallbackToLogsOnError,
 			},
 		)
@@ -558,6 +571,7 @@ func addModelcarsToPodSpec(
 				ImagePullPolicy: "IfNotPresent",
 				Env:             userEnvVar,
 				VolumeMounts:    []k8score.VolumeMount{emptyDirVolumeMount},
+				SecurityContext: modelcarSecurityContext,
 				Command: []string{
 					"sh",
 					"-c",

@@ -2226,11 +2226,8 @@ func Test_extendPodSpecPatch_SecurityContext(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				got,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
 				nil,
-				nil,
-				nil,
-				map[string]*structpb.Value{},
 				nil,
 			)
 			assert.Nil(t, err)
@@ -2254,7 +2251,7 @@ func Test_extendPodSpecPatch_SecurityContext_CombinedWithOtherFeatures(t *testin
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+		common.Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 			SecurityContext: &kubernetesplatform.SecurityContext{
 				RunAsUser:  &nobodyUID,
 				RunAsGroup: &rootGID,
@@ -2263,9 +2260,6 @@ func Test_extendPodSpecPatch_SecurityContext_CombinedWithOtherFeatures(t *testin
 			ImagePullPolicy:       string(imagePullPolicy),
 		}},
 		nil,
-		nil,
-		nil,
-		map[string]*structpb.Value{},
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2301,7 +2295,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminSetPreserved(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsUser:  &adminUID,
 			DefaultRunAsGroup: &adminGID,
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
@@ -2312,9 +2306,6 @@ func Test_extendPodSpecPatch_SecurityContext_AdminSetPreserved(t *testing.T) {
 			},
 		},
 		nil,
-		nil,
-		nil,
-		map[string]*structpb.Value{},
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2335,12 +2326,11 @@ func Test_extendPodSpecPatch_SecurityContext_AdminDefaultsNoUserOverride(t *test
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsUser: &adminUID,
 			// No KubernetesExecutorConfig — user didn't call set_security_context.
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2363,15 +2353,12 @@ func Test_extendPodSpecPatch_SecurityContext_RootOnHardenedContainer(t *testing.
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+		common.Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 			SecurityContext: &kubernetesplatform.SecurityContext{
 				RunAsUser: &rootUID,
 			},
 		}},
 		nil,
-		nil,
-		nil,
-		map[string]*structpb.Value{},
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2404,7 +2391,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminRunAsNonRoot(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsNonRoot: &adminRunAsNonRoot,
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 				SecurityContext: &kubernetesplatform.SecurityContext{
@@ -2412,8 +2399,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminRunAsNonRoot(t *testing.T) {
 				},
 			},
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2433,12 +2419,11 @@ func Test_extendPodSpecPatch_SecurityContext_AdminRunAsNonRootNoUserOverride(t *
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsNonRoot: &adminRunAsNonRoot,
 			// No KubernetesExecutorConfig — user didn't call set_security_context.
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2455,15 +2440,14 @@ func Test_extendPodSpecPatch_SecurityContext_UserRunAsNonRootNoAdmin(t *testing.
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 				SecurityContext: &kubernetesplatform.SecurityContext{
 					RunAsNonRoot: &userRunAsNonRoot,
 				},
 			},
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)

@@ -22,7 +22,10 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
+	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
 	scheduledworkflow "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 
 	"github.com/cenkalti/backoff"
@@ -77,6 +80,13 @@ var (
 		Name: "resource_manager_workflow_runs_failed",
 		Help: "The current number of failed workflow runs",
 	}, extraLabels)
+
+	// Map API enum values to Kubernetes DeletionPropagation values
+	propagationPolicyMap = map[apiv2beta1.DeletePropagationPolicy]v1.DeletionPropagation{
+		apiv2beta1.DeletePropagationPolicy_FOREGROUND: v1.DeletePropagationForeground,
+		apiv2beta1.DeletePropagationPolicy_BACKGROUND: v1.DeletePropagationBackground,
+		apiv2beta1.DeletePropagationPolicy_ORPHAN:     v1.DeletePropagationOrphan,
+	}
 )
 
 type ClientManagerInterface interface {
@@ -107,6 +117,9 @@ type ResourceManagerOptions struct {
 	CacheDisabled        bool                              `json:"cache_disabled,omitempty"`
 	DefaultWorkspace     *corev1.PersistentVolumeClaimSpec `json:"default_workspace,omitempty"`
 	MLPipelineTLSEnabled bool                              `json:"ml_pipeline_tls_enabled,omitempty"`
+	DefaultRunAsUser     *int64                            `json:"default_run_as_user,omitempty"`
+	DefaultRunAsGroup    *int64                            `json:"default_run_as_group,omitempty"`
+	DefaultRunAsNonRoot  *bool                             `json:"default_run_as_non_root,omitempty"`
 }
 
 type ResourceManager struct {
@@ -257,8 +270,12 @@ func (r *ResourceManager) UnarchiveExperiment(experimentId string) error {
 }
 
 // Returns a list of pipelines.
-func (r *ResourceManager) ListPipelines(filterContext *model.FilterContext, opts *list.Options) ([]*model.Pipeline, int, string, error) {
-	pipelines, total_size, nextPageToken, err := r.pipelineStore.ListPipelines(filterContext, opts)
+func (r *ResourceManager) ListPipelines(filterContext *model.FilterContext, opts *list.Options, tagFilters ...map[string]string) ([]*model.Pipeline, int, string, error) {
+	var resolvedTagFilters map[string]string
+	if len(tagFilters) > 0 {
+		resolvedTagFilters = tagFilters[0]
+	}
+	pipelines, total_size, nextPageToken, err := r.pipelineStore.ListPipelines(filterContext, opts, resolvedTagFilters)
 	if err != nil {
 		err = util.Wrapf(err, "Failed to list pipelines with context %v, options %v", filterContext, opts)
 	}
@@ -318,7 +335,7 @@ func (r *ResourceManager) DeletePipeline(pipelineId string, cascade bool) error 
 	if cascade {
 		// Get all pipeline versions for this pipeline and delete them
 		opts := list.EmptyOptions()
-		pipelineVersions, _, _, err := r.pipelineStore.ListPipelineVersions(pipelineId, opts)
+		pipelineVersions, _, _, err := r.pipelineStore.ListPipelineVersions(pipelineId, opts, nil)
 		if err != nil {
 			return util.Wrapf(err, "Failed to delete pipeline with id %v due to error listing pipeline versions", pipelineId)
 		}
@@ -367,6 +384,71 @@ func (r *ResourceManager) DeletePipeline(pipelineId string, cascade bool) error 
 // Supports v1beta1 behavior.
 func (r *ResourceManager) UpdatePipelineDefaultVersion(pipelineId string, versionId string) error {
 	return r.pipelineStore.UpdatePipelineDefaultVersion(pipelineId, versionId)
+}
+
+// MaxTagKeyLength is the maximum allowed length (in characters) for a tag key.
+const MaxTagKeyLength = 63
+
+// MaxTagValueLength is the maximum allowed length (in characters) for a tag value.
+const MaxTagValueLength = 63
+
+// MaxTagsPerEntity is the maximum number of tags allowed on a single pipeline or pipeline version.
+const MaxTagsPerEntity = 20
+
+// validateTags checks that tags conform to all constraints:
+// - maximum number of tags per entity
+// - no empty keys
+// - keys must not contain "." (conflicts with tag filter prefix "tags.")
+// - key and value character lengths within limits
+func validateTags(tags map[string]string) error {
+	if len(tags) > MaxTagsPerEntity {
+		return util.NewInvalidInputError("number of tags (%d) exceeds maximum of %d per entity", len(tags), MaxTagsPerEntity)
+	}
+	for key, value := range tags {
+		if key == "" {
+			return util.NewInvalidInputError("tag key cannot be empty")
+		}
+		if strings.Contains(key, ".") {
+			return util.NewInvalidInputError("tag key %q must not contain '.' character", key)
+		}
+		if utf8.RuneCountInString(key) > MaxTagKeyLength {
+			return util.NewInvalidInputError("tag key %q exceeds maximum length of %d characters", key, MaxTagKeyLength)
+		}
+		if utf8.RuneCountInString(value) > MaxTagValueLength {
+			return util.NewInvalidInputError("tag value %q for key %q exceeds maximum length of %d characters", value, key, MaxTagValueLength)
+		}
+	}
+	return nil
+}
+
+// UpdatePipeline updates mutable fields of a pipeline (display_name, tags).
+// Both fields are updated in a single transaction via UpdatePipelineFields.
+func (r *ResourceManager) UpdatePipeline(pipelineID string, displayName string, tags map[string]string) (*model.Pipeline, error) {
+	if pipelineID == "" {
+		return nil, util.NewInvalidInputError("pipeline id cannot be empty when updating pipeline")
+	}
+	if err := validateTags(tags); err != nil {
+		return nil, err
+	}
+	if err := r.pipelineStore.UpdatePipelineFields(pipelineID, displayName, tags); err != nil {
+		return nil, util.Wrap(err, "Failed to update pipeline")
+	}
+	return r.pipelineStore.GetPipeline(pipelineID)
+}
+
+// UpdatePipelineVersion updates mutable fields of a pipeline version (display_name, tags)
+// in a single transaction to prevent deadlocks.
+func (r *ResourceManager) UpdatePipelineVersion(pipelineVersionID string, displayName string, tags map[string]string) (*model.PipelineVersion, error) {
+	if pipelineVersionID == "" {
+		return nil, util.NewInvalidInputError("pipeline version id cannot be empty when updating pipeline version")
+	}
+	if err := validateTags(tags); err != nil {
+		return nil, err
+	}
+	if err := r.pipelineStore.UpdatePipelineVersionFields(pipelineVersionID, displayName, tags); err != nil {
+		return nil, util.Wrap(err, "Failed to update pipeline version")
+	}
+	return r.pipelineStore.GetPipelineVersion(pipelineVersionID)
 }
 
 // Creates a pipeline, but does not create a pipeline version.
@@ -1292,7 +1374,7 @@ func (r *ResourceManager) ChangeJobMode(ctx context.Context, jobId string, enabl
 }
 
 // Deletes a recurring run with given id.
-func (r *ResourceManager) DeleteJob(ctx context.Context, jobId string) error {
+func (r *ResourceManager) DeleteJob(ctx context.Context, jobId string, propagationPolicy ...apiv2beta1.DeletePropagationPolicy) error {
 	job, err := r.GetJob(jobId)
 	if err != nil {
 		return util.Wrapf(err, "Failed to delete recurring run %v. Check if exists", jobId)
@@ -1302,7 +1384,13 @@ func (r *ResourceManager) DeleteJob(ctx context.Context, jobId string) error {
 	if k8sNamespace == "" {
 		k8sNamespace = common.GetPodNamespace()
 	}
-	err = r.getScheduledWorkflowClient(k8sNamespace).Delete(ctx, job.K8SName, &v1.DeleteOptions{})
+	deleteOptions := &v1.DeleteOptions{}
+	if len(propagationPolicy) > 0 {
+		if policy, exists := propagationPolicyMap[propagationPolicy[0]]; exists {
+			deleteOptions.PropagationPolicy = &policy
+		}
+	}
+	err = r.getScheduledWorkflowClient(k8sNamespace).Delete(ctx, job.K8SName, deleteOptions)
 	if err != nil {
 		if !util.IsNotFound(err) {
 			return util.NewInternalServerError(err, "Failed to delete recurring run %v. Check if the scheduled workflow exists", jobId)
@@ -1855,8 +1943,12 @@ func (r *ResourceManager) GetLatestPipelineVersion(pipelineId string) (*model.Pi
 }
 
 // Returns a list of pipeline versions.
-func (r *ResourceManager) ListPipelineVersions(pipelineId string, opts *list.Options) ([]*model.PipelineVersion, int, string, error) {
-	pipelineVersions, total_size, nextPageToken, err := r.pipelineStore.ListPipelineVersions(pipelineId, opts)
+func (r *ResourceManager) ListPipelineVersions(pipelineId string, opts *list.Options, tagFilters ...map[string]string) ([]*model.PipelineVersion, int, string, error) {
+	var resolvedTagFilters map[string]string
+	if len(tagFilters) > 0 {
+		resolvedTagFilters = tagFilters[0]
+	}
+	pipelineVersions, total_size, nextPageToken, err := r.pipelineStore.ListPipelineVersions(pipelineId, opts, resolvedTagFilters)
 	if err != nil {
 		err = util.Wrapf(err, "Failed to list pipeline versions with pipeline id %v, options %v", pipelineId, opts)
 	}
