@@ -229,7 +229,8 @@ var _ = Describe("Verify Pipeline Upload Version with Tags >", Label(constants.P
 			uploadPipelineVersionAndVerify(helloWorldPipelineSpecFilePath, parameters, expectedPipelineVersion)
 
 			// Verify tags via ListPipelineVersions
-			versions := testutil.GetSortedPipelineVersionsByCreatedAt(pipelineClient, createdPipeline.PipelineID, nil)
+			versions, verErr := testutil.GetSortedPipelineVersionsByCreatedAt(pipelineClient, createdPipeline.PipelineID, nil)
+			Expect(verErr).NotTo(HaveOccurred())
 			Expect(len(versions)).To(BeNumerically(">=", 2))
 
 			var foundTaggedVersion bool
