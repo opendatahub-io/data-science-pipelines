@@ -457,6 +457,9 @@ func (r *ResourceManager) CreatePipeline(p *model.Pipeline) (*model.Pipeline, er
 	if p.Name == "" {
 		return nil, util.NewInvalidInputError("pipeline's name cannot be empty")
 	}
+	if err := validateTags(p.Tags); err != nil {
+		return nil, err
+	}
 
 	if p.DisplayName == "" {
 		p.DisplayName = p.Name
@@ -482,6 +485,12 @@ func (r *ResourceManager) CreatePipeline(p *model.Pipeline) (*model.Pipeline, er
 // Creates a pipeline and a pipeline version.
 // This is used when two resources need to be created in a single DB transaction.
 func (r *ResourceManager) CreatePipelineAndPipelineVersion(p *model.Pipeline, pv *model.PipelineVersion) (*model.Pipeline, *model.PipelineVersion, error) {
+	if err := validateTags(p.Tags); err != nil {
+		return nil, nil, err
+	}
+	if err := validateTags(pv.Tags); err != nil {
+		return nil, nil, err
+	}
 	// Fetch pipeline spec, verify it, and parse parameters
 	pipelineSpecBytes, pipelineSpecURI, err := r.fetchTemplateFromPipelineVersion(pv)
 	if err != nil {
@@ -1837,6 +1846,9 @@ func (r *ResourceManager) CreatePipelineVersion(pv *model.PipelineVersion) (*mod
 	pipelineId := pv.PipelineId
 	if len(pipelineId) == 0 {
 		return nil, util.NewInvalidInputError("Failed to create a pipeline version due to missing pipeline id")
+	}
+	if err := validateTags(pv.Tags); err != nil {
+		return nil, err
 	}
 
 	// Fetch pipeline spec
