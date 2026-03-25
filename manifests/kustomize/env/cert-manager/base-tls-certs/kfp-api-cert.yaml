@@ -8,6 +8,7 @@ spec:
   dnsNames:
     - ml-pipeline
     - ml-pipeline.kubeflow
+    - ml-pipeline.$(kfp-namespace).svc.cluster.local
     - ml-pipeline-scheduledworkflow
     - localhost
   ipAddresses:
