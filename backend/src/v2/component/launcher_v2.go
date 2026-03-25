@@ -1051,15 +1051,11 @@ func findMatchingParentOutputKeyForChild(
 			continue
 		}
 		// Found the child task in parent's DAG
-		// Check the task's output selectors
-		if dagTask.GetComponentRef() != nil {
-			// Look at the parent's output definitions to find which one uses this task's output
-			for parentOutputKey := range parentOutputDefs.GetArtifacts() {
-				// Check if this parent output is sourced from the child task
-				// The parent output may be directly from task output or from an artifact selector
-				if artifactSelectorMatches(parentComponentSpec, parentOutputKey, childTaskName, childOutputKey) {
-					return parentOutputKey
-				}
+		// Look at the parent's output definitions to find which one uses this task's output.
+		for parentOutputKey := range parentOutputDefs.GetArtifacts() {
+			// The parent output may be directly from task output or from an artifact selector.
+			if artifactSelectorMatches(parentComponentSpec, parentOutputKey, childTaskName, childOutputKey) {
+				return parentOutputKey
 			}
 		}
 	}
@@ -1086,14 +1082,10 @@ func findMatchingParentOutputKeyForChildParameter(
 		}
 
 		// Found the child task in parent's DAG
-		// Check the task's output selectors
-		if dagTask.GetComponentRef() != nil {
-			// Look at the parent's output definitions to find which one uses this task's parameter output
-			for parentOutputKey := range parentOutputDefs.GetParameters() {
-				// Check if this parent output is sourced from the child task
-				if parameterSelectorMatches(parentComponentSpec, parentOutputKey, childTaskName, childOutputKey) {
-					return parentOutputKey
-				}
+		// Look at the parent's output definitions to find which one uses this task's parameter output.
+		for parentOutputKey := range parentOutputDefs.GetParameters() {
+			if parameterSelectorMatches(parentComponentSpec, parentOutputKey, childTaskName, childOutputKey) {
+				return parentOutputKey
 			}
 		}
 	}

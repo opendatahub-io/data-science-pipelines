@@ -17,6 +17,8 @@ package objectstore
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,6 +27,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	_ "gocloud.dev/blob/gcsblob"
+	"gocloud.dev/blob/memblob"
 )
 
 func Test_createS3BucketSession(t *testing.T) {
@@ -151,4 +154,44 @@ func Test_createS3BucketSession(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDownloadBlob_DownloadsSingleFileAtExactPrefix(t *testing.T) {
+	ctx := context.Background()
+	bucket := memblob.OpenBucket(nil)
+	defer bucket.Close()
+
+	err := bucket.WriteAll(ctx, "artifacts/file.txt", []byte("hello world"), nil)
+	assert.NoError(t, err)
+
+	localPath := filepath.Join(t.TempDir(), "file.txt")
+	err = DownloadBlob(ctx, bucket, localPath, "artifacts/file.txt")
+	assert.NoError(t, err)
+
+	data, err := os.ReadFile(localPath)
+	assert.NoError(t, err)
+	assert.Equal(t, "hello world", string(data))
+}
+
+func TestDownloadBlob_SkipsDirectoryMarkerWhenDownloadingNestedObjects(t *testing.T) {
+	ctx := context.Background()
+	bucket := memblob.OpenBucket(nil)
+	defer bucket.Close()
+
+	err := bucket.WriteAll(ctx, "artifacts/out_ds", []byte{}, nil)
+	assert.NoError(t, err)
+	err = bucket.WriteAll(ctx, "artifacts/out_ds/file.txt", []byte("nested content"), nil)
+	assert.NoError(t, err)
+
+	localPath := filepath.Join(t.TempDir(), "out_ds")
+	err = DownloadBlob(ctx, bucket, localPath, "artifacts/out_ds")
+	assert.NoError(t, err)
+
+	info, err := os.Stat(localPath)
+	assert.NoError(t, err)
+	assert.True(t, info.IsDir())
+
+	data, err := os.ReadFile(filepath.Join(localPath, "file.txt"))
+	assert.NoError(t, err)
+	assert.Equal(t, "nested content", string(data))
 }

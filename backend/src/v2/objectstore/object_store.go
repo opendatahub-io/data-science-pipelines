@@ -131,7 +131,7 @@ func UploadBlob(ctx context.Context, bucket *blob.Bucket, localPath, blobPath st
 
 func DownloadBlob(ctx context.Context, bucket *blob.Bucket, localDir, blobDir string) error {
 	iter := bucket.List(&blob.ListOptions{Prefix: blobDir})
-	downloadedBlob := false
+	objects := make([]*blob.ListObject, 0)
 	for {
 		obj, err := iter.Next(ctx)
 		if err != nil {
@@ -146,20 +146,45 @@ func DownloadBlob(ctx context.Context, bucket *blob.Bucket, localDir, blobDir st
 			// Object stores list all files with the same prefix,
 			// there is no need to recursively list each folder.
 			continue
-		} else {
-			relativePath, err := filepath.Rel(blobDir, obj.Key)
-			if err != nil {
-				return fmt.Errorf("unexpected object key %q when listing %q: %w", obj.Key, blobDir, err)
-			}
-			if err := downloadFile(ctx, bucket, obj.Key, filepath.Join(localDir, relativePath)); err != nil {
-				return err
-			}
-			downloadedBlob = true
 		}
+		objects = append(objects, obj)
+	}
+
+	if len(objects) == 0 {
+		return fmt.Errorf("no blob found in remote storage %q", blobDir)
+	}
+
+	normalizedBlobDir := strings.TrimSuffix(blobDir, "/")
+	hasNestedObjects := false
+	for _, obj := range objects {
+		if strings.TrimSuffix(obj.Key, "/") != normalizedBlobDir {
+			hasNestedObjects = true
+			break
+		}
+	}
+
+	downloadedBlob := false
+	for _, obj := range objects {
+		normalizedKey := strings.TrimSuffix(obj.Key, "/")
+		// Some object stores may expose a zero-byte object for the directory prefix itself
+		// alongside the actual nested files. Skip that marker when downloading a directory tree.
+		if hasNestedObjects && normalizedKey == normalizedBlobDir {
+			continue
+		}
+
+		relativePath, err := filepath.Rel(normalizedBlobDir, normalizedKey)
+		if err != nil {
+			return fmt.Errorf("unexpected object key %q when listing %q: %w", obj.Key, blobDir, err)
+		}
+		if err := downloadFile(ctx, bucket, obj.Key, filepath.Join(localDir, relativePath)); err != nil {
+			return err
+		}
+		downloadedBlob = true
 	}
 	if !downloadedBlob {
 		return fmt.Errorf("no blob found in remote storage %q", blobDir)
 	}
+
 	return nil
 }
 
