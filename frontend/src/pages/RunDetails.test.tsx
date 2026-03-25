@@ -612,6 +612,20 @@ describe('RunDetails', () => {
     expect(renderResult!.asFragment()).toMatchSnapshot();
   });
 
+  it('renders config tab even when MLMD lookup fails', async () => {
+    testRun.pipeline_runtime!.workflow_manifest = JSON.stringify({
+      metadata: { name: 'wf1' },
+      status: { phase: 'Running' },
+    } as Workflow);
+    getRunContextSpy.mockRejectedValue(new Error('metadata store unavailable'));
+
+    await renderRunDetails();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Config' }));
+    expect(getRunDetailsState()?.selectedTab).toBe(2);
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
   it('shows run config fields', async () => {
     testRun.pipeline_runtime!.workflow_manifest = JSON.stringify({
       metadata: {
