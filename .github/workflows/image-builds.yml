@@ -70,7 +70,7 @@ jobs:
       ARTIFACTS_PATH: "images_${{ github.run_id }}"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Create Artifacts Path Directory
         id: configure
@@ -89,9 +89,12 @@ jobs:
           driver-opts: network=host
 
       - name: Build and save Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         if: ${{ steps.setup-buildx.outcome == 'success' }}
         id: save-image
+        env:
+          # Disable the job summary report in the GitHub Actions UI
+          DOCKER_BUILD_SUMMARY: false
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -101,9 +104,12 @@ jobs:
           network: host
 
       - name: Rebuild Images in case of failure
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         if: ${{ steps.save-image.outcome != 'success' && steps.setup-buildx.outcome == 'success' }}
         id: rebuild
+        env:
+          # Disable the job summary report in the GitHub Actions UI
+          DOCKER_BUILD_SUMMARY: false
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -113,7 +119,7 @@ jobs:
           network: host
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: ${{ steps.save-image.outcome == 'success' || steps.rebuild.outcome == 'success' }}
         with:
           name: ${{ env.ARTIFACT_NAME }}
