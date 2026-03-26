@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	sq "github.com/Masterminds/squirrel"
@@ -344,8 +345,7 @@ func (s *TaskStore) scanRows(rows *sql.Rows) ([]*model.Task, error) {
 	for rows.Next() {
 		t, err := scanTaskRow(rows)
 		if err != nil {
-			fmt.Printf("scan error is %v", err)
-			return tasks, err
+			return nil, err
 		}
 		tasks = append(tasks, t)
 	}
@@ -623,7 +623,7 @@ func (s *TaskStore) getTaskForUpdate(tx *sql.Tx, id string) (*model.Task, error)
 
 	task, err := scanTaskRow(row)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, util.NewResourceNotFoundError("task", fmt.Sprint(id))
 		}
 		return nil, util.NewInternalServerError(err, "Failed to get task for update: %v", err)
@@ -648,7 +648,11 @@ func (s *TaskStore) UpdateTask(new *model.Task) (*model.Task, error) {
 	if err != nil {
 		return nil, util.NewInternalServerError(err, "Failed to start transaction for task update")
 	}
-	defer tx.Rollback() // Will be no-op if Commit() succeeds
+	defer func() {
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			glog.Warningf("Failed to rollback task update transaction for %s: %v", new.UUID, rbErr)
+		}
+	}()
 
 	// Get the current task state with a row-level lock (SELECT ... FOR UPDATE)
 	// This prevents other concurrent updates from reading the same old state
@@ -838,7 +842,7 @@ func mergeParameters(old, new model.JSONSlice) (model.JSONSlice, error) {
 	if err != nil {
 		return nil, err
 	}
-	makeKey := func(p *apiv2beta1.PipelineTaskDetail_InputOutputs_IOParameter) string {
+	makeKey := func(p *apiv2beta1.PipelineTaskDetail_InputOutputs_IOParameter) (string, error) {
 		key := fmt.Sprintf("%v-%s", p.Type, p.ParameterKey)
 		if p.Producer != nil {
 			key = fmt.Sprintf("%s-%s", key, p.Producer.TaskName)
@@ -852,18 +856,24 @@ func mergeParameters(old, new model.JSONSlice) (model.JSONSlice, error) {
 		// to include the value hash to avoid collisions.
 		valueHash, err := hashProtoValue(p.GetValue())
 		if err != nil {
-			glog.Errorf("Failed to hash parameter value: %v", err)
+			return "", err
 		}
 		key = fmt.Sprintf("%s-%s", key, valueHash)
-		return key
+		return key, nil
 	}
 	mergedParams := map[string]*apiv2beta1.PipelineTaskDetail_InputOutputs_IOParameter{}
 	for _, p := range oldParams {
-		key := makeKey(p)
+		key, err := makeKey(p)
+		if err != nil {
+			return nil, err
+		}
 		mergedParams[key] = p
 	}
 	for _, p := range newParams {
-		key := makeKey(p)
+		key, err := makeKey(p)
+		if err != nil {
+			return nil, err
+		}
 		mergedParams[key] = p
 	}
 	paramsSlice := make([]*apiv2beta1.PipelineTaskDetail_InputOutputs_IOParameter, 0, len(mergedParams))
@@ -978,7 +988,7 @@ func (s *TaskStore) DeleteTasksForRun(tx *sql.Tx, runUUID string) error {
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		glog.Warningf("Failed to get rows affected when deleting tasks for run %s: %v", runUUID, err)
+		glog.V(4).Infof("Deleted tasks for run %s (rows affected unknown)", runUUID)
 	} else {
 		glog.V(4).Infof("Deleted %d tasks for run %s", rowsAffected, runUUID)
 	}

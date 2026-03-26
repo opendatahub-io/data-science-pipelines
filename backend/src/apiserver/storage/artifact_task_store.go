@@ -17,6 +17,7 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 
 	sq "github.com/Masterminds/squirrel"
@@ -48,9 +49,11 @@ type ArtifactTaskStoreInterface interface {
 	// GetArtifactTask Fetches an artifact-task relationship with a given id.
 	GetArtifactTask(id string) (*model.ArtifactTask, error)
 
-	// ListArtifactTasks Fetches artifact-task relationships for given filtering and listing options.
-	// filterContexts supports multiple filters: ArtifactID, TaskID, RunUUID
-	// ioType optionally filters by IOType (pass nil to skip filtering by type)
+	// ListArtifactTasks fetches artifact-task relationships for given filtering and listing options.
+	// filterContexts supports multiple filters: ArtifactID, TaskID, RunUUID.
+	// ioType optionally filters by IOType (pass nil to skip filtering by type).
+	// It returns the current page of artifact-task rows, the total count across all pages,
+	// the next page token, and an error.
 	ListArtifactTasks(filterContexts []*model.FilterContext, ioType *model.IOType, opts *list.Options) ([]*model.ArtifactTask, int, string, error)
 }
 
@@ -119,7 +122,11 @@ func (s *ArtifactTaskStore) CreateArtifactTasks(artifactTasks []*model.ArtifactT
 	if err != nil {
 		return nil, util.NewInternalServerError(err, "Failed to start transaction for creating artifact-tasks")
 	}
-	defer tx.Rollback()
+	defer func() {
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			glog.Warningf("Failed to rollback artifact-task create transaction: %v", rbErr)
+		}
+	}()
 
 	var newArtifactTasks []*model.ArtifactTask
 	for _, artifactTask := range artifactTasks {
@@ -188,7 +195,7 @@ func (s *ArtifactTaskStore) scanRows(rows *sql.Rows) ([]*model.ArtifactTask, err
 			&key,
 		)
 		if err != nil {
-			return artifactTasks, err
+			return nil, err
 		}
 
 		artifactTask := &model.ArtifactTask{
@@ -207,7 +214,7 @@ func (s *ArtifactTaskStore) scanRows(rows *sql.Rows) ([]*model.ArtifactTask, err
 
 // applyFilterContextsToQuery applies multiple filter contexts to the query builder
 // Supports filtering by multiple artifact_ids, task_ids, and run_ids simultaneously
-func (s *ArtifactTaskStore) applyFilterContextsToQuery(sqlBuilder sq.SelectBuilder, filterContexts []*model.FilterContext) sq.SelectBuilder {
+func (s *ArtifactTaskStore) applyFilterContextsToQuery(sqlBuilder sq.SelectBuilder, filterContexts []*model.FilterContext) (sq.SelectBuilder, error) {
 	var artifactIDs []string
 	var taskIDs []string
 	var runIDs []string
@@ -225,6 +232,8 @@ func (s *ArtifactTaskStore) applyFilterContextsToQuery(sqlBuilder sq.SelectBuild
 			taskIDs = append(taskIDs, filterContext.ID)
 		case model.RunResourceType:
 			runIDs = append(runIDs, filterContext.ID)
+		default:
+			return sqlBuilder, util.NewInvalidInputError("Unsupported artifact-task filter type %q", filterContext.Type)
 		}
 	}
 
@@ -255,7 +264,7 @@ func (s *ArtifactTaskStore) applyFilterContextsToQuery(sqlBuilder sq.SelectBuild
 		}
 	}
 
-	return sqlBuilder
+	return sqlBuilder, nil
 }
 
 func (s *ArtifactTaskStore) ListArtifactTasks(filterContexts []*model.FilterContext, ioType *model.IOType, opts *list.Options) ([]*model.ArtifactTask, int, string, error) {
@@ -265,7 +274,10 @@ func (s *ArtifactTaskStore) ListArtifactTasks(filterContexts []*model.FilterCont
 
 	// SQL for getting the filtered and paginated rows
 	sqlBuilder := sq.Select(artifactTaskColumns...).From(artifactTaskTableName)
-	sqlBuilder = s.applyFilterContextsToQuery(sqlBuilder, filterContexts)
+	sqlBuilder, err := s.applyFilterContextsToQuery(sqlBuilder, filterContexts)
+	if err != nil {
+		return errorF(err)
+	}
 
 	// Apply IOType filter if provided
 	if ioType != nil {
@@ -281,7 +293,10 @@ func (s *ArtifactTaskStore) ListArtifactTasks(filterContexts []*model.FilterCont
 
 	// SQL for getting total size
 	countBuilder := sq.Select("count(*)").From(artifactTaskTableName)
-	countBuilder = s.applyFilterContextsToQuery(countBuilder, filterContexts)
+	countBuilder, err = s.applyFilterContextsToQuery(countBuilder, filterContexts)
+	if err != nil {
+		return errorF(err)
+	}
 
 	// Apply IOType filter if provided
 	if ioType != nil {
@@ -296,45 +311,48 @@ func (s *ArtifactTaskStore) ListArtifactTasks(filterContexts []*model.FilterCont
 	// Use a transaction to make sure we're returning the totalSize of the same rows queried
 	tx, err := s.db.Begin()
 	if err != nil {
-		glog.Errorf("Failed to start transaction to list artifact-tasks")
 		return errorF(err)
+	}
+	rollback := func() {
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			glog.Warningf("Failed to rollback artifact-task list transaction: %v", rbErr)
+		}
 	}
 
 	rows, err := tx.Query(rowsSQL, rowsArgs...)
 	if err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	if err := rows.Err(); err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	artifactTasks, err := s.scanRows(rows)
 	if err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	defer rows.Close()
 
 	sizeRow, err := tx.Query(sizeSQL, sizeArgs...)
 	if err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	if err := sizeRow.Err(); err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	totalSize, err := list.ScanRowToTotalSize(sizeRow)
 	if err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	defer sizeRow.Close()
 
 	err = tx.Commit()
 	if err != nil {
-		glog.Errorf("Failed to commit transaction to list artifact-tasks")
 		return errorF(err)
 	}
 
@@ -343,7 +361,10 @@ func (s *ArtifactTaskStore) ListArtifactTasks(filterContexts []*model.FilterCont
 	}
 
 	npt, err := opts.NextPageToken(artifactTasks[opts.PageSize])
-	return artifactTasks[:opts.PageSize], totalSize, npt, err
+	if err != nil {
+		return errorF(err)
+	}
+	return artifactTasks[:opts.PageSize], totalSize, npt, nil
 }
 
 func (s *ArtifactTaskStore) GetArtifactTask(id string) (*model.ArtifactTask, error) {
@@ -363,8 +384,11 @@ func (s *ArtifactTaskStore) GetArtifactTask(id string) (*model.ArtifactTask, err
 	defer r.Close()
 
 	artifactTasks, err := s.scanRows(r)
-	if err != nil || len(artifactTasks) > 1 {
+	if err != nil {
 		return nil, util.NewInternalServerError(err, "Failed to get artifact-task: %v", err.Error())
+	}
+	if len(artifactTasks) > 1 {
+		return nil, util.NewInternalServerError(errors.New("multiple artifact-task rows found"), "Failed to get artifact-task %s: multiple rows returned", id)
 	}
 	if len(artifactTasks) == 0 {
 		return nil, util.NewResourceNotFoundError("artifact-task", fmt.Sprint(id))

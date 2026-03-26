@@ -291,7 +291,7 @@ func (s *ArtifactServer) CreateArtifactTask(ctx context.Context, request *apiv2b
 		return nil, util.Wrap(err, "Failed to fetch artifact for CreateArtifactTask")
 	}
 
-	// Optional: enforce same-namespace linkage
+	// Enforce same-namespace linkage in multi-user mode.
 	if common.IsMultiUserMode() && task.Namespace != "" && artifact.Namespace != "" && task.Namespace != artifact.Namespace {
 		return nil, util.NewInvalidInputError("artifact and task must be in the same namespace: artifact=%s task=%s", artifact.Namespace, task.Namespace)
 	}

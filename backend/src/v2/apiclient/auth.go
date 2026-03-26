@@ -48,7 +48,7 @@ func initTokenSource() {
 		// Check if token file exists before creating the token source
 		if _, err := os.Stat(KFPTokenPath); err != nil {
 			if os.IsNotExist(err) {
-				glog.V(2).Infof("KFP token file not found at %s, proceeding without authentication", KFPTokenPath)
+				glog.Warningf("KFP token file not found at %s, proceeding without authentication", KFPTokenPath)
 				tokenSource = &emptyTokenSource{}
 				return
 			}

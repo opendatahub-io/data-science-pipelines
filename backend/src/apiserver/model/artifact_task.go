@@ -51,7 +51,7 @@ func (at ArtifactTask) GetModelName() string {
 	return "artifact_tasks"
 }
 
-func (at ArtifactTask) GetSortByFieldPrefix(s string) string {
+func (at ArtifactTask) GetSortByFieldPrefix(string) string {
 	return "artifact_tasks."
 }
 

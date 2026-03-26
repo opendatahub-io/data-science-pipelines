@@ -15,8 +15,10 @@
 package model
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 
 	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -25,6 +27,15 @@ import (
 
 // JSONSlice represents JSON list data stored in database columns
 type JSONSlice []interface{}
+
+var (
+	_ sql.Scanner   = (*JSONSlice)(nil)
+	_ sql.Scanner   = (*JSONData)(nil)
+	_ sql.Scanner   = (*PodNames)(nil)
+	_ driver.Valuer = (*JSONSlice)(nil)
+	_ driver.Valuer = (*JSONData)(nil)
+	_ driver.Valuer = (*PodNames)(nil)
+)
 
 func (j *JSONSlice) Value() (driver.Value, error) {
 	if j == nil {
@@ -45,7 +56,7 @@ func (j *JSONSlice) Scan(value interface{}) error {
 	case string:
 		return json.Unmarshal([]byte(v), j)
 	default:
-		return nil
+		return fmt.Errorf("unsupported JSONSlice scan type %T", value)
 	}
 }
 
@@ -64,7 +75,7 @@ func (j *JSONData) Scan(value interface{}) error {
 	case string:
 		return json.Unmarshal([]byte(v), j)
 	default:
-		return nil
+		return fmt.Errorf("unsupported JSONData scan type %T", value)
 	}
 }
 
@@ -92,7 +103,7 @@ func (p *PodNames) Scan(value interface{}) error {
 	case string:
 		return json.Unmarshal([]byte(v), p)
 	default:
-		return nil
+		return fmt.Errorf("unsupported PodNames scan type %T", value)
 	}
 }
 

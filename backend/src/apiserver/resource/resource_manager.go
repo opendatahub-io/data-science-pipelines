@@ -949,7 +949,7 @@ func (r *ResourceManager) CreateTask(t *model.Task) (*model.Task, error) {
 }
 
 // Fetches tasks with a given set of filtering and listing options.
-// namespaceSet indicates whether the namespace filter was explicitly set (even if empty).
+// Namespace filtering only applies when namespace is non-empty.
 func (r *ResourceManager) ListTasks(runID, parentID, namespace string, opts *list.Options) ([]*model.Task, int, string, error) {
 	var filterContext *model.FilterContext
 

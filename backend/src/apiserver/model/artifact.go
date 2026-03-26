@@ -50,7 +50,7 @@ func (a Artifact) GetModelName() string {
 	return "artifacts"
 }
 
-func (a Artifact) GetSortByFieldPrefix(s string) string {
+func (a Artifact) GetSortByFieldPrefix(string) string {
 	return "artifacts."
 }
 

@@ -17,6 +17,7 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 
 	sq "github.com/Masterminds/squirrel"
@@ -45,13 +46,15 @@ var artifactColumns = []string{
 var _ ArtifactStoreInterface = &ArtifactStore{}
 
 type ArtifactStoreInterface interface {
-	// Create an artifact entry in the database.
+	// CreateArtifact creates an artifact entry in the database.
 	CreateArtifact(artifact *model.Artifact) (*model.Artifact, error)
 
-	// Fetches an artifact with a given id.
+	// GetArtifact fetches an artifact with a given id.
 	GetArtifact(id string) (*model.Artifact, error)
 
-	// Fetches artifacts for given filtering and listing options.
+	// ListArtifacts fetches artifacts for given filtering and listing options.
+	// It returns the current page of artifacts, the total count across all pages,
+	// the next page token, and an error.
 	ListArtifacts(filterContext *model.FilterContext, opts *list.Options) ([]*model.Artifact, int, string, error)
 }
 
@@ -144,7 +147,7 @@ func (s *ArtifactStore) scanRows(rows *sql.Rows) ([]*model.Artifact, error) {
 			&numberValue,
 		)
 		if err != nil {
-			return artifacts, err
+			return nil, err
 		}
 
 		// Parse metadata JSON
@@ -152,7 +155,7 @@ func (s *ArtifactStore) scanRows(rows *sql.Rows) ([]*model.Artifact, error) {
 		if metadataBytes != nil {
 			err = metadata.Scan(metadataBytes)
 			if err != nil {
-				return artifacts, util.NewInternalServerError(err, "Failed to parse artifact metadata")
+				return nil, util.NewInternalServerError(err, "Failed to parse artifact metadata")
 			}
 		}
 
@@ -190,6 +193,8 @@ func (s *ArtifactStore) ListArtifacts(filterContext *model.FilterContext, opts *
 	if filterContext != nil && filterContext.ReferenceKey != nil {
 		if filterContext.Type == model.NamespaceResourceType {
 			sqlBuilder = sqlBuilder.Where(sq.Eq{"Namespace": filterContext.ID})
+		} else {
+			return nil, 0, "", util.NewInvalidInputError("Unsupported artifact filter type %q", filterContext.Type)
 		}
 	}
 
@@ -205,6 +210,8 @@ func (s *ArtifactStore) ListArtifacts(filterContext *model.FilterContext, opts *
 	if filterContext != nil && filterContext.ReferenceKey != nil {
 		if filterContext.Type == model.NamespaceResourceType {
 			countBuilder = countBuilder.Where(sq.Eq{"Namespace": filterContext.ID})
+		} else {
+			return nil, 0, "", util.NewInvalidInputError("Unsupported artifact filter type %q", filterContext.Type)
 		}
 	}
 	sizeSQL, sizeArgs, err := opts.AddFilterToSelect(countBuilder).ToSql()
@@ -215,45 +222,48 @@ func (s *ArtifactStore) ListArtifacts(filterContext *model.FilterContext, opts *
 	// Use a transaction to make sure we're returning the totalSize of the same rows queried
 	tx, err := s.db.Begin()
 	if err != nil {
-		glog.Errorf("Failed to start transaction to list artifacts")
 		return errorF(err)
+	}
+	rollback := func() {
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			glog.Warningf("Failed to rollback artifact list transaction: %v", rbErr)
+		}
 	}
 
 	rows, err := tx.Query(rowsSQL, rowsArgs...)
 	if err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	if err := rows.Err(); err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	artifacts, err := s.scanRows(rows)
 	if err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	defer rows.Close()
 
 	sizeRow, err := tx.Query(sizeSQL, sizeArgs...)
 	if err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	if err := sizeRow.Err(); err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	totalSize, err := list.ScanRowToTotalSize(sizeRow)
 	if err != nil {
-		tx.Rollback()
+		rollback()
 		return errorF(err)
 	}
 	defer sizeRow.Close()
 
 	err = tx.Commit()
 	if err != nil {
-		glog.Errorf("Failed to commit transaction to list artifacts")
 		return errorF(err)
 	}
 
@@ -262,7 +272,10 @@ func (s *ArtifactStore) ListArtifacts(filterContext *model.FilterContext, opts *
 	}
 
 	npt, err := opts.NextPageToken(artifacts[opts.PageSize])
-	return artifacts[:opts.PageSize], totalSize, npt, err
+	if err != nil {
+		return errorF(err)
+	}
+	return artifacts[:opts.PageSize], totalSize, npt, nil
 }
 
 func (s *ArtifactStore) GetArtifact(id string) (*model.Artifact, error) {
@@ -282,8 +295,11 @@ func (s *ArtifactStore) GetArtifact(id string) (*model.Artifact, error) {
 	defer r.Close()
 
 	artifacts, err := s.scanRows(r)
-	if err != nil || len(artifacts) > 1 {
+	if err != nil {
 		return nil, util.NewInternalServerError(err, "Failed to get artifact: %v", err.Error())
+	}
+	if len(artifacts) > 1 {
+		return nil, util.NewInternalServerError(errors.New("multiple artifacts found"), "Failed to get artifact %s: multiple rows returned", id)
 	}
 	if len(artifacts) == 0 {
 		return nil, util.NewResourceNotFoundError("artifact", fmt.Sprint(id))

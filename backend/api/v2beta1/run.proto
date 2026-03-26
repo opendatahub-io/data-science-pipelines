@@ -226,7 +226,7 @@ message Run {
     // Pipeline spec.
     google.protobuf.Struct pipeline_spec = 7;
 
-    // Reference to a pipeline containing pipeline_id and optionally the pipeline_version_id.
+  // Reference to a pipeline containing pipeline_id and optionally the pipeline_version_id.
     PipelineVersionReference pipeline_version_reference = 18;
   }
 
@@ -297,6 +297,8 @@ enum RuntimeState {
   // Entity completed successfully.
   SUCCEEDED = 3;
 
+  // Values 4 and 5 were intentionally retired to preserve compatibility after
+  // removing unused run-level states from the API.
   // Entity execution has failed.
   FAILED = 6;
 
