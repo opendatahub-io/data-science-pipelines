@@ -34,7 +34,7 @@ oauthlib==3.3.1
     # via
     #   kubernetes
     #   requests-oauthlib
-protobuf==4.25.8
+protobuf==4.25.9
     # via ml-metadata
 pyasn1==0.6.2
     # via
