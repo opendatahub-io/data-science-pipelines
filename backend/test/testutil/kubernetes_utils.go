@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"slices"
 	"strings"
 	"time"
@@ -145,6 +146,23 @@ func GetPodContainingContainer(client *kubernetes.Clientset, namespace, containe
 		}
 	}
 	return nil
+}
+
+// GetPodNamesByRunID returns pod names for a pipeline run id.
+func GetPodNamesByRunID(client *kubernetes.Clientset, namespace, runID string) []string {
+	pods, err := client.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("pipeline/runid=%s", runID),
+	})
+	if err != nil {
+		logger.Log("Failed to list pods for runID=%s due to: %v", runID, err)
+		return nil
+	}
+	names := make([]string, 0, len(pods.Items))
+	for _, pod := range pods.Items {
+		names = append(names, pod.Name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func CreateUserToken(client *kubernetes.Clientset, namespace, serviceAccountName string) string {

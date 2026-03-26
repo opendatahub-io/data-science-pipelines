@@ -74,6 +74,14 @@ jobs:
         pod_to_pod_tls_enabled: [ "true" ]
         deploy_pypi_server: [ "false" ]
         include:
+          - deploy_pypi_server: "false"
+            k8s_version: "v1.34.0"
+            cache_enabled: "false"
+            deploy_external_argo: "false"
+            storage: "seaweedfs"
+            proxy: "false"
+            test_label: "ArtifactTests"
+            pod_to_pod_tls_enabled: "true"
           - k8s_version: "v1.31.0"
             cache_enabled: "false"
             proxy: "true"
@@ -185,6 +193,15 @@ jobs:
           docker build -f ./test_data/sdk_compiled_pipelines/valid/critical/modelcar/Dockerfile -t registry.domain.local/modelcar:test .
           kind --name kfp load docker-image registry.domain.local/modelcar:test
         continue-on-error: true
+
+      - name: Configure SeaweedFS Host Alias For Artifact Tests
+        id: configure-artifacttests-seaweedfs-host-alias
+        if: ${{ steps.configure.outcome == 'success' && steps.configure.outputs.TEST_LABEL == 'ArtifactTests' && matrix.storage == 'seaweedfs' }}
+        shell: bash
+        run: |
+          if ! grep -q '^127\.0\.0\.1 seaweedfs\.kubeflow\.svc\.cluster\.local$' /etc/hosts; then
+            echo "127.0.0.1 seaweedfs.kubeflow.svc.cluster.local" | sudo tee -a /etc/hosts > /dev/null
+          fi
 
       - name: Run Tests
         uses: ./.github/actions/test-and-report

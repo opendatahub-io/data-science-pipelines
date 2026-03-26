@@ -17,10 +17,12 @@ package end2end
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	"github.com/kubeflow/pipelines/backend/api/v2beta1/go_http_client/experiment_model"
 	upload_params "github.com/kubeflow/pipelines/backend/api/v2beta1/go_http_client/pipeline_upload_client/pipeline_upload_service"
 	"github.com/kubeflow/pipelines/backend/api/v2beta1/go_http_client/pipeline_upload_model"
@@ -167,6 +169,20 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		}
 	})
 
+	Context("Upload pipeline, run it, and verify artifacts can be downloaded >", FlakeAttempts(2), Label(ArtifactTests), func() {
+		var pipelineDir = "valid"
+		pipelineFiles := []string{
+			"critical/pythonic_artifacts_test_pipeline.yaml",
+			"critical/pipeline_with_artifact_upload_download.yaml",
+		}
+		for _, pipelineFile := range pipelineFiles {
+			It(fmt.Sprintf("Upload %s pipeline and verify artifact download", pipelineFile), FlakeAttempts(2), func() {
+				createdRunID, compiledWorkflow := validatePipelineRunSuccessAndGetCompiledWorkflow(pipelineFile, pipelineDir, testContext)
+				validateArtifactReadEndpoint(createdRunID, compiledWorkflow)
+			})
+		}
+	})
+
 	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(Sanity), func() {
 		var pipelineDir = "valid"
 		pipelineFiles := []string{
@@ -249,7 +265,12 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 	})
 })
 
-func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testContext *apitests.TestContext) {
+func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testContext *apitests.TestContext) string {
+	createdRunID, _ := validatePipelineRunSuccessAndGetCompiledWorkflow(pipelineFile, pipelineDir, testContext)
+	return createdRunID
+}
+
+func validatePipelineRunSuccessAndGetCompiledWorkflow(pipelineFile string, pipelineDir string, testContext *apitests.TestContext) (string, *v1alpha1.Workflow) {
 	testutil.CheckIfSkipping(pipelineFile)
 	pipelineFilePath := filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir, pipelineFile)
 	logger.Log("Uploading pipeline file %s", pipelineFile)
@@ -266,5 +287,174 @@ func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testCon
 	}
 	compiledWorkflow := workflowutils.UnmarshallWorkflowYAML(filepath.Join(testutil.GetCompiledWorkflowsFilesDir(), pipelineFile))
 	e2e_utils.ValidateComponentStatuses(runClient, k8Client, testContext, createdRunID, compiledWorkflow)
+	return createdRunID, compiledWorkflow
+}
 
+func validateArtifactReadEndpoint(runID string, compiledWorkflow *v1alpha1.Workflow) {
+	updatedRun := testutil.GetPipelineRun(runClient, &runID)
+	Expect(updatedRun.RunDetails).NotTo(BeNil(), "RunDetails should be available for run=%s", runID)
+	Expect(updatedRun.RunDetails.TaskDetails).NotTo(BeEmpty(), "TaskDetails should be available for run=%s", runID)
+
+	nodeID, artifactName, artifactID := getFirstTaskOutputArtifact(updatedRun.RunDetails.TaskDetails)
+	if nodeID == "" || artifactName == "" || artifactID == "" {
+		logger.Log("TaskDetails outputs are empty for run=%s, falling back to workflow-task based pod discovery and ListArtifacts", runID)
+		expectedTaskNames := getExpectedTaskNamesFromCompiledWorkflow(compiledWorkflow)
+		nodeID, artifactName, artifactID = findArtifactForRunWithKubernetesAndListArtifacts(runID, updatedRun.RunDetails.TaskDetails, expectedTaskNames)
+	}
+	Expect(artifactID).NotTo(BeEmpty(), "Expected output artifact id for run=%s", runID)
+
+	if nodeID != "" && artifactName != "" {
+		logger.Log("Validating artifact read endpoint for run=%s, node=%s, artifact=%s", runID, nodeID, artifactName)
+		decodedArtifact, decodeErr := artifactClient.ReadArtifact(runID, nodeID, artifactName)
+		Expect(decodeErr).To(BeNil(), "Artifact read endpoint should return decodable artifact bytes")
+		Expect(decodedArtifact).NotTo(BeEmpty(), "Decoded artifact payload should not be empty")
+	} else {
+		logger.Log("Skipping read endpoint check for run=%s because node/artifact name could not be resolved; validating signed download only", runID)
+	}
+
+	validateArtifactSignedDownload(artifactID)
+}
+
+func findArtifactForRunWithKubernetesAndListArtifacts(runID string, taskDetails []*run_model.V2beta1PipelineTaskDetail, expectedTaskNames map[string]struct{}) (string, string, string) {
+	workflowName := testutil.GetWorkflowNameByRunID(testutil.GetNamespace(), runID)
+	nodeIDCandidates := getNodeIDCandidatesFromTaskDetails(taskDetails, expectedTaskNames)
+	podNamesByRunID := testutil.GetPodNamesByRunID(k8Client, testutil.GetNamespace(), runID)
+	nodeIDCandidates = append(nodeIDCandidates, podNamesByRunID...)
+
+	artifacts, listErr := artifactClient.ListArtifacts(testutil.GetNamespace())
+	if listErr != nil {
+		return "", "", ""
+	}
+	artifactPathPattern := regexp.MustCompile(`/artifacts/([^/?]+)`)
+	for _, artifact := range artifacts {
+		storagePath := artifact.StoragePath
+		if storagePath == "" {
+			storagePath = artifact.StoragePathSnake
+		}
+		if storagePath == "" && artifact.URI == "" {
+			continue
+		}
+		artifactID := artifact.ArtifactID
+		if artifactID == "" {
+			artifactID = artifact.ArtifactIDSnake
+		}
+		if artifactID == "" {
+			continue
+		}
+		sourceText := storagePath + " " + artifact.URI
+		if !containsAny(sourceText, []string{runID, workflowName}) {
+			hasPodMatch := false
+			for _, podName := range podNamesByRunID {
+				if podName != "" && strings.Contains(sourceText, podName) {
+					hasPodMatch = true
+					break
+				}
+			}
+			if !hasPodMatch {
+				continue
+			}
+		}
+		artifactName := ""
+		pathMatches := artifactPathPattern.FindStringSubmatch(sourceText)
+		if len(pathMatches) == 2 {
+			artifactName = pathMatches[1]
+		}
+		for _, nodeIDCandidate := range nodeIDCandidates {
+			if nodeIDCandidate == "" {
+				continue
+			}
+			if strings.Contains(sourceText, nodeIDCandidate) {
+				if artifactName != "" {
+					return nodeIDCandidate, artifactName, artifactID
+				}
+				return nodeIDCandidate, "", artifactID
+			}
+		}
+		if len(nodeIDCandidates) > 0 {
+			return nodeIDCandidates[0], artifactName, artifactID
+		}
+		return "", artifactName, artifactID
+	}
+	return "", "", ""
+}
+
+func getNodeIDCandidatesFromTaskDetails(taskDetails []*run_model.V2beta1PipelineTaskDetail, expectedTaskNames map[string]struct{}) []string {
+	nodeIDCandidates := make([]string, 0, len(taskDetails))
+	fallbackNodeIDCandidates := make([]string, 0, len(taskDetails))
+	for _, taskDetail := range taskDetails {
+		if taskDetail == nil {
+			continue
+		}
+		candidates := make([]string, 0, 2)
+		if taskDetail.PodName != "" {
+			candidates = append(candidates, taskDetail.PodName)
+		}
+		if taskDetail.TaskID != "" {
+			if pod := testutil.GetPodContainingName(k8Client, testutil.GetNamespace(), taskDetail.TaskID); pod != nil {
+				candidates = append(candidates, pod.Name)
+			}
+		}
+		if len(candidates) == 0 {
+			continue
+		}
+		if _, expected := expectedTaskNames[taskDetail.DisplayName]; expected {
+			nodeIDCandidates = append(nodeIDCandidates, candidates...)
+		} else {
+			fallbackNodeIDCandidates = append(fallbackNodeIDCandidates, candidates...)
+		}
+	}
+	nodeIDCandidates = append(nodeIDCandidates, fallbackNodeIDCandidates...)
+	return nodeIDCandidates
+}
+
+func containsAny(sourceText string, keywords []string) bool {
+	for _, keyword := range keywords {
+		if keyword != "" && strings.Contains(sourceText, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func getExpectedTaskNamesFromCompiledWorkflow(compiledWorkflow *v1alpha1.Workflow) map[string]struct{} {
+	expectedTaskNames := map[string]struct{}{}
+	for _, taskDetails := range e2e_utils.GetTasksFromWorkflow(compiledWorkflow) {
+		expectedTaskNames[taskDetails.TaskName] = struct{}{}
+	}
+	return expectedTaskNames
+}
+
+func getFirstTaskOutputArtifact(taskDetails []*run_model.V2beta1PipelineTaskDetail) (string, string, string) {
+	for _, taskDetail := range taskDetails {
+		if taskDetail == nil || len(taskDetail.Outputs) == 0 {
+			continue
+		}
+		nodeID := taskDetail.PodName
+		if nodeID == "" {
+			// In v2 task details, task_id may be present while pod_name is omitted.
+			nodeID = taskDetail.TaskID
+		}
+		if nodeID == "" {
+			continue
+		}
+		for artifactName, artifactList := range taskDetail.Outputs {
+			if len(artifactList.ArtifactIds) == 0 {
+				continue
+			}
+			return nodeID, artifactName, artifactList.ArtifactIds[0]
+		}
+	}
+	return "", "", ""
+}
+
+func validateArtifactSignedDownload(artifactID string) {
+	logger.Log("Validating artifact signed download for artifact id=%s", artifactID)
+
+	downloadURLString, downloadURLErr := artifactClient.GetArtifactDownloadURL(artifactID)
+	Expect(downloadURLErr).To(BeNil(), "Artifact details endpoint should include download URL")
+	Expect(downloadURLString).NotTo(BeEmpty(), "Artifact download URL should not be empty")
+
+	downloadedArtifact, downloadedArtifactErr := artifactClient.DownloadArtifact(downloadURLString)
+	Expect(downloadedArtifactErr).To(BeNil(), "Failed downloading artifact via signed URL")
+	Expect(downloadedArtifact).NotTo(BeEmpty(), "Downloaded artifact bytes should not be empty")
 }

@@ -30,6 +30,8 @@ const (
 	E2eCritical string = "E2ECritical"
 	// E2eProxy - For pipeline that runs with a proxy
 	E2eProxy string = "E2EProxy"
+	// ArtifactTests - For tests that validate artifact APIs/download behavior
+	ArtifactTests string = "ArtifactTests"
 
 	WorkflowCompiler       string = "WorkflowCompiler"
 	WorkflowCompilerVisits string = "WorkflowCompilerVisits"
