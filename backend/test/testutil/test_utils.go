@@ -91,19 +91,37 @@ func CheckIfSkipping(stringValue string) {
 
 func WriteLogFile(specReport types.SpecReport, testName, logDirectory string) {
 	stdOutput := specReport.CapturedGinkgoWriterOutput
-	testLogFile := filepath.Join(logDirectory, testName+".log")
+	if err := os.MkdirAll(logDirectory, 0755); err != nil {
+		logger.Log("Failed to create log directory due to: %s", err.Error())
+		return
+	}
+	sanitizedTestName := sanitizeFilename(testName)
+	testLogFile := filepath.Join(logDirectory, sanitizedTestName+".log")
 	logFile, err := os.Create(testLogFile)
 	if err != nil {
 		logger.Log("Failed to create log file due to: %s", err.Error())
+		return
 	}
+	defer func() {
+		if closeErr := logFile.Close(); closeErr != nil {
+			logger.Log("Failed to close log file due to: %s", closeErr.Error())
+		}
+	}()
 	_, err = logFile.Write([]byte(stdOutput))
 	if err != nil {
 		logger.Log("Failed to write to the log file, due to: %s", err.Error())
-	}
-	err = logFile.Close()
-	if err != nil {
 		return
 	}
+}
+
+func sanitizeFilename(name string) string {
+	invalidChars := regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
+	sanitized := invalidChars.ReplaceAllString(name, "_")
+	sanitized = strings.TrimSpace(sanitized)
+	if sanitized == "" {
+		return "test-log"
+	}
+	return sanitized
 }
 
 // GetWorkflowNameByRunID retrieves the Argo Workflow name for a given pipeline run ID

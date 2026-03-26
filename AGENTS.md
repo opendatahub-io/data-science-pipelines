@@ -7,7 +7,7 @@
 
 ### Document metadata
 
-- Last updated: 2026-03-21
+- Last updated: 2026-03-26
 - Scope: KFP master branch (v2 engine), backend (Go), SDK (Python), frontend (React 17)
 
 ### Maintenance (agents and contributors)
@@ -516,6 +516,7 @@ When changing an effect-heavy frontend component, add or run the smallest releva
 
 - Kind-based clusters are provisioned via the `kfp-cluster` composite action, parameterized by `k8s_version`, `pipeline_store`, `proxy`, `cache_enabled`, and optional `argo_version`.
 - The `create-cluster` and `deploy` actions are used by newer suites; `kfp-k8s` installs SDK components from source inside jobs that execute Python-based tests.
+- In `e2e-test.yml`, `ArtifactTests` with `seaweedfs` configures a runner hosts alias for `seaweedfs.kubeflow.svc.cluster.local`; the shared `test-and-report` action handles the SeaweedFS `kubectl port-forward`.
 - The `protobuf` composite action prepares `protoc` and related dependencies when compiling Python protobufs.
 - The `create-cluster` action caches Kind node images by Kubernetes version to reduce Docker Hub pulls.
 - Python workflows use `actions/cache@v5` for pip cache to reduce repeated dependency installs.
