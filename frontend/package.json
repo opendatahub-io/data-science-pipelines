@@ -187,7 +187,7 @@
     "braces": "3.0.3",
     "minimatch": "3.0.5",
     "tmpl": "1.0.5",
-    "cross-spawn": "7.0.5",
+    "cross-spawn": "7.0.6",
     "react-dev-utils": {
       "ansi-regex": "5.0.1"
     },
