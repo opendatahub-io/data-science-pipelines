@@ -37,46 +37,96 @@ var metadataEnvFrom = k8score.EnvFromSource{
 	},
 }
 
-var commonEnvs = []k8score.EnvVar{{
-	Name: "KFP_POD_NAME",
-	ValueFrom: &k8score.EnvVarSource{
-		FieldRef: &k8score.ObjectFieldSelector{
-			FieldPath: "metadata.name",
+// KFP service account token configuration for authentication with API server
+const (
+	// kfpTokenExpirationSeconds is the expiration time for the projected service account token.
+	// Set to 7200 seconds (2 hours) to provide enough buffer while kubelet auto-rotates tokens.
+	kfpTokenExpirationSeconds = 7200
+	// kfpTokenVolumeName is the name of the volume containing the KFP service account token
+	kfpTokenVolumeName = "kfp-launcher-token"
+	// kfpTokenMountPath is the path where the KFP token is mounted
+	kfpTokenMountPath = "/var/run/secrets/kfp"
+	// kfpTokenAudience is the audience for the projected service account token
+	kfpTokenAudience = "pipelines.kubeflow.org"
+)
+
+// kfpTokenExpirationSecondsPtr returns a pointer to the KFP token expiration seconds constant.
+// This is used for the ServiceAccountTokenProjection ExpirationSeconds field which requires *int64.
+func kfpTokenExpirationSecondsPtr() *int64 {
+	seconds := int64(kfpTokenExpirationSeconds)
+	return &seconds
+}
+
+var commonEnvs = []k8score.EnvVar{
+	{
+		Name: "KFP_POD_NAME",
+		ValueFrom: &k8score.EnvVarSource{
+			FieldRef: &k8score.ObjectFieldSelector{
+				FieldPath: "metadata.name",
+			},
 		},
 	},
-}, {
-	Name: "KFP_POD_UID",
-	ValueFrom: &k8score.EnvVarSource{
-		FieldRef: &k8score.ObjectFieldSelector{
-			FieldPath: "metadata.uid",
+	{
+		Name: "KFP_POD_UID",
+		ValueFrom: &k8score.EnvVarSource{
+			FieldRef: &k8score.ObjectFieldSelector{
+				FieldPath: "metadata.uid",
+			},
 		},
 	},
-}}
+	{
+		Name: "NAMESPACE",
+		ValueFrom: &k8score.EnvVarSource{
+			FieldRef: &k8score.ObjectFieldSelector{
+				FieldPath: "metadata.namespace",
+			},
+		},
+	},
+}
 
 // ConfigureCustomCABundle adds CABundle environment variables and volume mounts if CABUNDLE_SECRET_NAME is set.
 func ConfigureCustomCABundle(tmpl *wfapi.Template) {
-	caBundleDir := common.CABundleDir
 	caBundleSecretName := common.GetCaBundleSecretName()
-	if caBundleSecretName == "" {
-		glog.Error("Env var CABUNDLE_SECRET_NAME is blank or empty. Failed to configure custom CA bundle.")
+	caBundleConfigMapName := common.GetCaBundleConfigMapName()
+	// If CABUNDLE_KEY_NAME is not set, use "ca.crt".
+	caBundleKeyName := common.GetCABundleKey()
+	if caBundleKeyName == "" {
+		caBundleKeyName = "ca.crt"
+	}
+	volumeSource := k8score.VolumeSource{}
+
+	// CABUNDLE_SECRET_NAME is prioritized above CABUNDLE_CONFIGMAP_NAME.
+	if caBundleSecretName != "" { // nolint:gocritic // ifElseChain is preferred here for clarity over a switch
+		volumeSource.Secret = &k8score.SecretVolumeSource{
+			SecretName: caBundleSecretName,
+			Items: []k8score.KeyToPath{
+				{
+					Key:  caBundleKeyName,
+					Path: "ca.crt",
+				},
+			},
+		}
+	} else if caBundleConfigMapName != "" {
+		volumeSource.ConfigMap = &k8score.ConfigMapVolumeSource{
+			LocalObjectReference: k8score.LocalObjectReference{Name: caBundleConfigMapName},
+			Items: []k8score.KeyToPath{
+				{
+					Key:  caBundleKeyName,
+					Path: "ca.crt",
+				},
+			},
+		}
+	} else {
+		glog.Error("Neither CABUNDLE_SECRET_NAME nor CABUNDLE_CONFIGMAP_NAME is set. Failed to configure custom CA bundle.")
 		return
 	}
 	volume := k8score.Volume{
-		Name: "ca-secret",
-		VolumeSource: k8score.VolumeSource{
-			Secret: &k8score.SecretVolumeSource{
-				SecretName: caBundleSecretName,
-			},
-		},
+		Name:         "custom-ca",
+		VolumeSource: volumeSource,
 	}
-
 	tmpl.Volumes = append(tmpl.Volumes, volume)
 
-	volumeMount := k8score.VolumeMount{
-		Name:      "ca-secret",
-		MountPath: caBundleDir,
-	}
-
+	volumeMount := k8score.VolumeMount{Name: "custom-ca", MountPath: common.CABundleDir}
 	tmpl.Container.VolumeMounts = append(tmpl.Container.VolumeMounts, volumeMount)
 
 }
@@ -91,7 +141,7 @@ func addExitTask(task *wfapi.DAGTask, exitTemplate string, parentDagID string) {
 		wfapi.ExitLifecycleEvent: wfapi.LifecycleHook{
 			Template: exitTemplate,
 			Arguments: wfapi.Arguments{Parameters: []wfapi.Parameter{
-				{Name: paramParentDagID, Value: wfapi.AnyStringPtr(parentDagID)},
+				{Name: paramParentDagTaskID, Value: wfapi.AnyStringPtr(parentDagID)},
 			}},
 		},
 	}

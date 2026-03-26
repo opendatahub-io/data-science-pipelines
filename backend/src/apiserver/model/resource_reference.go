@@ -22,6 +22,8 @@ const (
 	RunResourceType             ResourceType = "Run"
 	PipelineResourceType        ResourceType = "pipeline"
 	PipelineVersionResourceType ResourceType = "PipelineVersion"
+	ArtifactResourceType        ResourceType = "Artifact"
+	TaskResourceType            ResourceType = "Task"
 )
 
 const (
@@ -179,6 +181,10 @@ type ReferenceKey struct {
 type FilterContext struct {
 	// Filter by a specific reference key
 	*ReferenceKey
+}
+
+func EmptyFilterContext() *FilterContext {
+	return &FilterContext{}
 }
 
 // Checks whether the resource-reference relationship combination is valid.

@@ -22,7 +22,10 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
+	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
 	scheduledworkflow "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 
 	"github.com/cenkalti/backoff"
@@ -77,6 +80,13 @@ var (
 		Name: "resource_manager_workflow_runs_failed",
 		Help: "The current number of failed workflow runs",
 	}, extraLabels)
+
+	// Map API enum values to Kubernetes DeletionPropagation values
+	propagationPolicyMap = map[apiv2beta1.DeletePropagationPolicy]v1.DeletionPropagation{
+		apiv2beta1.DeletePropagationPolicy_FOREGROUND: v1.DeletePropagationForeground,
+		apiv2beta1.DeletePropagationPolicy_BACKGROUND: v1.DeletePropagationBackground,
+		apiv2beta1.DeletePropagationPolicy_ORPHAN:     v1.DeletePropagationOrphan,
+	}
 )
 
 type ClientManagerInterface interface {
@@ -85,6 +95,8 @@ type ClientManagerInterface interface {
 	JobStore() storage.JobStoreInterface
 	RunStore() storage.RunStoreInterface
 	TaskStore() storage.TaskStoreInterface
+	ArtifactStore() storage.ArtifactStoreInterface
+	ArtifactTaskStore() storage.ArtifactTaskStoreInterface
 	ResourceReferenceStore() storage.ResourceReferenceStoreInterface
 	DBStatusStore() storage.DBStatusStoreInterface
 	DefaultExperimentStore() storage.DefaultExperimentStoreInterface
@@ -105,6 +117,9 @@ type ResourceManagerOptions struct {
 	CacheDisabled        bool                              `json:"cache_disabled,omitempty"`
 	DefaultWorkspace     *corev1.PersistentVolumeClaimSpec `json:"default_workspace,omitempty"`
 	MLPipelineTLSEnabled bool                              `json:"ml_pipeline_tls_enabled,omitempty"`
+	DefaultRunAsUser     *int64                            `json:"default_run_as_user,omitempty"`
+	DefaultRunAsGroup    *int64                            `json:"default_run_as_group,omitempty"`
+	DefaultRunAsNonRoot  *bool                             `json:"default_run_as_non_root,omitempty"`
 }
 
 type ResourceManager struct {
@@ -113,6 +128,8 @@ type ResourceManager struct {
 	jobStore                  storage.JobStoreInterface
 	runStore                  storage.RunStoreInterface
 	taskStore                 storage.TaskStoreInterface
+	artifactStore             storage.ArtifactStoreInterface
+	artifactTaskStore         storage.ArtifactTaskStoreInterface
 	resourceReferenceStore    storage.ResourceReferenceStoreInterface
 	dBStatusStore             storage.DBStatusStoreInterface
 	defaultExperimentStore    storage.DefaultExperimentStoreInterface
@@ -136,6 +153,8 @@ func NewResourceManager(clientManager ClientManagerInterface, options *ResourceM
 		jobStore:                  clientManager.JobStore(),
 		runStore:                  clientManager.RunStore(),
 		taskStore:                 clientManager.TaskStore(),
+		artifactStore:             clientManager.ArtifactStore(),
+		artifactTaskStore:         clientManager.ArtifactTaskStore(),
 		resourceReferenceStore:    clientManager.ResourceReferenceStore(),
 		dBStatusStore:             clientManager.DBStatusStore(),
 		defaultExperimentStore:    clientManager.DefaultExperimentStore(),
@@ -251,8 +270,12 @@ func (r *ResourceManager) UnarchiveExperiment(experimentId string) error {
 }
 
 // Returns a list of pipelines.
-func (r *ResourceManager) ListPipelines(filterContext *model.FilterContext, opts *list.Options) ([]*model.Pipeline, int, string, error) {
-	pipelines, total_size, nextPageToken, err := r.pipelineStore.ListPipelines(filterContext, opts)
+func (r *ResourceManager) ListPipelines(filterContext *model.FilterContext, opts *list.Options, tagFilters ...map[string]string) ([]*model.Pipeline, int, string, error) {
+	var resolvedTagFilters map[string]string
+	if len(tagFilters) > 0 {
+		resolvedTagFilters = tagFilters[0]
+	}
+	pipelines, total_size, nextPageToken, err := r.pipelineStore.ListPipelines(filterContext, opts, resolvedTagFilters)
 	if err != nil {
 		err = util.Wrapf(err, "Failed to list pipelines with context %v, options %v", filterContext, opts)
 	}
@@ -312,7 +335,7 @@ func (r *ResourceManager) DeletePipeline(pipelineId string, cascade bool) error 
 	if cascade {
 		// Get all pipeline versions for this pipeline and delete them
 		opts := list.EmptyOptions()
-		pipelineVersions, _, _, err := r.pipelineStore.ListPipelineVersions(pipelineId, opts)
+		pipelineVersions, _, _, err := r.pipelineStore.ListPipelineVersions(pipelineId, opts, nil)
 		if err != nil {
 			return util.Wrapf(err, "Failed to delete pipeline with id %v due to error listing pipeline versions", pipelineId)
 		}
@@ -363,11 +386,79 @@ func (r *ResourceManager) UpdatePipelineDefaultVersion(pipelineId string, versio
 	return r.pipelineStore.UpdatePipelineDefaultVersion(pipelineId, versionId)
 }
 
+// MaxTagKeyLength is the maximum allowed length (in characters) for a tag key.
+const MaxTagKeyLength = 63
+
+// MaxTagValueLength is the maximum allowed length (in characters) for a tag value.
+const MaxTagValueLength = 63
+
+// MaxTagsPerEntity is the maximum number of tags allowed on a single pipeline or pipeline version.
+const MaxTagsPerEntity = 20
+
+// validateTags checks that tags conform to all constraints:
+// - maximum number of tags per entity
+// - no empty keys
+// - keys must not contain "." (conflicts with tag filter prefix "tags.")
+// - key and value character lengths within limits
+func validateTags(tags map[string]string) error {
+	if len(tags) > MaxTagsPerEntity {
+		return util.NewInvalidInputError("number of tags (%d) exceeds maximum of %d per entity", len(tags), MaxTagsPerEntity)
+	}
+	for key, value := range tags {
+		if key == "" {
+			return util.NewInvalidInputError("tag key cannot be empty")
+		}
+		if strings.Contains(key, ".") {
+			return util.NewInvalidInputError("tag key %q must not contain '.' character", key)
+		}
+		if utf8.RuneCountInString(key) > MaxTagKeyLength {
+			return util.NewInvalidInputError("tag key %q exceeds maximum length of %d characters", key, MaxTagKeyLength)
+		}
+		if utf8.RuneCountInString(value) > MaxTagValueLength {
+			return util.NewInvalidInputError("tag value %q for key %q exceeds maximum length of %d characters", value, key, MaxTagValueLength)
+		}
+	}
+	return nil
+}
+
+// UpdatePipeline updates mutable fields of a pipeline (display_name, tags).
+// Both fields are updated in a single transaction via UpdatePipelineFields.
+func (r *ResourceManager) UpdatePipeline(pipelineID string, displayName string, tags map[string]string) (*model.Pipeline, error) {
+	if pipelineID == "" {
+		return nil, util.NewInvalidInputError("pipeline id cannot be empty when updating pipeline")
+	}
+	if err := validateTags(tags); err != nil {
+		return nil, err
+	}
+	if err := r.pipelineStore.UpdatePipelineFields(pipelineID, displayName, tags); err != nil {
+		return nil, util.Wrap(err, "Failed to update pipeline")
+	}
+	return r.pipelineStore.GetPipeline(pipelineID)
+}
+
+// UpdatePipelineVersion updates mutable fields of a pipeline version (display_name, tags)
+// in a single transaction to prevent deadlocks.
+func (r *ResourceManager) UpdatePipelineVersion(pipelineVersionID string, displayName string, tags map[string]string) (*model.PipelineVersion, error) {
+	if pipelineVersionID == "" {
+		return nil, util.NewInvalidInputError("pipeline version id cannot be empty when updating pipeline version")
+	}
+	if err := validateTags(tags); err != nil {
+		return nil, err
+	}
+	if err := r.pipelineStore.UpdatePipelineVersionFields(pipelineVersionID, displayName, tags); err != nil {
+		return nil, util.Wrap(err, "Failed to update pipeline version")
+	}
+	return r.pipelineStore.GetPipelineVersion(pipelineVersionID)
+}
+
 // Creates a pipeline, but does not create a pipeline version.
 // Call CreatePipelineVersion to create a pipeline version.
 func (r *ResourceManager) CreatePipeline(p *model.Pipeline) (*model.Pipeline, error) {
 	if p.Name == "" {
 		return nil, util.NewInvalidInputError("pipeline's name cannot be empty")
+	}
+	if err := validateTags(p.Tags); err != nil {
+		return nil, err
 	}
 
 	if p.DisplayName == "" {
@@ -394,6 +485,12 @@ func (r *ResourceManager) CreatePipeline(p *model.Pipeline) (*model.Pipeline, er
 // Creates a pipeline and a pipeline version.
 // This is used when two resources need to be created in a single DB transaction.
 func (r *ResourceManager) CreatePipelineAndPipelineVersion(p *model.Pipeline, pv *model.PipelineVersion) (*model.Pipeline, *model.PipelineVersion, error) {
+	if err := validateTags(p.Tags); err != nil {
+		return nil, nil, err
+	}
+	if err := validateTags(pv.Tags); err != nil {
+		return nil, nil, err
+	}
 	// Fetch pipeline spec, verify it, and parse parameters
 	pipelineSpecBytes, pipelineSpecURI, err := r.fetchTemplateFromPipelineVersion(pv)
 	if err != nil {
@@ -407,13 +504,16 @@ func (r *ResourceManager) CreatePipelineAndPipelineVersion(p *model.Pipeline, pv
 		CacheDisabled:        r.options.CacheDisabled,
 		DefaultWorkspace:     r.options.DefaultWorkspace,
 		MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
+		DefaultRunAsUser:     r.options.DefaultRunAsUser,
+		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
+		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
 	}
 	tmpl, err := template.New(pipelineSpecBytes, templateOptions)
 	if err != nil {
 		return nil, nil, util.Wrap(err, "Failed to create a pipeline and a pipeline version due to template creation error")
 	}
 	// Validate pipeline's name in:
-	// 1. pipeline spec for v2 pipelines and v2-compatible pipeline must comply with MLMD requirements
+	// 1. pipeline spec for v2 pipelines and v2-compatible pipeline
 	// 2. display name must be non-empty
 	pipelineSpecName := ""
 	if tmpl.IsV2() {
@@ -640,7 +740,7 @@ func (r *ResourceManager) ReconcileSwfCrs(ctx context.Context) error {
 
 		// If the pipeline isn't pinned, skip it. The runs API is used directly by the ScheduledWorkflow controller
 		// in this case with just the pipeline ID and optionally the pipeline version ID.
-		if jobs[i].PipelineSpec.PipelineSpecManifest == "" && jobs[i].PipelineSpec.WorkflowSpecManifest == "" {
+		if jobs[i].PipelineSpecManifest == "" && jobs[i].WorkflowSpecManifest == "" {
 			continue
 		}
 
@@ -695,17 +795,32 @@ func (r *ResourceManager) updateSwfCrSpec(ctx context.Context, k8sNamespace stri
 }
 
 // Fetches a run with a given id.
+// GetRun fetches a run with full task hydration (backward compatible).
 func (r *ResourceManager) GetRun(runId string) (*model.Run, error) {
-	run, err := r.runStore.GetRun(runId)
+	return r.GetRunWithHydration(runId, true)
+}
+
+// GetRunWithHydration fetches a run with optional task hydration.
+// If hydrateTasks is true, full task details are loaded (expensive operation).
+// If hydrateTasks is false, only task count is populated (lightweight operation).
+func (r *ResourceManager) GetRunWithHydration(runID string, hydrateTasks bool) (*model.Run, error) {
+	run, err := r.runStore.GetRun(runID, hydrateTasks)
 	if err != nil {
-		return nil, util.Wrapf(err, "Failed to fetch run %v", runId)
+		return nil, util.Wrapf(err, "Failed to fetch run %v", runID)
 	}
 	return run, nil
 }
 
-// Fetches runs with a given set of filtering and listing options.
+// ListRuns fetches runs with full task hydration (backward compatible).
 func (r *ResourceManager) ListRuns(filterContext *model.FilterContext, opts *list.Options) ([]*model.Run, int, string, error) {
-	runs, totalSize, nextPageToken, err := r.runStore.ListRuns(filterContext, opts)
+	return r.ListRunsWithHydration(filterContext, opts, true)
+}
+
+// ListRunsWithHydration fetches runs with a given set of filtering and listing options.
+// If hydrateTasks is true, full task details are loaded (expensive operation).
+// If hydrateTasks is false, only task counts are populated (lightweight operation).
+func (r *ResourceManager) ListRunsWithHydration(filterContext *model.FilterContext, opts *list.Options, hydrateTasks bool) ([]*model.Run, int, string, error) {
+	runs, totalSize, nextPageToken, err := r.runStore.ListRuns(filterContext, opts, hydrateTasks)
 	if err != nil {
 		return nil, 0, "", util.Wrap(err, "Failed to list runs")
 	}
@@ -797,14 +912,14 @@ func (r *ResourceManager) DeleteRun(ctx context.Context, runId string) error {
 
 // Creates a task entry.
 func (r *ResourceManager) CreateTask(t *model.Task) (*model.Task, error) {
-	run, err := r.GetRun(t.RunID)
+	run, err := r.GetRun(t.RunUUID)
 	if err != nil {
-		return nil, util.Wrapf(err, "Failed to create a task for run %v", t.RunID)
+		return nil, util.Wrapf(err, "Failed to create a task for run %v", t.RunUUID)
 	}
 	if run.ExperimentId == "" {
 		defaultExperimentId, err := r.GetDefaultExperimentId()
 		if err != nil {
-			return nil, util.Wrapf(err, "Failed to create a task in run %v. Specify experiment id for the run or check if the default experiment exists", t.RunID)
+			return nil, util.Wrapf(err, "Failed to create a task in run %v. Specify experiment id for the run or check if the default experiment exists", t.RunUUID)
 		}
 		run.ExperimentId = defaultExperimentId
 	}
@@ -813,28 +928,49 @@ func (r *ResourceManager) CreateTask(t *model.Task) (*model.Task, error) {
 	if t.Namespace == "" {
 		namespace, err := r.GetNamespaceFromExperimentId(run.ExperimentId)
 		if err != nil {
-			return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunID)
+			return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunUUID)
 		}
 		t.Namespace = namespace
 	}
 	if common.IsMultiUserMode() {
 		if t.Namespace == "" {
-			return nil, util.NewInternalServerError(util.NewInvalidInputError("Task cannot have an empty namespace in multi-user mode"), "Failed to create a task in run %v", t.RunID)
+			return nil, util.NewInternalServerError(util.NewInvalidInputError("Task cannot have an empty namespace in multi-user mode"), "Failed to create a task in run %v", t.RunUUID)
 		}
 	}
 	if err := r.CheckExperimentBelongsToNamespace(run.ExperimentId, t.Namespace); err != nil {
-		return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunID)
+		return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunUUID)
 	}
 
 	newTask, err := r.taskStore.CreateTask(t)
 	if err != nil {
-		return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunID)
+		return nil, util.Wrapf(err, "Failed to create a task in run %v", t.RunUUID)
 	}
 	return newTask, nil
 }
 
 // Fetches tasks with a given set of filtering and listing options.
-func (r *ResourceManager) ListTasks(filterContext *model.FilterContext, opts *list.Options) ([]*model.Task, int, string, error) {
+// Namespace filtering only applies when namespace is non-empty.
+func (r *ResourceManager) ListTasks(runID, parentID, namespace string, opts *list.Options) ([]*model.Task, int, string, error) {
+	var filterContext *model.FilterContext
+
+	switch {
+	case runID != "":
+		filterContext = &model.FilterContext{
+			ReferenceKey: &model.ReferenceKey{Type: model.RunResourceType, ID: runID},
+		}
+	case parentID != "":
+		filterContext = &model.FilterContext{
+			ReferenceKey: &model.ReferenceKey{Type: model.TaskResourceType, ID: parentID},
+		}
+	case namespace != "":
+		// Namespace filter is set (can be empty string in single-user mode)
+		filterContext = &model.FilterContext{
+			ReferenceKey: &model.ReferenceKey{Type: model.NamespaceResourceType, ID: namespace},
+		}
+	default:
+		filterContext = &model.FilterContext{}
+	}
+
 	tasks, totalSize, nextPageToken, err := r.taskStore.ListTasks(filterContext, opts)
 	if err != nil {
 		return nil, 0, "", util.Wrap(err, "Failed to list tasks")
@@ -1139,8 +1275,12 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 		}
 
 		templateOptions := template.TemplateOptions{
-			CacheDisabled:    r.options.CacheDisabled,
-			DefaultWorkspace: r.options.DefaultWorkspace,
+			CacheDisabled:        r.options.CacheDisabled,
+			DefaultWorkspace:     r.options.DefaultWorkspace,
+			MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
+			DefaultRunAsUser:     r.options.DefaultRunAsUser,
+			DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
+			DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
 		}
 		tmpl, err := template.New(manifest, templateOptions)
 		if err != nil {
@@ -1243,7 +1383,7 @@ func (r *ResourceManager) ChangeJobMode(ctx context.Context, jobId string, enabl
 }
 
 // Deletes a recurring run with given id.
-func (r *ResourceManager) DeleteJob(ctx context.Context, jobId string) error {
+func (r *ResourceManager) DeleteJob(ctx context.Context, jobId string, propagationPolicy ...apiv2beta1.DeletePropagationPolicy) error {
 	job, err := r.GetJob(jobId)
 	if err != nil {
 		return util.Wrapf(err, "Failed to delete recurring run %v. Check if exists", jobId)
@@ -1253,7 +1393,13 @@ func (r *ResourceManager) DeleteJob(ctx context.Context, jobId string) error {
 	if k8sNamespace == "" {
 		k8sNamespace = common.GetPodNamespace()
 	}
-	err = r.getScheduledWorkflowClient(k8sNamespace).Delete(ctx, job.K8SName, &v1.DeleteOptions{})
+	deleteOptions := &v1.DeleteOptions{}
+	if len(propagationPolicy) > 0 {
+		if policy, exists := propagationPolicyMap[propagationPolicy[0]]; exists {
+			deleteOptions.PropagationPolicy = &policy
+		}
+	}
+	err = r.getScheduledWorkflowClient(k8sNamespace).Delete(ctx, job.K8SName, deleteOptions)
 	if err != nil {
 		if !util.IsNotFound(err) {
 			return util.NewInternalServerError(err, "Failed to delete recurring run %v. Check if the scheduled workflow exists", jobId)
@@ -1269,16 +1415,6 @@ func (r *ResourceManager) DeleteJob(ctx context.Context, jobId string) error {
 		return util.Wrapf(err, "Failed to delete recurring run %v", jobId)
 	}
 	return nil
-}
-
-// Creates new tasks or updates existing ones.
-// This is not a part of internal API exposed to persistence agent only.
-func (r *ResourceManager) CreateOrUpdateTasks(t []*model.Task) ([]*model.Task, error) {
-	tasks, err := r.taskStore.CreateOrUpdateTasks(t)
-	if err != nil {
-		return nil, util.Wrap(err, "Failed to create or update tasks")
-	}
-	return tasks, nil
 }
 
 // Reports a workflow CR.
@@ -1450,12 +1586,10 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 		if r.options.CollectMetrics {
 			execNamespace := execSpec.ExecutionNamespace()
 			execName := execSpec.ExecutionName()
-
 			if execStatus.Condition() == exec.ExecutionSucceeded {
 				workflowSuccessCounter.WithLabelValues(execNamespace, execName).Inc()
 			} else {
 				glog.Errorf("pipeline '%s' finished with an error", execName)
-
 				// also collects counts regarding retries
 				workflowFailedCounter.WithLabelValues(execNamespace, execName).Inc()
 			}
@@ -1529,8 +1663,12 @@ func (r *ResourceManager) fetchTemplateFromPipelineSpec(pipelineSpec *model.Pipe
 		}
 	}
 	templateOptions := template.TemplateOptions{
-		CacheDisabled:    r.options.CacheDisabled,
-		DefaultWorkspace: r.options.DefaultWorkspace,
+		CacheDisabled:        r.options.CacheDisabled,
+		DefaultWorkspace:     r.options.DefaultWorkspace,
+		MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
+		DefaultRunAsUser:     r.options.DefaultRunAsUser,
+		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
+		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
 	}
 	tmpl, err := template.New([]byte(manifest), templateOptions)
 	if err != nil {
@@ -1616,20 +1754,26 @@ func (r *ResourceManager) CreateDefaultExperiment(namespace string) (string, err
 	return defaultExperiment.UUID, nil
 }
 
-// TODO(gkcalat): deprecate this as we no longer have metrics in the v2beta1 run message.
-// Read metrics as ordinary artifacts instead.
-// Creates a run metric entry.
-func (r *ResourceManager) ReportMetric(metric *model.RunMetric) error {
-	err := r.runStore.CreateMetric(metric)
+// ReportMetric Read metrics as ordinary artifacts instead.
+// Creates a run metric entry. Deprecated.
+func (r *ResourceManager) ReportMetric(metric *model.RunMetricV1) error {
+	err := r.runStore.CreateV1Metric(metric)
 	if err != nil {
 		return util.Wrap(err, "Failed to report a run metric")
 	}
 	return nil
 }
 
+// UpdateTask updates a task entry.
+func (r *ResourceManager) UpdateTask(new *model.Task) (*model.Task, error) {
+	// Update task
+	return r.taskStore.UpdateTask(new)
+}
+
 // ResolveArtifactPath resolves the object storage path for an artifact.
 func (r *ResourceManager) ResolveArtifactPath(runID string, nodeID string, artifactName string) (string, error) {
-	run, err := r.runStore.GetRun(runID)
+	// No need to hydrate tasks for reading artifacts
+	run, err := r.runStore.GetRun(runID, false)
 	if err != nil {
 		return "", err
 	}
@@ -1703,6 +1847,9 @@ func (r *ResourceManager) CreatePipelineVersion(pv *model.PipelineVersion) (*mod
 	if len(pipelineId) == 0 {
 		return nil, util.NewInvalidInputError("Failed to create a pipeline version due to missing pipeline id")
 	}
+	if err := validateTags(pv.Tags); err != nil {
+		return nil, err
+	}
 
 	// Fetch pipeline spec
 	pipelineSpecBytes, pipelineSpecURI, err := r.fetchTemplateFromPipelineVersion(pv)
@@ -1716,15 +1863,19 @@ func (r *ResourceManager) CreatePipelineVersion(pv *model.PipelineVersion) (*mod
 
 	// Create a template
 	templateOptions := template.TemplateOptions{
-		CacheDisabled:    r.options.CacheDisabled,
-		DefaultWorkspace: r.options.DefaultWorkspace,
+		CacheDisabled:        r.options.CacheDisabled,
+		DefaultWorkspace:     r.options.DefaultWorkspace,
+		MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
+		DefaultRunAsUser:     r.options.DefaultRunAsUser,
+		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
+		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
 	}
 	tmpl, err := template.New(pipelineSpecBytes, templateOptions)
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to create a pipeline version due to template creation error")
 	}
 	// Validate pipeline's name in:
-	// 1. pipeline spec for v2 pipelines and v2-compatible pipeline must comply with MLMD requirements
+	// 1. pipeline spec for v2 pipelines and v2-compatible pipeline
 	// 2. display name must be non-empty
 	pipelineSpecName := ""
 	if tmpl.IsV2() {
@@ -1804,8 +1955,12 @@ func (r *ResourceManager) GetLatestPipelineVersion(pipelineId string) (*model.Pi
 }
 
 // Returns a list of pipeline versions.
-func (r *ResourceManager) ListPipelineVersions(pipelineId string, opts *list.Options) ([]*model.PipelineVersion, int, string, error) {
-	pipelineVersions, total_size, nextPageToken, err := r.pipelineStore.ListPipelineVersions(pipelineId, opts)
+func (r *ResourceManager) ListPipelineVersions(pipelineId string, opts *list.Options, tagFilters ...map[string]string) ([]*model.PipelineVersion, int, string, error) {
+	var resolvedTagFilters map[string]string
+	if len(tagFilters) > 0 {
+		resolvedTagFilters = tagFilters[0]
+	}
+	pipelineVersions, total_size, nextPageToken, err := r.pipelineStore.ListPipelineVersions(pipelineId, opts, resolvedTagFilters)
 	if err != nil {
 		err = util.Wrapf(err, "Failed to list pipeline versions with pipeline id %v, options %v", pipelineId, opts)
 	}
@@ -2078,11 +2233,80 @@ func (r *ResourceManager) GetValidExperimentNamespacePair(experimentId string, n
 	return experimentId, namespace, nil
 }
 
-// Fetches a task entry.
+// GetTask Fetches a task entry.
 func (r *ResourceManager) GetTask(taskId string) (*model.Task, error) {
 	task, err := r.taskStore.GetTask(taskId)
 	if err != nil {
 		return nil, util.Wrapf(err, "Failed to fetch task %v", taskId)
 	}
 	return task, nil
+}
+
+// GetTaskChildren fetches all immediate child tasks of the given task UUID.
+func (r *ResourceManager) GetTaskChildren(taskID string) ([]*model.Task, error) {
+	children, err := r.taskStore.GetChildTasks(taskID)
+	if err != nil {
+		return nil, util.Wrapf(err, "Failed to fetch children of task %v", taskID)
+	}
+	return children, nil
+}
+
+// ListArtifactTasks Fetches artifact tasks with given filtering and listing options.
+func (r *ResourceManager) ListArtifactTasks(filterContexts []*model.FilterContext, ioType *model.IOType, opts *list.Options) ([]*model.ArtifactTask, int, string, error) {
+	artifactTasks, totalSize, nextPageToken, err := r.artifactTaskStore.ListArtifactTasks(filterContexts, ioType, opts)
+	if err != nil {
+		return nil, 0, "", util.Wrap(err, "Failed to list artifact tasks")
+	}
+	return artifactTasks, totalSize, nextPageToken, nil
+}
+
+// CreateArtifactTask Creates an artifact-task relationship entry.
+func (r *ResourceManager) CreateArtifactTask(artifactTask *model.ArtifactTask) (*model.ArtifactTask, error) {
+	newAT, err := r.artifactTaskStore.CreateArtifactTask(artifactTask)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to create artifact-task relationship")
+	}
+	return newAT, nil
+}
+
+// CreateArtifactTasks Creates multiple artifact-task relationship entries in bulk.
+func (r *ResourceManager) CreateArtifactTasks(artifactTasks []*model.ArtifactTask) ([]*model.ArtifactTask, error) {
+	newATs, err := r.artifactTaskStore.CreateArtifactTasks(artifactTasks)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to create artifact-task relationships in bulk")
+	}
+	return newATs, nil
+}
+
+// GetArtifact Fetches an artifact with a given id.
+func (r *ResourceManager) GetArtifact(artifactID string) (*model.Artifact, error) {
+	artifact, err := r.artifactStore.GetArtifact(artifactID)
+	if err != nil {
+		return nil, util.Wrapf(err, "Failed to fetch artifact %v", artifactID)
+	}
+	return artifact, nil
+}
+
+// CreateArtifact Creates an artifact entry.
+func (r *ResourceManager) CreateArtifact(artifact *model.Artifact) (*model.Artifact, error) {
+	newArtifact, err := r.artifactStore.CreateArtifact(artifact)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to create artifact")
+	}
+	return newArtifact, nil
+}
+
+// ListArtifacts Fetches artifacts with given filtering and listing options.
+func (r *ResourceManager) ListArtifacts(filterContexts []*model.FilterContext, opts *list.Options) ([]*model.Artifact, int, string, error) {
+	// Use the first filter context for now (artifacts are typically filtered by namespace)
+	var filterContext *model.FilterContext
+	if len(filterContexts) > 0 {
+		filterContext = filterContexts[0]
+	}
+
+	artifacts, totalSize, nextPageToken, err := r.artifactStore.ListArtifacts(filterContext, opts)
+	if err != nil {
+		return nil, 0, "", util.Wrap(err, "Failed to list artifacts")
+	}
+	return artifacts, totalSize, nextPageToken, nil
 }

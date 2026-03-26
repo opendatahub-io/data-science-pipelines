@@ -34,7 +34,9 @@ func MatchPipelines(actual *model.V2beta1Pipeline, expected *model.V2beta1Pipeli
 		gomega.Expect(actual.Namespace).To(gomega.Equal(expected.Namespace), "Pipeline Namespace not matching")
 	}
 	gomega.Expect(actual.Description).To(gomega.Equal(expected.Description), "Pipeline Description not matching")
-
+	if expected.Tags != nil {
+		MatchMaps(actual.Tags, expected.Tags, "Pipeline Tags")
+	}
 }
 
 // MatchPipelineVersions - Deep compare 2 pipeline versions - even with deep comparison of pipeline specs
@@ -49,6 +51,9 @@ func MatchPipelineVersions(actual *model.V2beta1PipelineVersion, expected *model
 	}
 	gomega.Expect(actual.DisplayName).To(gomega.Equal(expected.DisplayName), "Pipeline Display Name not matching")
 	gomega.Expect(actual.Description).To(gomega.Equal(expected.Description), "Pipeline Description not matching")
+	if expected.Tags != nil {
+		MatchMaps(actual.Tags, expected.Tags, "Pipeline Version Tags")
+	}
 	expectedPipelineSpec := expected.PipelineSpec.(*template.V2Spec)
 	MatchPipelineSpecs(actual.PipelineSpec, expectedPipelineSpec)
 }
@@ -112,16 +117,13 @@ func MatchPipelineRunDetails(actual *run_model.V2beta1RunDetails, expected *run_
 		gomega.Expect(actual.TaskDetails[index].ParentTaskID).To(gomega.Equal(task.ParentTaskID), "Task Parent Task ID is not matching")
 		actualCreationTime := time.Time(actual.TaskDetails[index].CreateTime).UTC()
 		expectedCreationTime := time.Time(task.CreateTime).UTC()
-		actualStartTime := time.Time(actual.TaskDetails[index].StartTime).UTC()
 		expectedStartTimeRange := expectedCreationTime.Add(-1 * time.Second)
 		expectedEndTimeRange := expectedCreationTime.Add(1 * time.Second)
 		gomega.Expect(actualCreationTime.After(expectedStartTimeRange)).To(gomega.BeTrue(), "Task Create Time is before the expected creation time")
 		gomega.Expect(actualCreationTime.Before(expectedEndTimeRange)).To(gomega.BeTrue(), "Task Create Time is after the expected creation time")
-		gomega.Expect(actualStartTime.After(expectedStartTimeRange)).To(gomega.BeTrue(), "Task Start Time is before the expected start time")
-		gomega.Expect(actualStartTime.Before(expectedEndTimeRange)).To(gomega.BeTrue(), "Task End Time is before the expected start time")
-		gomega.Expect(*actual.TaskDetails[index].State).To(gomega.BeElementOf([]run_model.V2beta1RuntimeState{run_model.V2beta1RuntimeStateCANCELED, run_model.V2beta1RuntimeStateCANCELING, run_model.V2beta1RuntimeStateFAILED, run_model.V2beta1RuntimeStateSUCCEEDED, run_model.V2beta1RuntimeStateSKIPPED, run_model.V2beta1RuntimeStatePENDING, run_model.V2beta1RuntimeStateRUNNING}), "Task State is not matching")
+		gomega.Expect(*actual.TaskDetails[index].State).To(gomega.BeElementOf([]run_model.V2beta1RuntimeState{run_model.V2beta1RuntimeStateCANCELED, run_model.V2beta1RuntimeStateCANCELING, run_model.V2beta1RuntimeStateFAILED, run_model.V2beta1RuntimeStateSUCCEEDED, run_model.V2beta1RuntimeStatePENDING, run_model.V2beta1RuntimeStateRUNNING}), "Task State is not matching")
 		for _, state := range actual.TaskDetails[index].StateHistory {
-			gomega.Expect(*state.State).To(gomega.BeElementOf([]run_model.V2beta1RuntimeState{run_model.V2beta1RuntimeStateCANCELED, run_model.V2beta1RuntimeStateCANCELING, run_model.V2beta1RuntimeStateFAILED, run_model.V2beta1RuntimeStateSUCCEEDED, run_model.V2beta1RuntimeStateSKIPPED, run_model.V2beta1RuntimeStatePENDING, run_model.V2beta1RuntimeStateRUNNING}), "Task State History is not matching")
+			gomega.Expect(*state.State).To(gomega.BeElementOf([]run_model.V2beta1RuntimeState{run_model.V2beta1RuntimeStateCANCELED, run_model.V2beta1RuntimeStateCANCELING, run_model.V2beta1RuntimeStateFAILED, run_model.V2beta1RuntimeStateSUCCEEDED, run_model.V2beta1RuntimeStatePENDING, run_model.V2beta1RuntimeStateRUNNING}), "Task State History is not matching")
 		}
 		if strings.Contains(task.DisplayName, "driver") {
 			gomega.Expect(len(actual.TaskDetails[index].ChildTasks) > 0).To(gomega.BeTrue(), "No child tasks found for a Driver Task")

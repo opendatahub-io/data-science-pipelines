@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import * as React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BuildInfoContext } from '../lib/BuildInfo';
 import PrivateSharedSelector, { PrivateSharedSelectorProps } from './PrivateSharedSelector';
@@ -22,7 +21,7 @@ import { PipelineTabsHeaders } from '../pages/PrivateAndSharedPipelines';
 
 function generateProps(): PrivateSharedSelectorProps {
   return {
-    onChange: jest.fn(),
+    onChange: vi.fn(),
   };
 }
 
