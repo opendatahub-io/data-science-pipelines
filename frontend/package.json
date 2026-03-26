@@ -168,7 +168,7 @@
     "yaml": "^2.2.2"
   },
   "overrides": {
-    "nanoid": "3.3.8",
+    "nanoid": "3.3.11",
     "recharts": {
       "react-redux": "9.2.0"
     },
