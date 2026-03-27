@@ -24,7 +24,7 @@
     "@types/gunzip-maybe": "^1.4.0",
     "@types/node": "^22.0.0",
     "@types/supertest": "^2.0.8",
-    "@types/tar": "^4.0.3",
+    "@types/tar": "^7.0.0",
     "@types/tar-stream": "^1.6.1",
     "@vitest/coverage-v8": "^4.0.18",
     "prettier": "^3.8.1",
