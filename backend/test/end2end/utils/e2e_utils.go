@@ -69,7 +69,21 @@ func CreatePipelineRunAndWaitForItToFinish(runClient *apiserver.RunClient, testC
 // ValidateComponentStatuses - Validate that all the components of a pipeline run ran successfully
 func ValidateComponentStatuses(runClient *apiserver.RunClient, k8Client *kubernetes.Clientset, testContext *apitests.TestContext, runID string, compiledWorkflow *v1alpha1.Workflow) {
 	logger.Log("Fetching updated pipeline run details for run with id=%s", runID)
-	updatedRun := testutil.GetPipelineRun(runClient, &runID)
+	var updatedRun *run_model.V2beta1Run
+	gomega.Eventually(func() error {
+		updatedRun = testutil.GetPipelineRun(runClient, &runID)
+		if updatedRun == nil {
+			return fmt.Errorf("run object is nil")
+		}
+		if updatedRun.State == nil {
+			return fmt.Errorf("run state is nil")
+		}
+		if updatedRun.RunDetails == nil {
+			return fmt.Errorf("run details are nil")
+		}
+		return nil
+	}, "60s", "2s").Should(gomega.Succeed(), "Run details were not populated for run=%s", runID)
+
 	actualTaskDetails := updatedRun.RunDetails.TaskDetails
 	logger.Log("Updated pipeline run details")
 	expectedTaskDetails := GetTasksFromWorkflow(compiledWorkflow)
