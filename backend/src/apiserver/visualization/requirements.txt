@@ -85,7 +85,7 @@ ipython==7.34.0
     # via
     #   -r requirements.in
     #   ipykernel
-itables==0.1.0
+itables==2.7.3
     # via -r requirements.in
 jedi==0.19.2
     # via ipython
