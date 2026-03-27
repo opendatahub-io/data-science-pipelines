@@ -183,7 +183,7 @@ platformdirs==4.4.0
     # via jupyter-core
 prompt-toolkit==3.0.52
     # via ipython
-protobuf==4.25.8
+protobuf==7.34.1
     # via
     #   -r requirements.in
     #   googleapis-common-protos
