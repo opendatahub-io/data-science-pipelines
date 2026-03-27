@@ -19,7 +19,7 @@
     "tar-stream": "^2.1.0"
   },
   "devDependencies": {
-    "@types/crypto-js": "^3.1.43",
+    "@types/crypto-js": "^4.0.0",
     "@types/express": "^4.11.1",
     "@types/gunzip-maybe": "^1.4.0",
     "@types/node": "^22.0.0",
