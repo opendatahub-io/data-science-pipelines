@@ -57,7 +57,7 @@ def read_readme() -> str:
 _version = find_version('kfp', 'version.py')
 docker = ['docker']
 kubernetes = [f'kfp-kubernetes=={_version}']
-notebooks = ["nbclient>=0.10,<1", "ipykernel>=6,<7", "jupyter_client>=7,<9"]
+notebooks = ["nbclient>=0.10,<1", "ipykernel>=7,<8", "jupyter_client>=7,<9"]
 
 setuptools.setup(
     name='kfp',
