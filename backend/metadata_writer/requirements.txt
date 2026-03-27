@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=- --resolver=backtracking -
 #
-absl-py==1.4.0
+absl-py==2.4.0
     # via ml-metadata
 attrs==23.2.0
     # via ml-metadata

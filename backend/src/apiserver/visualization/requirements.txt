@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=- --resolver=backtracking -
 #
-absl-py==2.3.1
+absl-py==2.4.0
     # via
     #   tensorboard
     #   tensorflow
