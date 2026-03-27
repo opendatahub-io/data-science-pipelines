@@ -299,7 +299,7 @@ typing-extensions==4.15.0
     #   tensorflow
 tzdata==2025.2
     # via pandas
-uritemplate==3.0.1
+uritemplate==4.2.0
     # via google-api-python-client
 urllib3==2.6.3
     # via requests
