@@ -11,7 +11,7 @@
 # limitations under the License.
 
 
-FROM ubuntu:16.04
+FROM ubuntu:24.04
 
 RUN apt-get update -y && apt-get install --no-install-recommends -y -q ca-certificates python-dev python-setuptools wget unzip
 
