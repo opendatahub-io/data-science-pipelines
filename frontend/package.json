@@ -19,7 +19,7 @@
     "d3": "^5.7.0",
     "d3-dsv": "^1.0.10",
     "dagre": "^0.8.2",
-    "google-protobuf": "^3.11.2",
+    "google-protobuf": "^4.0.0",
     "grpc-web": "^1.2.1",
     "http-proxy-middleware": "^2.0.7",
     "immer": "^9.0.6",
