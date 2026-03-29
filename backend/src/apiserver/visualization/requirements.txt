@@ -145,7 +145,7 @@ nbformat==5.10.4
     #   nbconvert
 nest-asyncio==1.6.0
     # via ipykernel
-numpy==1.26.4
+numpy==2.4.4
     # via
     #   bokeh
     #   h5py
