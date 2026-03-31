@@ -4913,3 +4913,451 @@ func TestToPipelineSpecRuntimeConfig_InvalidJSON(t *testing.T) {
 	// v1 parameter parsing, causing toPipelineSpecRuntimeConfig to return nil.
 	assert.Nil(t, result)
 }
+
+func TestValidatePluginsInputLimitsUsesConfiguredOverrides(t *testing.T) {
+	input := map[string]*structpb.Struct{
+		"mlflow": {
+			Fields: map[string]*structpb.Value{
+				"k": structpb.NewStringValue("ok"),
+			},
+		},
+		"other": {
+			Fields: map[string]*structpb.Value{
+				"k": structpb.NewStringValue("ok"),
+			},
+		},
+	}
+
+	setPluginLimitsConfigForTest(t, map[string]string{
+		common.PluginMaxKeys: "1",
+	})
+
+	limits, err := common.GetPluginLimitsConfig()
+	require.NoError(t, err)
+	err = validatePluginsInputLimits(input, limits)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "exceeds maximum 1")
+}
+
+func TestValidatePluginsOutputLimitsUsesConfiguredOverrides(t *testing.T) {
+	output := map[string]*apiv2beta1.PluginOutput{
+		"mlflow": {
+			Entries: map[string]*apiv2beta1.MetadataValue{
+				"run_url": {
+					Value:      structpb.NewStringValue(testPluginsURLBase),
+					RenderType: apiv2beta1.MetadataValue_URL.Enum(),
+				},
+			},
+			State: apiv2beta1.PluginState_PLUGIN_RUNNING,
+		},
+	}
+
+	setPluginLimitsConfigForTest(t, map[string]string{
+		common.PluginMaxPayloadBytes: "64",
+	})
+
+	limits, err := common.GetPluginLimitsConfig()
+	require.NoError(t, err)
+	err = validatePluginsOutputLimits(output, limits)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "exceeds maximum 64 bytes")
+}
+
+func TestValidatePluginsInputLimitsUsesNestingDepthOverride(t *testing.T) {
+	input := map[string]*structpb.Struct{
+		"mlflow": {
+			Fields: map[string]*structpb.Value{
+				"nested": makeDeepValue(3),
+			},
+		},
+	}
+
+	setPluginLimitsConfigForTest(t, map[string]string{
+		common.PluginMaxNestingDepth: "2",
+	})
+
+	limits, err := common.GetPluginLimitsConfig()
+	require.NoError(t, err)
+	err = validatePluginsInputLimits(input, limits)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "nesting depth exceeds maximum 2")
+}
+
+func TestValidatePluginsOutputLimitsUsesTotalPayloadOverride(t *testing.T) {
+	output := map[string]*apiv2beta1.PluginOutput{
+		"mlflow": {
+			Entries: map[string]*apiv2beta1.MetadataValue{
+				"run_url": {
+					Value:      structpb.NewStringValue("https://example.com/run1"),
+					RenderType: apiv2beta1.MetadataValue_URL.Enum(),
+				},
+			},
+			State: apiv2beta1.PluginState_PLUGIN_RUNNING,
+		},
+		"other": {
+			Entries: map[string]*apiv2beta1.MetadataValue{
+				"status": {
+					Value: structpb.NewStringValue("https://example.com/run2"),
+				},
+			},
+			State: apiv2beta1.PluginState_PLUGIN_SUCCEEDED,
+		},
+	}
+
+	setPluginLimitsConfigForTest(t, map[string]string{
+		common.PluginMaxTotalPayloadBytes: "10",
+		common.PluginMaxPayloadBytes:      "10",
+	})
+
+	limits, err := common.GetPluginLimitsConfig()
+	require.NoError(t, err)
+	err = validatePluginsOutputLimits(output, limits)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "exceeds maximum 10 bytes")
+}
+
+func makeDeepStruct(depth int) *structpb.Struct {
+	current := structpb.NewStringValue("leaf")
+	for range depth {
+		current = structpb.NewStructValue(&structpb.Struct{
+			Fields: map[string]*structpb.Value{"nested": current},
+		})
+	}
+	return current.GetStructValue()
+}
+
+func makeDeepValue(depth int) *structpb.Value {
+	current := structpb.NewStringValue("leaf")
+	for range depth {
+		current = structpb.NewStructValue(&structpb.Struct{
+			Fields: map[string]*structpb.Value{"nested": current},
+		})
+	}
+	return current
+}
+
+func TestToModelRunPluginsFields(t *testing.T) {
+	pluginsInput := map[string]*structpb.Struct{
+		"mlflow": {Fields: map[string]*structpb.Value{
+			"experiment_name": structpb.NewStringValue(testPluginsExperimentName),
+		}},
+		"other": {Fields: map[string]*structpb.Value{
+			"key": structpb.NewBoolValue(true),
+		}},
+	}
+	pluginsOutput := map[string]*apiv2beta1.PluginOutput{
+		"mlflow": {
+			Entries: map[string]*apiv2beta1.MetadataValue{
+				"root_run_id": {Value: structpb.NewStringValue("abc123")},
+			},
+			State:        apiv2beta1.PluginState_PLUGIN_SUCCEEDED,
+			StateMessage: "ok",
+		},
+		"other": {
+			State:        apiv2beta1.PluginState_PLUGIN_RUNNING,
+			StateMessage: "in progress",
+		},
+	}
+
+	t.Run("with plugins fields", func(t *testing.T) {
+		run := &apiv2beta1.Run{
+			RunId:       "run1",
+			DisplayName: "test",
+			PipelineSource: &apiv2beta1.Run_PipelineVersionReference{
+				PipelineVersionReference: &apiv2beta1.PipelineVersionReference{
+					PipelineId: "p1", PipelineVersionId: "pv1",
+				},
+			},
+			PluginsInput:  pluginsInput,
+			PluginsOutput: pluginsOutput,
+		}
+		got, err := toModelRun(run)
+		require.NoError(t, err)
+		require.NotNil(t, got.PluginsInputString)
+		require.NotNil(t, got.PluginsOutputString)
+
+		parsedInput, err := jsonToPluginsInput(largeTextToString(got.PluginsInputString))
+		require.NoError(t, err)
+		assert.Equal(t, testPluginsExperimentName, parsedInput["mlflow"].Fields["experiment_name"].GetStringValue())
+
+		parsedOutput, err := jsonToPluginsOutput(largeTextToString(got.PluginsOutputString))
+		require.NoError(t, err)
+		assert.Equal(t, apiv2beta1.PluginState_PLUGIN_SUCCEEDED, parsedOutput["mlflow"].State)
+		assert.Equal(t, "abc123", parsedOutput["mlflow"].Entries["root_run_id"].Value.GetStringValue())
+	})
+
+	t.Run("nil plugins fields", func(t *testing.T) {
+		apiRun := &apiv2beta1.Run{
+			RunId:       "run2",
+			DisplayName: "test-nil",
+			PipelineSource: &apiv2beta1.Run_PipelineVersionReference{
+				PipelineVersionReference: &apiv2beta1.PipelineVersionReference{
+					PipelineId: "p1", PipelineVersionId: "pv1",
+				},
+			},
+		}
+		got, err := toModelRun(apiRun)
+		require.NoError(t, err)
+		assert.Nil(t, got.PluginsInputString)
+		assert.Nil(t, got.PluginsOutputString)
+	})
+
+	t.Run("invalid plugins output URL scheme returns error", func(t *testing.T) {
+		apiRun := &apiv2beta1.Run{
+			RunId:       "run3",
+			DisplayName: "test-invalid",
+			PipelineSource: &apiv2beta1.Run_PipelineVersionReference{
+				PipelineVersionReference: &apiv2beta1.PipelineVersionReference{
+					PipelineId: "p1", PipelineVersionId: "pv1",
+				},
+			},
+			PluginsOutput: map[string]*apiv2beta1.PluginOutput{
+				"mlflow": {
+					Entries: map[string]*apiv2beta1.MetadataValue{
+						"run_url": {
+							Value:      structpb.NewStringValue(testPluginsUnsafeJavaScriptURL),
+							RenderType: apiv2beta1.MetadataValue_URL.Enum(),
+						},
+					},
+				},
+			},
+		}
+
+		_, err := toModelRun(apiRun)
+		require.Error(t, err)
+	})
+
+	t.Run("plugins_input exceeding limits returns error", func(t *testing.T) {
+		apiRun := &apiv2beta1.Run{
+			RunId:       "run4",
+			DisplayName: "test-too-large-input",
+			PipelineSource: &apiv2beta1.Run_PipelineVersionReference{
+				PipelineVersionReference: &apiv2beta1.PipelineVersionReference{
+					PipelineId: "p1", PipelineVersionId: "pv1",
+				},
+			},
+			PluginsInput: map[string]*structpb.Struct{
+				"mlflow": {
+					Fields: map[string]*structpb.Value{
+						"blob": structpb.NewStringValue(strings.Repeat("a", common.DefaultPluginMaxPayloadBytes*2)),
+					},
+				},
+			},
+		}
+
+		_, err := toModelRun(apiRun)
+		require.Error(t, err)
+	})
+
+	t.Run("plugins_output exceeding limits returns error", func(t *testing.T) {
+		apiRun := &apiv2beta1.Run{
+			RunId:       "run5",
+			DisplayName: "test-too-large-output",
+			PipelineSource: &apiv2beta1.Run_PipelineVersionReference{
+				PipelineVersionReference: &apiv2beta1.PipelineVersionReference{
+					PipelineId: "p1", PipelineVersionId: "pv1",
+				},
+			},
+			PluginsOutput: map[string]*apiv2beta1.PluginOutput{
+				"mlflow": {
+					Entries: map[string]*apiv2beta1.MetadataValue{
+						"run_url": {
+							Value:      structpb.NewStringValue(testPluginsURLBase + strings.Repeat("a", common.DefaultPluginMaxPayloadBytes*2)),
+							RenderType: apiv2beta1.MetadataValue_URL.Enum(),
+						},
+					},
+					State: apiv2beta1.PluginState_PLUGIN_RUNNING,
+				},
+			},
+		}
+
+		_, err := toModelRun(apiRun)
+		require.Error(t, err)
+	})
+}
+
+func TestToApiRunPluginsFields(t *testing.T) {
+	inputJSON := `{"mlflow":{"experiment_name":"` + testPluginsExperimentName + `"},"other":{"key":true}}`
+	outputJSON := `{"mlflow":{"entries":{"root_run_id":{"value":"abc123"}},"state":"PLUGIN_SUCCEEDED","stateMessage":"ok"},"other":{"state":"PLUGIN_RUNNING","stateMessage":"in progress"}}`
+
+	t.Run("with plugins fields", func(t *testing.T) {
+		modelRun := &model.Run{
+			UUID:        "run1",
+			DisplayName: "test",
+			PipelineSpec: model.PipelineSpec{
+				PipelineVersionId: "pv1",
+				PipelineId:        "p1",
+			},
+			RunDetails: model.RunDetails{
+				PluginsInputString:  testLargeTextPtr(inputJSON),
+				PluginsOutputString: testLargeTextPtr(outputJSON),
+			},
+		}
+		got := toApiRun(modelRun)
+		require.Len(t, got.PluginsInput, 2)
+		require.Contains(t, got.PluginsInput, "mlflow")
+		assert.Equal(t, testPluginsExperimentName, got.PluginsInput["mlflow"].Fields["experiment_name"].GetStringValue())
+		require.Contains(t, got.PluginsInput, "other")
+		assert.Equal(t, true, got.PluginsInput["other"].Fields["key"].GetBoolValue())
+
+		require.Len(t, got.PluginsOutput, 2)
+		require.Contains(t, got.PluginsOutput, "mlflow")
+		assert.Equal(t, apiv2beta1.PluginState_PLUGIN_SUCCEEDED, got.PluginsOutput["mlflow"].State)
+		assert.Equal(t, "abc123", got.PluginsOutput["mlflow"].Entries["root_run_id"].Value.GetStringValue())
+		require.Contains(t, got.PluginsOutput, "other")
+		assert.Equal(t, apiv2beta1.PluginState_PLUGIN_RUNNING, got.PluginsOutput["other"].State)
+	})
+
+	t.Run("nil plugins fields", func(t *testing.T) {
+		modelRun := &model.Run{
+			UUID:        "run2",
+			DisplayName: "test-nil",
+			PipelineSpec: model.PipelineSpec{
+				PipelineVersionId: "pv1",
+				PipelineId:        "p1",
+			},
+			RunDetails: model.RunDetails{},
+		}
+		got := toApiRun(modelRun)
+		assert.Nil(t, got.PluginsInput)
+		assert.Nil(t, got.PluginsOutput)
+	})
+
+	t.Run("invalid plugins output URL in storage returns API error", func(t *testing.T) {
+		modelRun := &model.Run{
+			UUID:        "run3",
+			DisplayName: "test-invalid",
+			PipelineSpec: model.PipelineSpec{
+				PipelineVersionId: "pv1",
+				PipelineId:        "p1",
+			},
+			RunDetails: model.RunDetails{
+				PluginsOutputString: testLargeTextPtr(`{"mlflow":{"entries":{"run_url":{"value":"` + testPluginsUnsafeJavaScriptURL + `","renderType":"URL"}}}}`),
+			},
+		}
+		got := toApiRun(modelRun)
+		require.NotNil(t, got.Error)
+		assert.Nil(t, got.PluginsOutput)
+	})
+}
+
+func TestToModelJobPluginsInput(t *testing.T) {
+	pluginsInput := map[string]*structpb.Struct{
+		"mlflow": {Fields: map[string]*structpb.Value{
+			"experiment_name": structpb.NewStringValue(testPluginsRecurringExperimentName),
+		}},
+		"other": {Fields: map[string]*structpb.Value{
+			"enabled": structpb.NewBoolValue(true),
+		}},
+	}
+
+	t.Run("with plugins_input", func(t *testing.T) {
+		apiJob := &apiv2beta1.RecurringRun{
+			RecurringRunId: "job1",
+			DisplayName:    testPluginsJobName,
+			MaxConcurrency: 1,
+			Mode:           apiv2beta1.RecurringRun_ENABLE,
+			Trigger: &apiv2beta1.Trigger{
+				Trigger: &apiv2beta1.Trigger_PeriodicSchedule{
+					PeriodicSchedule: &apiv2beta1.PeriodicSchedule{IntervalSecond: 60},
+				},
+			},
+			PluginsInput: pluginsInput,
+		}
+		got, err := toModelJob(apiJob)
+		require.NoError(t, err)
+		require.NotNil(t, got.PluginsInputString)
+
+		parsedInput, err := jsonToPluginsInput(largeTextToString(got.PluginsInputString))
+		require.NoError(t, err)
+		require.Len(t, parsedInput, 2)
+		require.Contains(t, parsedInput, "mlflow")
+		assert.Equal(t, testPluginsRecurringExperimentName, parsedInput["mlflow"].Fields["experiment_name"].GetStringValue())
+		require.Contains(t, parsedInput, "other")
+		assert.Equal(t, true, parsedInput["other"].Fields["enabled"].GetBoolValue())
+	})
+
+	t.Run("nil plugins_input", func(t *testing.T) {
+		apiJob := &apiv2beta1.RecurringRun{
+			RecurringRunId: "job2",
+			DisplayName:    "test-job-nil",
+			MaxConcurrency: 1,
+			Mode:           apiv2beta1.RecurringRun_ENABLE,
+			Trigger: &apiv2beta1.Trigger{
+				Trigger: &apiv2beta1.Trigger_PeriodicSchedule{
+					PeriodicSchedule: &apiv2beta1.PeriodicSchedule{IntervalSecond: 60},
+				},
+			},
+		}
+		got, err := toModelJob(apiJob)
+		require.NoError(t, err)
+		assert.Nil(t, got.PluginsInputString)
+	})
+
+	t.Run("plugins_input exceeding limits returns error", func(t *testing.T) {
+		apiJob := &apiv2beta1.RecurringRun{
+			RecurringRunId: "job3",
+			DisplayName:    "test-job-too-large",
+			MaxConcurrency: 1,
+			Mode:           apiv2beta1.RecurringRun_ENABLE,
+			Trigger: &apiv2beta1.Trigger{
+				Trigger: &apiv2beta1.Trigger_PeriodicSchedule{
+					PeriodicSchedule: &apiv2beta1.PeriodicSchedule{IntervalSecond: 60},
+				},
+			},
+			PluginsInput: map[string]*structpb.Struct{
+				"mlflow": {
+					Fields: map[string]*structpb.Value{
+						"blob": structpb.NewStringValue(strings.Repeat("a", common.DefaultPluginMaxPayloadBytes*2)),
+					},
+				},
+			},
+		}
+
+		_, err := toModelJob(apiJob)
+		require.Error(t, err)
+	})
+}
+
+func TestToApiRecurringRunPluginsInput(t *testing.T) {
+	inputJSON := `{"mlflow":{"experiment_name":"` + testPluginsRecurringExperimentName + `"},"other":{"enabled":true}}`
+
+	t.Run("with plugins_input", func(t *testing.T) {
+		modelJob := &model.Job{
+			UUID:               "job1",
+			DisplayName:        testPluginsJobName,
+			K8SName:            testPluginsJobName,
+			Enabled:            true,
+			Conditions:         "ENABLED",
+			MaxConcurrency:     1,
+			PluginsInputString: testLargeTextPtr(inputJSON),
+			PipelineSpec: model.PipelineSpec{
+				PipelineId:        "p1",
+				PipelineVersionId: "pv1",
+			},
+		}
+		got := toApiRecurringRun(modelJob)
+		require.Len(t, got.PluginsInput, 2)
+		require.Contains(t, got.PluginsInput, "mlflow")
+		assert.Equal(t, testPluginsRecurringExperimentName, got.PluginsInput["mlflow"].Fields["experiment_name"].GetStringValue())
+		require.Contains(t, got.PluginsInput, "other")
+		assert.Equal(t, true, got.PluginsInput["other"].Fields["enabled"].GetBoolValue())
+	})
+
+	t.Run("empty plugins_input", func(t *testing.T) {
+		modelJob := &model.Job{
+			UUID:           "job2",
+			DisplayName:    "test-job-empty",
+			K8SName:        "test-job-empty",
+			Enabled:        true,
+			Conditions:     "ENABLED",
+			MaxConcurrency: 1,
+			PipelineSpec: model.PipelineSpec{
+				PipelineId:        "p1",
+				PipelineVersionId: "pv1",
+			},
+		}
+		got := toApiRecurringRun(modelJob)
+		assert.Nil(t, got.PluginsInput)
+	})
+}
