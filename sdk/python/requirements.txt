@@ -27,7 +27,7 @@ google-auth==2.43.0
     #   google-cloud-core
     #   google-cloud-storage
     #   kubernetes
-google-cloud-core==2.5.0
+google-cloud-core==2.5.1
     # via google-cloud-storage
 google-cloud-storage==3.6.0
     # via -r requirements.in
