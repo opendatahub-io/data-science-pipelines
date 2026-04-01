@@ -12,5 +12,5 @@ require github.com/google/go-cmp v0.6.0 // indirect
 replace (
 	github.com/mattn/go-sqlite3 => github.com/mattn/go-sqlite3 v1.14.18
 	golang.org/x/net => golang.org/x/net v0.33.0
-	google.golang.org/grpc => google.golang.org/grpc v1.56.3
+	google.golang.org/grpc => google.golang.org/grpc v1.80.0
 )
