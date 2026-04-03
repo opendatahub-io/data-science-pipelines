@@ -1,5 +1,5 @@
 # Runtime requirements
-boto3==1.14.12
+boto3==1.42.83
 sagemaker==2.237.3
 pathlib2==2.3.5
 pyyaml==5.4
