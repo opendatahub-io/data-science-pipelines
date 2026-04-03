@@ -114,7 +114,7 @@ jupyter-core==5.8.1
     #   nbformat
 jupyterlab-pygments==0.3.0
     # via nbconvert
-keras==2.15.0
+keras==3.14.0
     # via tensorflow
 libclang==18.1.1
     # via tensorflow
