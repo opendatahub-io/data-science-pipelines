@@ -16,6 +16,6 @@ require (
 )
 
 replace (
-	github.com/mattn/go-sqlite3 => github.com/mattn/go-sqlite3 v1.14.18
+	github.com/mattn/go-sqlite3 => github.com/mattn/go-sqlite3 v1.14.40
 	golang.org/x/net => golang.org/x/net v0.33.0
 )
