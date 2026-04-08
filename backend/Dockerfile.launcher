@@ -58,7 +58,7 @@ RUN if [ "${FIPS_ENABLED}" = "1" ]; then \
       cp /bin/launcher-v2 /bin/launcher-v2-fips; \
     fi
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7-1775623882
 
 WORKDIR /bin
 

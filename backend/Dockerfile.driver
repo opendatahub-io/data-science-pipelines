@@ -53,7 +53,7 @@ RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
       echo "ERROR: FIPS_ENABLED must be '0' or '1', got '${FIPS_ENABLED}'" && exit 1; \
     fi
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.7-1775623882
 
 WORKDIR /bin
 
