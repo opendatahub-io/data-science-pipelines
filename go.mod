@@ -209,7 +209,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.14.0 // indirect
 	github.com/spf13/cast v1.9.2 // indirect
-	github.com/spf13/pflag v1.0.9 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
@@ -251,7 +251,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/apiextensions-apiserver v0.35.2 // indirect
-	k8s.io/gengo/v2 v2.0.0-20250922181213-ec3ebc5fd46b // indirect
+	k8s.io/gengo/v2 v2.0.0-20260408192533-25e2208e0dc3 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
