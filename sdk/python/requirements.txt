@@ -20,7 +20,7 @@ google-api-core==2.28.1
     #   -r requirements.in
     #   google-cloud-core
     #   google-cloud-storage
-google-auth==2.43.0
+google-auth==2.49.2
     # via
     #   -r requirements.in
     #   google-api-core
