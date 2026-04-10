@@ -49,7 +49,7 @@ gcsfs==0.2.3
     # via -r requirements.in
 google-api-python-client==1.7.12
     # via -r requirements.in
-google-auth==2.40.3
+google-auth==2.49.2
     # via
     #   gcsfs
     #   google-api-python-client

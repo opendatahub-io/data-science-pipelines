@@ -18,7 +18,7 @@ charset-normalizer==3.4.3
     # via requests
 durationpy==0.10
     # via kubernetes
-google-auth==2.40.3
+google-auth==2.49.2
     # via kubernetes
 grpcio==1.74.0
     # via ml-metadata
