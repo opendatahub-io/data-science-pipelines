@@ -4,7 +4,7 @@
   "license": "Apache-2.0",
   "private": true,
   "engines": {
-    "node": "24.14.0"
+    "node": "24.15.0"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -128,7 +128,7 @@
     "@types/google-protobuf": "^3.7.2",
     "@types/js-yaml": "^3.12.3",
     "@types/lodash": ">=4.14.117",
-    "@types/node": "^20.19.28",
+    "@types/node": "^24.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-router": "^5.1.20",
