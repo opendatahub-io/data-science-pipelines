@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.22 as builder
+FROM registry.access.redhat.com/ubi9/go-toolset:9.7-1776370298 as builder
 
 WORKDIR /tmp
 RUN git clone https://github.com/openshift/build-machinery-go.git && \
