@@ -81,7 +81,7 @@ idna==3.10
     # via requests
 ipykernel==6.29.5
     # via -r requirements.in
-ipython==7.34.0
+ipython==9.13.0
     # via
     #   -r requirements.in
     #   ipykernel
