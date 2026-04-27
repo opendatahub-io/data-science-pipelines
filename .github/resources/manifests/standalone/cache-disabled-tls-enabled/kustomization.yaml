@@ -5,7 +5,7 @@ resources:
   - ../tls-enabled
 
 patches:
-  - path: cache-env.yaml
+  - path: ../cache-disabled/cache-env.yaml
     target:
       kind: Deployment
       name: ml-pipeline

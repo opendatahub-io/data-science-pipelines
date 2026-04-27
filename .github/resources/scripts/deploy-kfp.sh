@@ -85,6 +85,11 @@ if [ "${MULTI_USER}" == "true" ] && [ "${USE_PROXY}" == "true" ]; then
   exit 1
 fi
 
+if [ "${USE_PROXY}" == "true" ] && [ "${POD_TO_POD_TLS_ENABLED}" == "true" ]; then
+  echo "ERROR: Proxy mode cannot be deployed with pod-to-pod TLS enabled."
+  exit 1
+fi
+
 if [ -n "${AWF_VERSION}"  ]; then
   echo "NOTE: Argo version ${AWF_VERSION} specified, updating Argo Workflow manifests..."
   echo "${AWF_VERSION}" > third_party/argo/VERSION
