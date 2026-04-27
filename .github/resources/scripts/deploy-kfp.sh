@@ -109,6 +109,38 @@ if [ "${PIPELINES_STORE}" == "kubernetes" ] || [ "${POD_TO_POD_TLS_ENABLED}" == 
     echo "Failed to deploy cert-manager."
     exit $EXIT_CODE
   fi
+
+  # The Makefile target waits for pods to be Ready, but the webhook may not
+  # be serving yet.  Wait for all three deployments so Certificate CRs
+  # applied later are accepted and processed.
+  kubectl wait --for=condition=available deployment/cert-manager-webhook -n cert-manager --timeout=120s
+  kubectl wait --for=condition=available deployment/cert-manager-cainjector -n cert-manager --timeout=120s
+
+  # Verify the webhook is actually serving by trying to create a test Issuer.
+  # Even after "Available", the webhook can briefly reject requests.
+  echo "Verifying cert-manager webhook is serving..."
+  for i in $(seq 1 12); do
+    if kubectl apply -f - <<'VERIFY_EOF'
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: cert-manager-readiness-probe
+  namespace: default
+spec:
+  selfSigned: {}
+VERIFY_EOF
+    then
+      kubectl delete issuer cert-manager-readiness-probe -n default --ignore-not-found
+      echo "cert-manager webhook is ready."
+      break
+    fi
+    if [ "$i" -eq 12 ]; then
+      echo "cert-manager webhook did not become ready in time."
+      exit 1
+    fi
+    echo "  Waiting for cert-manager webhook (attempt $i/12)..."
+    sleep 10
+  done
 fi
 
 
