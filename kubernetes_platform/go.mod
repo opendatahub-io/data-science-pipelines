@@ -3,7 +3,7 @@ module github.com/kubeflow/pipelines/kubernetes_platform
 go 1.25.7
 
 require (
-	github.com/kubeflow/pipelines/api v0.0.0-00010101000000-000000000000
+	github.com/kubeflow/pipelines/api v0.0.0-20260426205331-0268fad4f697
 	google.golang.org/protobuf v1.36.6
 )
 
