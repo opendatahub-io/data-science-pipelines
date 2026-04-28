@@ -17,8 +17,8 @@ package template
 import (
 	"fmt"
 
-	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
-	"github.com/argoproj/argo-workflows/v3/workflow/validate"
+	workflowapi "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
+	"github.com/argoproj/argo-workflows/v4/workflow/validate"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/model"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
