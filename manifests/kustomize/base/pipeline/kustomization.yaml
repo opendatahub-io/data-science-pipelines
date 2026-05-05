@@ -46,7 +46,7 @@ images:
   - name: ghcr.io/kubeflow/kfp-api-server
     newTag: 2.16.0
   - name: ghcr.io/kubeflow/kfp-persistence-agent
-    newTag: 2.16.0
+    newTag: 2.16.1
   - name: ghcr.io/kubeflow/kfp-scheduled-workflow-controller
     newTag: 2.16.0
   - name: ghcr.io/kubeflow/kfp-frontend
