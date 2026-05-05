@@ -49,7 +49,7 @@ idna==3.10
     # via requests
 kfp==2.16.0
     # via -r requirements.in
-kfp-pipeline-spec==2.16.0
+kfp-pipeline-spec==2.16.1
     # via kfp
 kfp-server-api==2.16.0
     # via kfp
