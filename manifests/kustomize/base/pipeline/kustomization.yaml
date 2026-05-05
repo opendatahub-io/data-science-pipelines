@@ -52,6 +52,6 @@ images:
   - name: ghcr.io/kubeflow/kfp-frontend
     newTag: 2.16.0
   - name: ghcr.io/kubeflow/kfp-viewer-crd-controller
-    newTag: 2.16.0
+    newTag: 2.16.1
   - name: ghcr.io/kubeflow/kfp-visualization-server
     newTag: 2.16.0
