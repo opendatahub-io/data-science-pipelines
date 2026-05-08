@@ -16,8 +16,11 @@
 ARG SOURCE_CODE=.
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
+ARG BUILDER_ARCH=multiarch
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:d36470d5258da00f618b7aca9bdaab8e05134aa938bd6c42d9bd17d50ed45e76 AS builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:45bd06d392349dfdb09073514cfebcc5082db33301347b51dcae8e5516a89126 AS go-toolset-multiarch
+FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:3880436381044c6d89c2311f2a7dc8d64224668bf84b43810982b5a9ddd851d0 AS go-toolset-arm64
+FROM go-toolset-${BUILDER_ARCH} AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -39,7 +42,7 @@ RUN GOTOOLCHAIN=local GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TAR
       go build -tags no_openssl -o /bin/apiserver ./backend/src/apiserver/
 
 # 2. Compile preloaded pipeline samples
-FROM registry.access.redhat.com/ubi9/python-311 AS compiler
+FROM --platform=${BUILDPLATFORM:-linux/amd64} registry.access.redhat.com/ubi9/python-311 AS compiler
 
 ARG TARGETOS TARGETARCH
 
