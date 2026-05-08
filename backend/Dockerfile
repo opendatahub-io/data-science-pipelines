@@ -18,11 +18,12 @@ ARG FIPS_ENABLED=1
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25.7-1771417345 AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} registry.access.redhat.com/ubi9/go-toolset:1.25.7-1771417345 AS builder
 
 ARG FIPS_ENABLED
 ARG TARGETOS
 ARG TARGETARCH
+ARG BUILDARCH
 
 USER root
 
@@ -39,10 +40,32 @@ RUN GO111MODULE=on go mod download
 COPY ${SOURCE_CODE}/ ./
 
 # FIPS_ENABLED=1 (default): FIPS-compliant build with strictfipsruntime (requires CGO)
-# FIPS_ENABLED=0: Non-FIPS build for local development on Apple Silicon (pure Go, no CGO)
+# FIPS_ENABLED=0: Non-FIPS build for local development on Apple Silicon (CGO required for go-sqlite3)
+#   When cross-compiling (e.g. arm64 -> amd64), zig provides the C cross-compiler needed for CGO.
 RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
-      GO111MODULE=on CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-        go build -o /bin/apiserver ./backend/src/apiserver/; \
+      if [ "${BUILDARCH}" != "${TARGETARCH}" ]; then \
+        case "${BUILDARCH}" in \
+          amd64) ZIG_ARCH="x86_64" ;; \
+          arm64) ZIG_ARCH="aarch64" ;; \
+          *) ZIG_ARCH="${BUILDARCH}" ;; \
+        esac && \
+        ZIG_VERSION=0.16.0 && \
+        curl -sL "https://ziglang.org/download/${ZIG_VERSION}/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}.tar.xz" | \
+          tar -xJf - -C /usr/local && \
+        ln -s "/usr/local/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}/zig" /usr/local/bin/zig && \
+        case "${TARGETARCH}" in \
+          amd64) ZIG_TARGET="x86_64-linux-gnu" ;; \
+          arm64) ZIG_TARGET="aarch64-linux-gnu" ;; \
+          *) ZIG_TARGET="${TARGETARCH}-linux-gnu" ;; \
+        esac && \
+        GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+          CC="zig cc -target ${ZIG_TARGET}" \
+          CXX="zig c++ -target ${ZIG_TARGET}" \
+          go build -o /bin/apiserver ./backend/src/apiserver/; \
+      else \
+        GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+          go build -o /bin/apiserver ./backend/src/apiserver/; \
+      fi; \
     elif [ "${FIPS_ENABLED}" = "1" ]; then \
       GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
         GOEXPERIMENT=strictfipsruntime \
@@ -53,7 +76,7 @@ RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
     dnf clean all
 
 # 2. Compile preloaded pipeline samples
-FROM registry.access.redhat.com/ubi9/python-311 AS compiler
+FROM --platform=${BUILDPLATFORM:-linux/amd64} registry.access.redhat.com/ubi9/python-311 AS compiler
 
 ARG TARGETOS TARGETARCH
 
