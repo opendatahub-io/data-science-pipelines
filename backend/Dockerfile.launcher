@@ -17,6 +17,7 @@ ARG SOURCE_CODE=.
 ARG FIPS_ENABLED=1
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
+ARG BUILDPLATFORM
 
 FROM --platform=${BUILDPLATFORM:-linux/amd64} registry.access.redhat.com/ubi9/go-toolset:1.25.7-1771417345 AS builder
 
@@ -48,7 +49,7 @@ RUN if [ "${FIPS_ENABLED}" != "0" ] && [ "${FIPS_ENABLED}" != "1" ]; then \
 RUN GO111MODULE=on CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -tags netgo -ldflags '-extldflags "-static"' -o /bin/launcher-v2 ./backend/src/v2/cmd/launcher-v2/*.go
 
 # Build FIPS version only when FIPS_ENABLED=1
-# FIPS_ENABLED=0: Skip FIPS build for local development on Apple Silicon
+# FIPS_ENABLED=0: Skip FIPS build for local development on Apple Silicon (native builds only)
 RUN if [ "${FIPS_ENABLED}" = "1" ]; then \
       GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOEXPERIMENT=strictfipsruntime go build -tags 'netgo strictfipsruntime' -o /bin/launcher-v2-fips ./backend/src/v2/cmd/launcher-v2/*.go; \
     else \

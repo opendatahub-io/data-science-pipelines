@@ -17,13 +17,14 @@ ARG SOURCE_CODE=.
 ARG FIPS_ENABLED=1
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
+ARG BUILDPLATFORM
 
 FROM --platform=${BUILDPLATFORM:-linux/amd64} registry.access.redhat.com/ubi9/go-toolset:1.25.7-1771417345 AS builder
 
 ARG FIPS_ENABLED
 ARG TARGETOS
 ARG TARGETARCH
-ARG BUILDARCH
+ARG BUILDARCH=amd64
 
 USER root
 
@@ -50,8 +51,15 @@ RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
           *) ZIG_ARCH="${BUILDARCH}" ;; \
         esac && \
         ZIG_VERSION=0.16.0 && \
-        curl -sL "https://ziglang.org/download/${ZIG_VERSION}/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}.tar.xz" | \
-          tar -xJf - -C /usr/local && \
+        case "${ZIG_ARCH}" in \
+          x86_64)  ZIG_SHA256="70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00" ;; \
+          aarch64) ZIG_SHA256="ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17" ;; \
+          *) echo "ERROR: unsupported ZIG_ARCH=${ZIG_ARCH}" && exit 1 ;; \
+        esac && \
+        curl --fail -sLo /tmp/zig.tar.xz \
+          "https://ziglang.org/download/${ZIG_VERSION}/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}.tar.xz" && \
+        echo "${ZIG_SHA256}  /tmp/zig.tar.xz" | sha256sum -c - && \
+        tar -xJf /tmp/zig.tar.xz -C /usr/local && rm /tmp/zig.tar.xz && \
         ln -s "/usr/local/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}/zig" /usr/local/bin/zig && \
         case "${TARGETARCH}" in \
           amd64) ZIG_TARGET="x86_64-linux-gnu" ;; \
