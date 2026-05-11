@@ -44,7 +44,7 @@ RUN GOTOOLCHAIN=local GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TAR
 # 2. Compile preloaded pipeline samples
 FROM --platform=${BUILDPLATFORM:-linux/amd64} registry.access.redhat.com/ubi9/python-311 AS compiler
 
-ARG TARGETOS TARGETARCH
+ARG BUILDARCH=amd64
 
 USER root
 RUN dnf install -y python3-setuptools jq
@@ -54,10 +54,10 @@ RUN python3 -m pip install -r requirements.txt --no-cache-dir
 
 # Downloading Argo CLI so that the samples are validated
 ENV ARGO_VERSION=v3.6.7
-RUN curl -sLO https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-${TARGETOS:-linux}-${TARGETARCH:-amd64}.gz && \
-    gunzip argo-${TARGETOS:-linux}-${TARGETARCH:-amd64}.gz && \
-    chmod +x argo-${TARGETOS:-linux}-${TARGETARCH:-amd64} && \
-    mv ./argo-${TARGETOS:-linux}-${TARGETARCH:-amd64} /usr/local/bin/argo
+RUN curl -sLO https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-linux-${BUILDARCH:-amd64}.gz && \
+    gunzip argo-linux-${BUILDARCH:-amd64}.gz && \
+    chmod +x argo-linux-${BUILDARCH:-amd64} && \
+    mv ./argo-linux-${BUILDARCH:-amd64} /usr/local/bin/argo
 
 WORKDIR /
 COPY ./samples /samples
