@@ -4,12 +4,14 @@
 
 ### Current Image Production and Consumption
 
-| Org  | Branch    | Actually produced                    | Built by      | DSP CI expects                       | Nightly builds expect                | Status                 |
-|------|-----------|--------------------------------------|---------------|--------------------------------------|--------------------------------------|------------------------|
-| ODH  | `main`    | `quay.io/opendatahub/...:main`       | GHA + Konflux | `quay.io/opendatahub/...:main`       | *not used*                           | ✅ Currently aligned    |
-| ODH  | `stable`  | `quay.io/opendatahub/...:odh-stable` | Konflux       | `quay.io/opendatahub/...:odh-stable` | `quay.io/opendatahub/...:odh-stable` | ✅ Fully aligned        |
-| RHDS | `main`    | *nothing*                            | —             | `quay.io/rhoai/...:main`             | *uses versioned releases*            | ❌ Missing image        |
-| RHDS | `rhoai-*` | *nothing*                            | —             | `quay.io/rhoai/...:rhoai-*`          | *uses versioned releases*            | ❌ Missing images       |
+| Org  | Branch    | Actually produced                                     | Built by      | DSP CI expects                       | Nightly builds expect                | Status                 |
+|------|-----------|-------------------------------------------------------|---------------|--------------------------------------|--------------------------------------|------------------------|
+| ODH  | `main`    | `quay.io/opendatahub/...:main`                        | GHA + Konflux | `quay.io/opendatahub/...:main`       | *not used*                           | ✅ Currently aligned    |
+| ODH  | `stable`  | `quay.io/opendatahub/...:odh-stable`                  | Konflux       | `quay.io/opendatahub/...:odh-stable` | `quay.io/opendatahub/...:odh-stable` | ✅ Fully aligned        |
+| ODH  | PRs       | `quay.io/opendatahub/...:pr-<number>`                 | GHA           | *not consumed*                       | *not used*                           | ❌ Not consumed         |
+| RHDS | `main`    | `quay.io/opendatahub/...:stable`                      | Konflux       | `quay.io/rhoai/...:main`             | *uses versioned releases*            | ❌ Wrong registry + tag |
+| RHDS | `rhoai-*` | *nothing*                                             | —             | `quay.io/rhoai/...:rhoai-*`          | *uses versioned releases*            | ❌ Missing images       |
+| RHDS | PRs       | `quay.io/rhoai/pull-request-pipelines:...-<revision>` | Konflux       | *not consumed*                       | *not used*                           | ❌ Not consumed         |
 
 ### Nightly Build Expectations
 
@@ -28,19 +30,21 @@
 
 ### Expected Image Production and Consumption
 
-| Org  | Branch    | Expected image                                                   | Produced by         | DSP CI consumes  | Nightly builds consume    |
-|------|-----------|------------------------------------------------------------------|---------------------|------------------|---------------------------|
-| ODH  | `main`    | `quay.io/opendatahub/data-science-pipelines-operator:odh-main`   | GHA + Konflux       | `...:odh-main`   | *not used*                |
-| ODH  | `stable`  | `quay.io/opendatahub/data-science-pipelines-operator:odh-stable` | Konflux (no change) | `...:odh-stable` | `...:odh-stable`          |
-| RHDS | `main`    | `quay.io/opendatahub/data-science-pipelines-operator:main`       | Konflux             | `...:main`       | *uses versioned releases* |
-| RHDS | `rhoai-*` | `quay.io/opendatahub/data-science-pipelines-operator:rhoai-*`    | Konflux             | `...:rhoai-*`    | *uses versioned releases* |
+| Org  | Branch    | Expected image                                                        | Produced by         | DSP CI consumes       | Nightly builds consume    |
+|------|-----------|-----------------------------------------------------------------------|---------------------|-----------------------|---------------------------|
+| ODH  | `main`    | `quay.io/opendatahub/data-science-pipelines-operator:odh-main`        | GHA + Konflux       | `...:odh-main`        | *not used*                |
+| ODH  | `stable`  | `quay.io/opendatahub/data-science-pipelines-operator:odh-stable`      | Konflux (no change) | `...:odh-stable`      | `...:odh-stable`          |
+| ODH  | PRs       | `quay.io/opendatahub/data-science-pipelines-operator:odh-pr-<number>` | GHA                 | `...:odh-pr-<number>` | *not used*                |
+| RHDS | `main`    | `quay.io/opendatahub/data-science-pipelines-operator:main`            | Konflux             | `...:main`            | *uses versioned releases* |
+| RHDS | `rhoai-*` | `quay.io/opendatahub/data-science-pipelines-operator:rhoai-*`         | Konflux             | `...:rhoai-*`         | *uses versioned releases* |
+| RHDS | PRs       | `quay.io/opendatahub/data-science-pipelines-operator:pr-<number>`     | Konflux             | `...:pr-<number>`     | *not used*                |
 
 
 ## Goals of This Alignment
 
 1. **Unified registry** - consolidate all images in `quay.io/opendatahub/` temporarily. We will not use the `quay.io/rhoai/` registry since RHDS already uses `quay.io/opendatahub/` today. Focus on making DSP CI work correctly first, then address registry separation in a follow-up effort.
 2. **Tag-based distinction** - use naming convention to distinguish source org
-3. **Complete coverage** - ensure main/master and release branches have corresponding images (ODH stable, RHDS rhoai-*)
+3. **Complete coverage** - ensure main/master, release branches, and PRs have corresponding images consumed by DSP CI
 4. **Preserved nightly builds** - maintain `odh-*` prefix compatibility  
 5. **Registry migration foundation** - establish consistent patterns for future `rhoai/` migration
 
@@ -49,13 +53,16 @@
 ### PR Sequence
 
 **PR 1 - DSPO (ODH main):**
-- Change ODH main builds: `:main` → `:odh-main` (both GHA and Konflux)
+- Change ODH main push builds: `:main` → `:odh-main` (both GHA and Konflux)
+- Change ODH PR builds: `:pr-<number>` → `:odh-pr-<number>` (GHA `build-prs.yml`)
 
 **PR 2 - DSP (ODH main):**
 - Update `operator_deployer.py` for new tag patterns:
   - ODH main: `:main` → `:odh-main`
+  - ODH PRs: `:pr-<number>` → `:odh-pr-<number>`
   - ODH stable: `:odh-stable` (no change)
   - RHDS branches: `:main`, `:rhoai-*` at `quay.io/opendatahub/`
+  - RHDS PRs: `:pr-<number>` at `quay.io/opendatahub/`
 - **Registry change:** Update RHDS DSP CI to expect images from `quay.io/opendatahub/` instead of `quay.io/rhoai/`
 
 **PR 3 - DSPO (ODH):**
@@ -65,10 +72,12 @@
 **PR 4 - DSP (ODH):**
 - Merge main → stable (brings DSP CI changes to stable)
 
-**ODH stable → RHDS sync** (triggered by PR 2 and PR 4)
+**ODH stable → RHDS sync** (triggered by PR 3 and PR 4)
 
 **PR 5 - DSPO (RHDS, after sync):**
-- Add RHDS main → `:main` Konflux config
+- Change RHDS main push builds: `:odh-stable` → `:main` (Konflux push config arrives from sync with `:odh-stable`; the existing RHDS config producing `:stable` will conflict and must be resolved)
+- Change RHDS PR builds: update existing Konflux `pull-request.yaml` to produce `quay.io/opendatahub/data-science-pipelines-operator:pr-<number>` (currently produces `quay.io/rhoai/pull-request-pipelines:...-<revision>`)
+- Disable GHA build workflows (`build-main.yml`, `build-prs.yml`) on RHDS — these arrive from sync but RHDS uses Konflux for all builds
 - Add RHDS rhoai-* → `:rhoai-*` Konflux config
 
 **PR 6 - DSP (RHDS, after PR 5):**
