@@ -17,15 +17,13 @@ TARGETARCH ?= amd64
 # BUILDARCH specifies the build host architecture, auto-detected from the host.
 BUILDARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
-# PLATFORM_FLAG controls the --platform argument for container builds.
-# When FIPS_ENABLED=0, we skip the platform flag to let the build run natively
-# and use Go's cross-compilation instead of QEMU emulation.
-# When FIPS_ENABLED=1, we use the platform flag to ensure proper FIPS build.
-ifeq ($(FIPS_ENABLED),0)
-PLATFORM_FLAG ?=
-else
-PLATFORM_FLAG ?= --platform linux/$(TARGETARCH)
+ifeq ($(filter $(BUILDARCH),amd64 arm64),)
+$(error Unsupported BUILDARCH: $(BUILDARCH). Only amd64 and arm64 are supported.)
 endif
+
+# PLATFORM_FLAG sets --platform to ensure the final image matches the target arch.
+# Builder/compiler stages override with --platform=${BUILDPLATFORM} to run natively.
+PLATFORM_FLAG ?= --platform linux/$(TARGETARCH)
 
 # Container Build Params
 CONTAINER_ENGINE ?= $(shell \
