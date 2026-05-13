@@ -9,7 +9,6 @@
 | ODH  | `main`    | `quay.io/opendatahub/...:main`       | GHA + Konflux | `quay.io/opendatahub/...:main`       | *not used*                           | ✅ Currently aligned    |
 | ODH  | `stable`  | `quay.io/opendatahub/...:odh-stable` | Konflux       | `quay.io/opendatahub/...:odh-stable` | `quay.io/opendatahub/...:odh-stable` | ✅ Fully aligned        |
 | RHDS | `main`    | *nothing*                            | —             | `quay.io/rhoai/...:main`             | *uses versioned releases*            | ❌ Missing image        |
-| RHDS | `stable`  | `quay.io/opendatahub/...:stable`     | Konflux       | `quay.io/rhoai/...:odh-stable`       | *uses versioned releases*            | ❌ Wrong registry + tag |
 | RHDS | `rhoai-*` | *nothing*                            | —             | `quay.io/rhoai/...:rhoai-*`          | *uses versioned releases*            | ❌ Missing images       |
 
 ### Nightly Build Expectations
@@ -34,7 +33,6 @@
 | ODH  | `main`    | `quay.io/opendatahub/data-science-pipelines-operator:odh-main`   | GHA + Konflux       | `...:odh-main`   | *not used*                |
 | ODH  | `stable`  | `quay.io/opendatahub/data-science-pipelines-operator:odh-stable` | Konflux (no change) | `...:odh-stable` | `...:odh-stable`          |
 | RHDS | `main`    | `quay.io/opendatahub/data-science-pipelines-operator:main`       | Konflux             | `...:main`       | *uses versioned releases* |
-| RHDS | `stable`  | `quay.io/opendatahub/data-science-pipelines-operator:stable`     | Konflux             | `...:stable`     | *uses versioned releases* |
 | RHDS | `rhoai-*` | `quay.io/opendatahub/data-science-pipelines-operator:rhoai-*`    | Konflux             | `...:rhoai-*`    | *uses versioned releases* |
 
 
@@ -42,7 +40,7 @@
 
 1. **Unified registry** - consolidate all images in `quay.io/opendatahub/` temporarily. We will not use the `quay.io/rhoai/` registry since RHDS already uses `quay.io/opendatahub/` today. Focus on making DSP CI work correctly first, then address registry separation in a follow-up effort.
 2. **Tag-based distinction** - use naming convention to distinguish source org
-3. **Complete coverage** - ensure main/master, stable, and release branches have corresponding images
+3. **Complete coverage** - ensure main/master and release branches have corresponding images (ODH stable, RHDS rhoai-*)
 4. **Preserved nightly builds** - maintain `odh-*` prefix compatibility  
 5. **Registry migration foundation** - establish consistent patterns for future `rhoai/` migration
 
@@ -57,7 +55,7 @@
 - Update `operator_deployer.py` for new tag patterns:
   - ODH main: `:main` → `:odh-main`
   - ODH stable: `:odh-stable` (no change)
-  - RHDS branches: `:main`, `:stable`, `:rhoai-*` at `quay.io/opendatahub/`
+  - RHDS branches: `:main`, `:rhoai-*` at `quay.io/opendatahub/`
 - **Registry change:** Update RHDS DSP CI to expect images from `quay.io/opendatahub/` instead of `quay.io/rhoai/`
 
 **PR 3 - DSPO (ODH):**
@@ -72,7 +70,6 @@
 **PR 5 - DSPO (RHDS, after sync):**
 - Add RHDS main → `:main` Konflux config
 - Add RHDS rhoai-* → `:rhoai-*` Konflux config
-- RHDS stable continues producing `:stable` tag (now at correct `quay.io/opendatahub/` registry)
 
 **PR 6 - DSP (RHDS, after PR 5):**
 - **Registry change:** Ensure RHDS DSP CI expects images from `quay.io/opendatahub/` (will inherit this change from ODH sync in PR 4)
