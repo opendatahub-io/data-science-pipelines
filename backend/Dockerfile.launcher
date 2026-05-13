@@ -26,6 +26,7 @@ ARG SOURCE_CODE
 ARG FIPS_ENABLED
 ARG TARGETOS
 ARG TARGETARCH
+ARG BUILDARCH=amd64
 
 ## Switch to root as required for some operations
 USER root
@@ -51,6 +52,9 @@ RUN GO111MODULE=on CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build 
 # Build FIPS version only when FIPS_ENABLED=1
 # FIPS_ENABLED=0: Skip FIPS build for local development on Apple Silicon (native builds only)
 RUN if [ "${FIPS_ENABLED}" = "1" ]; then \
+      if [ "${BUILDARCH}" != "${TARGETARCH}" ]; then \
+        echo "ERROR: FIPS builds require native compilation (BUILDARCH=${BUILDARCH} != TARGETARCH=${TARGETARCH})" && exit 1; \
+      fi; \
       GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOEXPERIMENT=strictfipsruntime go build -tags 'netgo strictfipsruntime' -o /bin/launcher-v2-fips ./backend/src/v2/cmd/launcher-v2/*.go; \
     else \
       cp /bin/launcher-v2 /bin/launcher-v2-fips; \

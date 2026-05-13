@@ -48,7 +48,7 @@ RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
         case "${BUILDARCH}" in \
           amd64) ZIG_ARCH="x86_64" ;; \
           arm64) ZIG_ARCH="aarch64" ;; \
-          *) ZIG_ARCH="${BUILDARCH}" ;; \
+          *) echo "ERROR: unsupported BUILDARCH=${BUILDARCH}" && exit 1 ;; \
         esac && \
         ZIG_VERSION=0.16.0 && \
         case "${ZIG_ARCH}" in \
@@ -64,7 +64,7 @@ RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
         case "${TARGETARCH}" in \
           amd64) ZIG_TARGET="x86_64-linux-gnu" ;; \
           arm64) ZIG_TARGET="aarch64-linux-gnu" ;; \
-          *) ZIG_TARGET="${TARGETARCH}-linux-gnu" ;; \
+          *) echo "ERROR: unsupported TARGETARCH=${TARGETARCH}" && exit 1 ;; \
         esac && \
         GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
           CC="zig cc -target ${ZIG_TARGET}" \
@@ -75,6 +75,9 @@ RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
           go build -o /bin/apiserver ./backend/src/apiserver/; \
       fi; \
     elif [ "${FIPS_ENABLED}" = "1" ]; then \
+      if [ "${BUILDARCH}" != "${TARGETARCH}" ]; then \
+        echo "ERROR: FIPS builds require native compilation (BUILDARCH=${BUILDARCH} != TARGETARCH=${TARGETARCH})" && exit 1; \
+      fi; \
       GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
         GOEXPERIMENT=strictfipsruntime \
         go build -tags strictfipsruntime -o /bin/apiserver ./backend/src/apiserver/; \
