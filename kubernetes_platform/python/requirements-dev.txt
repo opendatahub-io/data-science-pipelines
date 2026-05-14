@@ -1,4 +1,4 @@
-docformatter==1.4
+docformatter==1.7.8
 isort==5.10.1
 mypy==0.941
 pre-commit==2.19.0
