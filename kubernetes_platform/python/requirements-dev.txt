@@ -1,5 +1,5 @@
 docformatter==1.4
-isort==5.10.1
+isort==8.0.1
 mypy==0.941
 pre-commit==2.19.0
 pycln==2.1.1
