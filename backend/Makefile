@@ -14,15 +14,16 @@ FIPS_ENABLED ?= 1
 # Default is amd64.
 TARGETARCH ?= amd64
 
-# PLATFORM_FLAG controls the --platform argument for container builds.
-# When FIPS_ENABLED=0, we skip the platform flag to let the build run natively
-# and use Go's cross-compilation instead of QEMU emulation.
-# When FIPS_ENABLED=1, we use the platform flag to ensure proper FIPS build.
-ifeq ($(FIPS_ENABLED),0)
-PLATFORM_FLAG ?=
-else
-PLATFORM_FLAG ?= --platform linux/$(TARGETARCH)
+# BUILDARCH specifies the build host architecture, auto-detected from the host.
+BUILDARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
+
+ifeq ($(filter $(BUILDARCH),amd64 arm64),)
+$(error Unsupported BUILDARCH: $(BUILDARCH). Only amd64 and arm64 are supported.)
 endif
+
+# PLATFORM_FLAG sets --platform to ensure the final image matches the target arch.
+# Builder/compiler stages override with --platform=${BUILDPLATFORM} to run natively.
+PLATFORM_FLAG ?= --platform linux/$(TARGETARCH)
 
 # Container Build Params
 CONTAINER_ENGINE ?= $(shell \
@@ -59,25 +60,25 @@ image_all: image_apiserver image_persistence_agent image_cache image_swf image_v
 
 .PHONY: image_apiserver
 image_apiserver:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) -t ${IMG_REGISTRY}${IMG_TAG_APISERVER} -f backend/Dockerfile .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDARCH=$(BUILDARCH) -t ${IMG_REGISTRY}${IMG_TAG_APISERVER} -f backend/Dockerfile .
 .PHONY: image_persistence_agent
 image_persistence_agent:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) -t ${IMG_REGISTRY}${IMG_TAG_PERSISTENCEAGENT} -f backend/Dockerfile.persistenceagent .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDARCH=$(BUILDARCH) -t ${IMG_REGISTRY}${IMG_TAG_PERSISTENCEAGENT} -f backend/Dockerfile.persistenceagent .
 .PHONY: image_cache
 image_cache:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) -t ${IMG_REGISTRY}${IMG_TAG_CACHESERVER} -f backend/Dockerfile.cacheserver .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDARCH=$(BUILDARCH) -t ${IMG_REGISTRY}${IMG_TAG_CACHESERVER} -f backend/Dockerfile.cacheserver .
 .PHONY: image_swf
 image_swf:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) -t ${IMG_REGISTRY}${IMG_TAG_SCHEDULEDWORKFLOW} -f backend/Dockerfile.scheduledworkflow .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDARCH=$(BUILDARCH) -t ${IMG_REGISTRY}${IMG_TAG_SCHEDULEDWORKFLOW} -f backend/Dockerfile.scheduledworkflow .
 .PHONY: image_viewer
 image_viewer:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) -t ${IMG_REGISTRY}${IMG_TAG_VIEWERCONTROLLER} -f backend/Dockerfile.viewercontroller .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDARCH=$(BUILDARCH) -t ${IMG_REGISTRY}${IMG_TAG_VIEWERCONTROLLER} -f backend/Dockerfile.viewercontroller .
 .PHONY: image_visualization
 image_visualization:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) -t ${IMG_REGISTRY}${IMG_TAG_VISUALIZATION} -f backend/Dockerfile.visualization .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg BUILDARCH=$(BUILDARCH) -t ${IMG_REGISTRY}${IMG_TAG_VISUALIZATION} -f backend/Dockerfile.visualization .
 .PHONY: image_driver
 image_driver:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) -t ${IMG_REGISTRY}${IMG_TAG_DRIVER} -f backend/Dockerfile.driver .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDARCH=$(BUILDARCH) -t ${IMG_REGISTRY}${IMG_TAG_DRIVER} -f backend/Dockerfile.driver .
 .PHONY: image_driver_debug
 image_driver_debug:
 	cd $(MOD_ROOT) && sed -e '/RUN .*go mod download/a\
@@ -87,10 +88,10 @@ image_driver_debug:
 	COPY --from=builder /go/bin/dlv /bin/dlv\
 	EXPOSE 2345' \
 	backend/Dockerfile.driver > backend/Dockerfile.driver-debug
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg GCFLAGS="all=-N -l" --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) -t ${IMG_REGISTRY}${IMG_TAG_DRIVER}:debug -f backend/Dockerfile.driver-debug .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg GCFLAGS="all=-N -l" --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDARCH=$(BUILDARCH) -t ${IMG_REGISTRY}${IMG_TAG_DRIVER}:debug -f backend/Dockerfile.driver-debug .
 .PHONY: image_launcher
 image_launcher:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) -t ${IMG_REGISTRY}${IMG_TAG_LAUNCHER} -f backend/Dockerfile.launcher .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg FIPS_ENABLED=$(FIPS_ENABLED) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDARCH=$(BUILDARCH) -t ${IMG_REGISTRY}${IMG_TAG_LAUNCHER} -f backend/Dockerfile.launcher .
 
 .PHONY: install-cert-manager
 install-cert-manager:

@@ -17,14 +17,16 @@ ARG SOURCE_CODE=.
 ARG FIPS_ENABLED=1
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
+ARG BUILDPLATFORM
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25.7-1771417345 AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} registry.access.redhat.com/ubi9/go-toolset:1.25.7-1771417345 AS builder
 
 ## Build args to be used at this step
 ARG SOURCE_CODE
 ARG FIPS_ENABLED
 ARG TARGETOS
 ARG TARGETARCH
+ARG BUILDARCH=amd64
 
 ## Switch to root as required for some operations
 USER root
@@ -46,12 +48,15 @@ RUN GO111MODULE=on go mod download
 # Copy the source
 COPY ${SOURCE_CODE}/ ./
 
-# FIPS_ENABLED=1 (default): FIPS-compliant build with strictfipsruntime (requires CGO)
+# FIPS_ENABLED=1 (default): FIPS-compliant build with strictfipsruntime (requires CGO, native builds only)
 # FIPS_ENABLED=0: Non-FIPS build for local development on Apple Silicon (pure Go, no CGO)
 RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
       GO111MODULE=on CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
         go build -o /bin/controller backend/src/crd/controller/scheduledworkflow/*.go; \
     elif [ "${FIPS_ENABLED}" = "1" ]; then \
+      if [ "${BUILDARCH}" != "${TARGETARCH}" ]; then \
+        echo "ERROR: FIPS builds require native compilation (BUILDARCH=${BUILDARCH} != TARGETARCH=${TARGETARCH})" && exit 1; \
+      fi; \
       GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
         GOEXPERIMENT=strictfipsruntime \
         go build -tags strictfipsruntime -o /bin/controller backend/src/crd/controller/scheduledworkflow/*.go; \

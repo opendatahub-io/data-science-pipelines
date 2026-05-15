@@ -17,12 +17,14 @@ ARG SOURCE_CODE=.
 ARG FIPS_ENABLED=1
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
+ARG BUILDPLATFORM
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25.7-1771417345 AS builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} registry.access.redhat.com/ubi9/go-toolset:1.25.7-1771417345 AS builder
 
 ARG FIPS_ENABLED
 ARG TARGETOS
 ARG TARGETARCH
+ARG BUILDARCH=amd64
 
 USER root
 
@@ -39,11 +41,43 @@ RUN GO111MODULE=on go mod download
 COPY ${SOURCE_CODE}/ ./
 
 # FIPS_ENABLED=1 (default): FIPS-compliant build with strictfipsruntime (requires CGO)
-# FIPS_ENABLED=0: Non-FIPS build for local development on Apple Silicon (pure Go, no CGO)
+# FIPS_ENABLED=0: Non-FIPS build for local development on Apple Silicon (CGO required for go-sqlite3)
+#   When cross-compiling (e.g. arm64 -> amd64), zig provides the C cross-compiler needed for CGO.
 RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
-      GO111MODULE=on CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-        go build -o /bin/apiserver ./backend/src/apiserver/; \
+      if [ "${BUILDARCH}" != "${TARGETARCH}" ]; then \
+        case "${BUILDARCH}" in \
+          amd64) ZIG_ARCH="x86_64" ;; \
+          arm64) ZIG_ARCH="aarch64" ;; \
+          *) echo "ERROR: unsupported BUILDARCH=${BUILDARCH}" && exit 1 ;; \
+        esac && \
+        ZIG_VERSION=0.16.0 && \
+        case "${ZIG_ARCH}" in \
+          x86_64)  ZIG_SHA256="70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00" ;; \
+          aarch64) ZIG_SHA256="ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17" ;; \
+          *) echo "ERROR: unsupported ZIG_ARCH=${ZIG_ARCH}" && exit 1 ;; \
+        esac && \
+        curl --fail -sLo /tmp/zig.tar.xz \
+          "https://ziglang.org/download/${ZIG_VERSION}/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}.tar.xz" && \
+        echo "${ZIG_SHA256}  /tmp/zig.tar.xz" | sha256sum -c - && \
+        tar -xJf /tmp/zig.tar.xz -C /usr/local && rm /tmp/zig.tar.xz && \
+        ln -s "/usr/local/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}/zig" /usr/local/bin/zig && \
+        case "${TARGETARCH}" in \
+          amd64) ZIG_TARGET="x86_64-linux-gnu" ;; \
+          arm64) ZIG_TARGET="aarch64-linux-gnu" ;; \
+          *) echo "ERROR: unsupported TARGETARCH=${TARGETARCH}" && exit 1 ;; \
+        esac && \
+        GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+          CC="zig cc -target ${ZIG_TARGET}" \
+          CXX="zig c++ -target ${ZIG_TARGET}" \
+          go build -o /bin/apiserver ./backend/src/apiserver/; \
+      else \
+        GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+          go build -o /bin/apiserver ./backend/src/apiserver/; \
+      fi; \
     elif [ "${FIPS_ENABLED}" = "1" ]; then \
+      if [ "${BUILDARCH}" != "${TARGETARCH}" ]; then \
+        echo "ERROR: FIPS builds require native compilation (BUILDARCH=${BUILDARCH} != TARGETARCH=${TARGETARCH})" && exit 1; \
+      fi; \
       GO111MODULE=on CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
         GOEXPERIMENT=strictfipsruntime \
         go build -tags strictfipsruntime -o /bin/apiserver ./backend/src/apiserver/; \
@@ -53,9 +87,9 @@ RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
     dnf clean all
 
 # 2. Compile preloaded pipeline samples
-FROM registry.access.redhat.com/ubi9/python-311 AS compiler
+FROM --platform=${BUILDPLATFORM:-linux/amd64} registry.access.redhat.com/ubi9/python-311 AS compiler
 
-ARG TARGETOS TARGETARCH
+ARG BUILDARCH=amd64
 
 USER root
 RUN dnf install -y python3-setuptools jq
@@ -65,10 +99,10 @@ RUN python3 -m pip install -r requirements.txt --no-cache-dir
 
 # Downloading Argo CLI so that the samples are validated
 ENV ARGO_VERSION=v3.6.7
-RUN curl -sLO https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-${TARGETOS:-linux}-${TARGETARCH:-amd64}.gz && \
-    gunzip argo-${TARGETOS:-linux}-${TARGETARCH:-amd64}.gz && \
-    chmod +x argo-${TARGETOS:-linux}-${TARGETARCH:-amd64} && \
-    mv ./argo-${TARGETOS:-linux}-${TARGETARCH:-amd64} /usr/local/bin/argo
+RUN curl -sLO https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-linux-${BUILDARCH:-amd64}.gz && \
+    gunzip argo-linux-${BUILDARCH:-amd64}.gz && \
+    chmod +x argo-linux-${BUILDARCH:-amd64} && \
+    mv ./argo-linux-${BUILDARCH:-amd64} /usr/local/bin/argo
 
 WORKDIR /
 COPY ./samples /samples
