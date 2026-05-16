@@ -168,7 +168,7 @@
   "overrides": {
     "nanoid": "3.3.8",
     "recharts": {
-      "react-redux": "9.2.0"
+      "react-redux": "9.3.0"
     },
     "express": {
       "path-to-regexp": "0.1.12"
