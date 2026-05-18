@@ -33,7 +33,7 @@ comm==0.2.3
     # via ipykernel
 debugpy==1.8.16
     # via ipykernel
-decorator==5.2.1
+decorator==5.3.1
     # via
     #   gcsfs
     #   ipython
