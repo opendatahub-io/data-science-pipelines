@@ -58,11 +58,24 @@ jobs:
         pip install requests==2.28.1
 
     - name: Run SDK Tests
+      id: run-tests
       env:
         # We setup the env in the CI
         SETUP_ENV: false
         REPO_NAME: ${{ github.repository }}
         PULL_NUMBER: ${{ github.event.pull_request.number }}
         PYTEST_PARALLEL_WORKERS: 2
+        JUNIT_XML: "sdk-unit.xml"
+        PIP_INDEX_URL: "https://pypi.org/simple"
+        PIP_TRUSTED_HOST: "pypi.org"
       run: |
         ./test/presubmit-tests-sdk.sh
+        echo "JUNIT_XML=$JUNIT_XML" >> "$GITHUB_OUTPUT"
+
+    - name: Publish Junit Summary
+      id: summary
+      uses: ./.github/actions/junit-summary
+      if: (!cancelled())
+      with:
+        xml_files: ${{ steps.run-tests.outputs.JUNIT_XML }}
+      continue-on-error: true

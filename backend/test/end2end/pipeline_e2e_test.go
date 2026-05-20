@@ -177,6 +177,19 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		}
 	})
 
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds on a Disconnected cluster>", FlakeAttempts(2), Label(Disconnected), func() {
+		var pipelineDir = "valid"
+		pipelineFiles := []string{
+			"essential/component_with_pip_index_urls.yaml",
+			"critical/flip_coin.yaml",
+		}
+		for _, pipelineFile := range pipelineFiles {
+			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
+				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
+			})
+		}
+	})
+
 	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(Sanity), func() {
 		var pipelineDir = "valid"
 		pipelineFiles := []string{

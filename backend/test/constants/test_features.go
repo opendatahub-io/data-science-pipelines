@@ -20,6 +20,8 @@ const (
 	Smoke string = "smoke"
 	// Sanity - quality gate tag for sanity level testing
 	Sanity string = "sanity"
+	// Disconnected - quality gate tag for disconnected testing
+	Disconnected string = "disconnected"
 	// Integration - quality gate tag for integration testing with other components
 	Integration = "integration"
 	// E2eEssential - For pipelines that are essential for regression testing

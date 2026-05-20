@@ -17,11 +17,10 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location --index-url https://pypi.org/simple\
-          \ --trusted-host https://pypi.org/simple 'yapf'  &&  python3 -m pip install\
-          \ --quiet --no-warn-script-location --index-url https://pypi.org/simple\
-          \ --trusted-host https://pypi.org/simple 'kfp==2.14.3' '--no-deps' 'typing-extensions>=3.7.4,<5;\
-          \ python_version<\"3.9\"' && \"$0\" \"$@\"\n"
+          \ python3 -m pip install --quiet --no-warn-script-location 'yapf'  &&  python3\
+          \ -m pip install --quiet --no-warn-script-location 'kfp==2.15.2' '--no-deps'\
+          \ 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\
+          \n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -48,4 +47,21 @@ root:
         taskInfo:
           name: component-op
 schemaVersion: 2.1.0
-sdkVersion: kfp-2.14.3
+sdkVersion: kfp-2.15.2
+---
+platforms:
+  kubernetes:
+    deploymentSpec:
+      executors:
+        exec-component-op:
+          configMapAsEnv:
+          - configMapName: ds-pipeline-custom-env-vars
+            configMapNameParameter:
+              runtimeValue:
+                constant: ds-pipeline-custom-env-vars
+            keyToEnv:
+            - configMapKey: pip_index_url
+              envVar: PIP_INDEX_URL
+            - configMapKey: pip_trusted_host
+              envVar: PIP_TRUSTED_HOST
+            optional: false

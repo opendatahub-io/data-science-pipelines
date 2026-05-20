@@ -147,6 +147,12 @@ func getPackagePath(subdir string) string {
 func ReplaceSDKInPipelineSpec(pipelineFilePath string) []byte {
 	pipelineFileBytes, err := os.ReadFile(pipelineFilePath)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to read pipeline file: "+pipelineFilePath)
+
+	if *config.DisconnectedCluster {
+		logger.Log("Disconnected cluster: skipping SDK replacement, using kfp version from pipeline spec")
+		return pipelineFileBytes
+	}
+
 	pipelineFileString := string(pipelineFileBytes)
 
 	// Define regex pattern to match kfp==[version] (e.g., kfp==2.8.0)
@@ -164,10 +170,8 @@ func ReplaceBaseImageInPipelineSpec(pipelineFilePath string) []byte {
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "failed to read pipeline file: "+pipelineFilePath)
 	pipelineFileString := string(pipelineFileBytes)
 
-	// Define regex pattern to match image: python:3.9
-	imagePattern := regexp.MustCompile(`image: python:[0-9]+\.[0-9]+`)
+	imagePattern := regexp.MustCompile(`image: (?:python:[0-9]+\.[0-9]+|registry\.(?:redhat\.io|access\.redhat\.com)/ubi[0-9]+/python-[^\s]+|public\.ecr\.aws/docker/library/python:[^\s]+)`)
 
-	// Replace all occurrences with the new package path
 	newBaseImage := fmt.Sprintf("image: %s", *config.BaseImage)
 	modifiedPipelineSpec := imagePattern.ReplaceAllString(pipelineFileString, newBaseImage)
 

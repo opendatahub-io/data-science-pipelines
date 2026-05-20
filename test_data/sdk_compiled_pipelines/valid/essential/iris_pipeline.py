@@ -2,10 +2,9 @@ from kfp import compiler, dsl
 from kfp.dsl import ClassificationMetrics, Dataset, Input, Model, Output
 
 common_base_image = (
-    "registry.redhat.io/ubi8/python-39@sha256:3523b184212e1f2243e76d8094ab52b01ea3015471471290d011625e1763af61"
+    "registry.access.redhat.com/ubi9/python-312@sha256:e80ff3673c95b91f0dafdbe97afb261eab8244d7fd8b47e20ffcbcfee27fb168"
 )
 # common_base_image = "quay.io/opendatahub/ds-pipelines-sample-base:v1.0"
-
 
 @dsl.component(base_image=common_base_image, packages_to_install=["pandas==2.2.0"])
 def create_dataset(iris_dataset: Output[Dataset]):

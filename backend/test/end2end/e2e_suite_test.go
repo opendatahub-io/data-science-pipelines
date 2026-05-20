@@ -74,6 +74,14 @@ var _ = BeforeSuite(func() {
 			log.Fatalf("Error getting TLS Config: %v", err)
 		}
 	}
+
+	testutil.CreateConfigMap(k8Client,
+		testutil.GetNamespace(),
+		*config.CustomPipelineEnvVars,
+		map[string]string{
+			"pip_index_url":    *config.CustomPipIndexURL,
+			"pip_trusted_host": *config.CustomPipTrustedHost,
+		})
 	if *config.KubeflowMode {
 		logger.Log("Creating API Clients for Kubeflow Mode")
 		newPipelineClient = func() (*apiserver.PipelineClient, error) {

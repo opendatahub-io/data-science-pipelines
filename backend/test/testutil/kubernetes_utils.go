@@ -29,6 +29,7 @@ import (
 	"github.com/onsi/gomega"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	v1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc" // Register credential plugin for OIDC authentication
@@ -178,6 +179,28 @@ func CreateSecret(client *kubernetes.Clientset, namespace string, secret *v1.Sec
 	} else {
 		logger.Log("Looks like %s already exists, because creation failed due to %s", secret.Name, createErr.Error())
 		_, getErr := client.CoreV1().Secrets(namespace).Get(context.TODO(), secret.Name, metav1.GetOptions{})
-		gomega.Expect(getErr).ToNot(gomega.HaveOccurred(), "Failed to get secret '%s'")
+		gomega.Expect(getErr).ToNot(gomega.HaveOccurred(), fmt.Sprintf("Failed to get secret '%s' as well", secret.Name))
 	}
+}
+
+func CreateConfigMap(client *kubernetes.Clientset, namespace string, configMapName string, data map[string]string) {
+	configMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: namespace,
+		},
+		Data: data,
+	}
+
+	logger.Log("Creating Config Map %s", configMapName)
+	_, err := client.CoreV1().ConfigMaps(namespace).Create(
+		context.TODO(),
+		configMap,
+		metav1.CreateOptions{},
+	)
+	if k8serrors.IsAlreadyExists(err) {
+		logger.Log("ConfigMap '%s' already exists, skipping creation", configMapName)
+		return
+	}
+	gomega.Expect(err).ToNot(gomega.HaveOccurred(), "Failed to create config map '%s'", configMapName)
 }

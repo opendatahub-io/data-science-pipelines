@@ -18,6 +18,8 @@ DSPO_BRANCH="stable"
 DSP_TAG="stable"
 DEPLOY_DSPO="true"
 NUM_PARALLEL_NODES=10
+CUSTOM_PIP_INDEX_URL="https://pypi.org/simple"
+CUSTOM_PIP_TRUSTED_HOST="pypi.org"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -51,6 +53,35 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+source "./check_disconnected_cluster.sh"
+DISCONNECTED_RESULT="$(check_disconnected_cluster)" || {
+  echo "ERROR: check_disconnected_cluster failed (exit $?), aborting"
+  exit 1
+}
+if [[ "$DISCONNECTED_RESULT" == "true" ]]; then
+  echo "Disconnected cluster detected, setting test label to 'disconnected'"
+  TEST_LABEL="disconnected"
+  CLUSTER_BASE_DOMAIN=""
+  for attempt in 1 2 3; do
+    CLUSTER_BASE_DOMAIN=$(oc get dns cluster -o jsonpath='{.spec.baseDomain}' 2>/dev/null) && break
+    echo "WARNING: oc get dns cluster failed (attempt $attempt/3), retrying in 5s..."
+    sleep 5
+  done
+  if [[ -z "$CLUSTER_BASE_DOMAIN" ]]; then
+    echo "ERROR: Failed to retrieve CLUSTER_BASE_DOMAIN from 'oc get dns cluster' after 3 attempts"
+    exit 1
+  fi
+  BASTION_HOST="bastion.${CLUSTER_BASE_DOMAIN}"
+  AWS_ENDPOINT="${BASTION_HOST}:9000"
+  AWS_SECRET_ACCESS_KEY="minioadmin"
+  AWS_ACCESS_KEY_ID="minioadmin"
+  BUCKET="ods-ci-ds-pipelines"
+  REGION="us-east-1"
+  CUSTOM_PIP_INDEX_URL="https://${BASTION_HOST}:9443/root/pypi/+simple/"
+  CUSTOM_PIP_TRUSTED_HOST="${BASTION_HOST}"
+  DISCONNECTED_CLUSTER="true"
+fi
 
 # 1. Create a temporary file to store dspa config
 dspa_deployment=$(mktemp)
@@ -115,11 +146,9 @@ EOF
 else
   cat <<EOF >> "$dspa_deployment"
   objectStorage:
-    enableExternalRoute: true
     minio:
       deploy: true
       image: 'quay.io/opendatahub/minio:RELEASE.2019-08-14T20-37-41Z-license-compliance'
-  podToPodTLS: true
 EOF
 fi
 
@@ -240,5 +269,8 @@ go run github.com/onsi/ginkgo/v2/ginkgo -r -v -p \
   -apiUrl="$API_URL" \
   -authToken="$API_TOKEN" \
   -disableTlsCheck=true \
+  -customPipIndexURL=$CUSTOM_PIP_INDEX_URL \
+  -customPipTrustedHost=$CUSTOM_PIP_TRUSTED_HOST \
   -serviceAccountName=pipeline-runner-"$DSPA_NAME" \
-  -baseImage="registry.redhat.io/ubi9/python-312@sha256:e80ff3673c95b91f0dafdbe97afb261eab8244d7fd8b47e20ffcbcfee27fb168"
+  -baseImage="registry.redhat.io/ubi9/python-312@sha256:e80ff3673c95b91f0dafdbe97afb261eab8244d7fd8b47e20ffcbcfee27fb168" \
+  -disconnectedCluster="${DISCONNECTED_CLUSTER:-false}"

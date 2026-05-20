@@ -5,13 +5,15 @@ metadata:
 spec:
   arguments:
     parameters:
-    - name: components-6d9fd4a4d18480bfc98d1bbb174a6aaea617e354b4ed0efcc0eadc2414b1e582
+    - name: kubernetes-comp-print-msg
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
+    - name: components-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c
       value: '{"executorLabel":"exec-print-msg","inputDefinitions":{"parameters":{"msg":{"parameterType":"STRING"}}}}'
-    - name: implementations-6d9fd4a4d18480bfc98d1bbb174a6aaea617e354b4ed0efcc0eadc2414b1e582
+    - name: implementations-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c
       value: '{"args":["--executor_input","{{$}}","--function_to_execute","print_msg"],"command":["sh","-c","\nif
         ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3
         -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1
-        python3 -m pip install --quiet --no-warn-script-location ''kfp==2.14.3'' ''--no-deps''
+        python3 -m pip install --quiet --no-warn-script-location ''kfp==2.15.2'' ''--no-deps''
         ''typing-extensions\u003e=3.7.4,\u003c5; python_version\u003c\"3.9\"'' \u0026\u0026
         \"$0\" \"$@\"\n","sh","-ec","program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\"
         \u003e \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3
@@ -22,17 +24,21 @@ spec:
       value: '{"dag":{"tasks":{"print-msg":{"cachingOptions":{},"componentRef":{"name":"comp-print-msg"},"inputs":{"parameters":{"msg":{"runtimeValue":{"constant":"heads
         and {{$.inputs.parameters[''pipelinechannel--random-num-Output'']}} \u003e
         5!"}},"pipelinechannel--random-num-Output":{"componentInputParameter":"pipelinechannel--random-num-Output"}}},"taskInfo":{"name":"print-msg"}}}},"inputDefinitions":{"parameters":{"pipelinechannel--flip-coin-Output":{"parameterType":"STRING"},"pipelinechannel--random-num-Output":{"parameterType":"NUMBER_INTEGER"}}}}'
+    - name: kubernetes-comp-print-msg-2
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
     - name: components-comp-condition-3
       value: '{"dag":{"tasks":{"print-msg-2":{"cachingOptions":{},"componentRef":{"name":"comp-print-msg-2"},"inputs":{"parameters":{"msg":{"runtimeValue":{"constant":"heads
         and {{$.inputs.parameters[''pipelinechannel--random-num-Output'']}} \u003c=
         5!"}},"pipelinechannel--random-num-Output":{"componentInputParameter":"pipelinechannel--random-num-Output"}}},"taskInfo":{"name":"print-msg-2"}}}},"inputDefinitions":{"parameters":{"pipelinechannel--flip-coin-Output":{"parameterType":"STRING"},"pipelinechannel--random-num-Output":{"parameterType":"NUMBER_INTEGER"}}}}'
-    - name: components-2c52a38e80b2a374e3ca25334ecf08a91b2565a0eb9fe88129b5d3b4392493b0
+    - name: kubernetes-comp-random-num
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
+    - name: components-f1170b2d8b489f7533f5675cb134187e3b1a1f86c7febe015f4113cff3efadaa
       value: '{"executorLabel":"exec-random-num","inputDefinitions":{"parameters":{"high":{"parameterType":"NUMBER_INTEGER"},"low":{"parameterType":"NUMBER_INTEGER"}}},"outputDefinitions":{"parameters":{"Output":{"parameterType":"NUMBER_INTEGER"}}}}'
-    - name: implementations-2c52a38e80b2a374e3ca25334ecf08a91b2565a0eb9fe88129b5d3b4392493b0
+    - name: implementations-f1170b2d8b489f7533f5675cb134187e3b1a1f86c7febe015f4113cff3efadaa
       value: '{"args":["--executor_input","{{$}}","--function_to_execute","random_num"],"command":["sh","-c","\nif
         ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3
         -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1
-        python3 -m pip install --quiet --no-warn-script-location ''kfp==2.14.3'' ''--no-deps''
+        python3 -m pip install --quiet --no-warn-script-location ''kfp==2.15.2'' ''--no-deps''
         ''typing-extensions\u003e=3.7.4,\u003c5; python_version\u003c\"3.9\"'' \u0026\u0026
         \"$0\" \"$@\"\n","sh","-ec","program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\"
         \u003e \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3
@@ -45,25 +51,33 @@ spec:
       value: '{"dag":{"tasks":{"condition-2":{"componentRef":{"name":"comp-condition-2"},"dependentTasks":["random-num"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"componentInputParameter":"pipelinechannel--flip-coin-Output"},"pipelinechannel--random-num-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"random-num"}}}},"taskInfo":{"name":"condition-2"},"triggerPolicy":{"condition":"int(inputs.parameter_values[''pipelinechannel--random-num-Output''])
         \u003e 5"}},"condition-3":{"componentRef":{"name":"comp-condition-3"},"dependentTasks":["random-num"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"componentInputParameter":"pipelinechannel--flip-coin-Output"},"pipelinechannel--random-num-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"random-num"}}}},"taskInfo":{"name":"condition-3"},"triggerPolicy":{"condition":"int(inputs.parameter_values[''pipelinechannel--random-num-Output''])
         \u003c= 5"}},"random-num":{"cachingOptions":{},"componentRef":{"name":"comp-random-num"},"inputs":{"parameters":{"high":{"runtimeValue":{"constant":9}},"low":{"runtimeValue":{"constant":0}}}},"taskInfo":{"name":"random-num"}}}},"inputDefinitions":{"parameters":{"pipelinechannel--flip-coin-Output":{"parameterType":"STRING"}}}}'
+    - name: kubernetes-comp-print-msg-3
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
     - name: components-comp-condition-5
       value: '{"dag":{"tasks":{"print-msg-3":{"cachingOptions":{},"componentRef":{"name":"comp-print-msg-3"},"inputs":{"parameters":{"msg":{"runtimeValue":{"constant":"tails
         and {{$.inputs.parameters[''pipelinechannel--random-num-2-Output'']}} \u003e
         15!"}},"pipelinechannel--random-num-2-Output":{"componentInputParameter":"pipelinechannel--random-num-2-Output"}}},"taskInfo":{"name":"print-msg-3"}}}},"inputDefinitions":{"parameters":{"pipelinechannel--flip-coin-Output":{"parameterType":"STRING"},"pipelinechannel--random-num-2-Output":{"parameterType":"NUMBER_INTEGER"}}}}'
+    - name: kubernetes-comp-print-msg-4
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
     - name: components-comp-condition-6
       value: '{"dag":{"tasks":{"print-msg-4":{"cachingOptions":{},"componentRef":{"name":"comp-print-msg-4"},"inputs":{"parameters":{"msg":{"runtimeValue":{"constant":"tails
         and {{$.inputs.parameters[''pipelinechannel--random-num-2-Output'']}} \u003c=
         15!"}},"pipelinechannel--random-num-2-Output":{"componentInputParameter":"pipelinechannel--random-num-2-Output"}}},"taskInfo":{"name":"print-msg-4"}}}},"inputDefinitions":{"parameters":{"pipelinechannel--flip-coin-Output":{"parameterType":"STRING"},"pipelinechannel--random-num-2-Output":{"parameterType":"NUMBER_INTEGER"}}}}'
+    - name: kubernetes-comp-random-num-2
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
     - name: components-comp-condition-4
       value: '{"dag":{"tasks":{"condition-5":{"componentRef":{"name":"comp-condition-5"},"dependentTasks":["random-num-2"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"componentInputParameter":"pipelinechannel--flip-coin-Output"},"pipelinechannel--random-num-2-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"random-num-2"}}}},"taskInfo":{"name":"condition-5"},"triggerPolicy":{"condition":"int(inputs.parameter_values[''pipelinechannel--random-num-2-Output''])
         \u003e 15"}},"condition-6":{"componentRef":{"name":"comp-condition-6"},"dependentTasks":["random-num-2"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"componentInputParameter":"pipelinechannel--flip-coin-Output"},"pipelinechannel--random-num-2-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"random-num-2"}}}},"taskInfo":{"name":"condition-6"},"triggerPolicy":{"condition":"int(inputs.parameter_values[''pipelinechannel--random-num-2-Output''])
         \u003c= 15"}},"random-num-2":{"cachingOptions":{},"componentRef":{"name":"comp-random-num-2"},"inputs":{"parameters":{"high":{"runtimeValue":{"constant":19}},"low":{"runtimeValue":{"constant":10}}}},"taskInfo":{"name":"random-num-2"}}}},"inputDefinitions":{"parameters":{"pipelinechannel--flip-coin-Output":{"parameterType":"STRING"}}}}'
-    - name: components-6175eb183c8ba935a4c42b40e65a5c3e4623a9c16b38fd5c4bbfc23275f0e9bd
+    - name: kubernetes-comp-flip-coin
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
+    - name: components-54d0c2631d6668bed811927e817e5e2cbe659621bc132697bf31d556d3bf1fdc
       value: '{"executorLabel":"exec-flip-coin","outputDefinitions":{"parameters":{"Output":{"parameterType":"STRING"}}}}'
-    - name: implementations-6175eb183c8ba935a4c42b40e65a5c3e4623a9c16b38fd5c4bbfc23275f0e9bd
+    - name: implementations-54d0c2631d6668bed811927e817e5e2cbe659621bc132697bf31d556d3bf1fdc
       value: '{"args":["--executor_input","{{$}}","--function_to_execute","flip_coin"],"command":["sh","-c","\nif
         ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3
         -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1
-        python3 -m pip install --quiet --no-warn-script-location ''kfp==2.14.3'' ''--no-deps''
+        python3 -m pip install --quiet --no-warn-script-location ''kfp==2.15.2'' ''--no-deps''
         ''typing-extensions\u003e=3.7.4,\u003c5; python_version\u003c\"3.9\"'' \u0026\u0026
         \"$0\" \"$@\"\n","sh","-ec","program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\"
         \u003e \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3
@@ -308,17 +322,19 @@ spec:
       - arguments:
           parameters:
           - name: component
-            value: '{{workflow.parameters.components-6d9fd4a4d18480bfc98d1bbb174a6aaea617e354b4ed0efcc0eadc2414b1e582}}'
+            value: '{{workflow.parameters.components-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task
             value: '{"cachingOptions":{},"componentRef":{"name":"comp-print-msg"},"inputs":{"parameters":{"msg":{"runtimeValue":{"constant":"heads
               and {{$.inputs.parameters[''pipelinechannel--random-num-Output'']}}
               \u003e 5!"}},"pipelinechannel--random-num-Output":{"componentInputParameter":"pipelinechannel--random-num-Output"}}},"taskInfo":{"name":"print-msg"}}'
           - name: container
-            value: '{{workflow.parameters.implementations-6d9fd4a4d18480bfc98d1bbb174a6aaea617e354b4ed0efcc0eadc2414b1e582}}'
+            value: '{{workflow.parameters.implementations-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task-name
             value: print-msg
           - name: parent-dag-id
             value: '{{inputs.parameters.parent-dag-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-print-msg}}'
         name: print-msg-driver
         template: system-container-driver
       - arguments:
@@ -342,17 +358,19 @@ spec:
       - arguments:
           parameters:
           - name: component
-            value: '{{workflow.parameters.components-6d9fd4a4d18480bfc98d1bbb174a6aaea617e354b4ed0efcc0eadc2414b1e582}}'
+            value: '{{workflow.parameters.components-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task
             value: '{"cachingOptions":{},"componentRef":{"name":"comp-print-msg-2"},"inputs":{"parameters":{"msg":{"runtimeValue":{"constant":"heads
               and {{$.inputs.parameters[''pipelinechannel--random-num-Output'']}}
               \u003c= 5!"}},"pipelinechannel--random-num-Output":{"componentInputParameter":"pipelinechannel--random-num-Output"}}},"taskInfo":{"name":"print-msg-2"}}'
           - name: container
-            value: '{{workflow.parameters.implementations-6d9fd4a4d18480bfc98d1bbb174a6aaea617e354b4ed0efcc0eadc2414b1e582}}'
+            value: '{{workflow.parameters.implementations-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task-name
             value: print-msg-2
           - name: parent-dag-id
             value: '{{inputs.parameters.parent-dag-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-print-msg-2}}'
         name: print-msg-2-driver
         template: system-container-driver
       - arguments:
@@ -521,15 +539,17 @@ spec:
       - arguments:
           parameters:
           - name: component
-            value: '{{workflow.parameters.components-2c52a38e80b2a374e3ca25334ecf08a91b2565a0eb9fe88129b5d3b4392493b0}}'
+            value: '{{workflow.parameters.components-f1170b2d8b489f7533f5675cb134187e3b1a1f86c7febe015f4113cff3efadaa}}'
           - name: task
             value: '{"cachingOptions":{},"componentRef":{"name":"comp-random-num"},"inputs":{"parameters":{"high":{"runtimeValue":{"constant":9}},"low":{"runtimeValue":{"constant":0}}}},"taskInfo":{"name":"random-num"}}'
           - name: container
-            value: '{{workflow.parameters.implementations-2c52a38e80b2a374e3ca25334ecf08a91b2565a0eb9fe88129b5d3b4392493b0}}'
+            value: '{{workflow.parameters.implementations-f1170b2d8b489f7533f5675cb134187e3b1a1f86c7febe015f4113cff3efadaa}}'
           - name: task-name
             value: random-num
           - name: parent-dag-id
             value: '{{inputs.parameters.parent-dag-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-random-num}}'
         name: random-num-driver
         template: system-container-driver
       - arguments:
@@ -553,17 +573,19 @@ spec:
       - arguments:
           parameters:
           - name: component
-            value: '{{workflow.parameters.components-6d9fd4a4d18480bfc98d1bbb174a6aaea617e354b4ed0efcc0eadc2414b1e582}}'
+            value: '{{workflow.parameters.components-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task
             value: '{"cachingOptions":{},"componentRef":{"name":"comp-print-msg-3"},"inputs":{"parameters":{"msg":{"runtimeValue":{"constant":"tails
               and {{$.inputs.parameters[''pipelinechannel--random-num-2-Output'']}}
               \u003e 15!"}},"pipelinechannel--random-num-2-Output":{"componentInputParameter":"pipelinechannel--random-num-2-Output"}}},"taskInfo":{"name":"print-msg-3"}}'
           - name: container
-            value: '{{workflow.parameters.implementations-6d9fd4a4d18480bfc98d1bbb174a6aaea617e354b4ed0efcc0eadc2414b1e582}}'
+            value: '{{workflow.parameters.implementations-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task-name
             value: print-msg-3
           - name: parent-dag-id
             value: '{{inputs.parameters.parent-dag-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-print-msg-3}}'
         name: print-msg-3-driver
         template: system-container-driver
       - arguments:
@@ -587,17 +609,19 @@ spec:
       - arguments:
           parameters:
           - name: component
-            value: '{{workflow.parameters.components-6d9fd4a4d18480bfc98d1bbb174a6aaea617e354b4ed0efcc0eadc2414b1e582}}'
+            value: '{{workflow.parameters.components-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task
             value: '{"cachingOptions":{},"componentRef":{"name":"comp-print-msg-4"},"inputs":{"parameters":{"msg":{"runtimeValue":{"constant":"tails
               and {{$.inputs.parameters[''pipelinechannel--random-num-2-Output'']}}
               \u003c= 15!"}},"pipelinechannel--random-num-2-Output":{"componentInputParameter":"pipelinechannel--random-num-2-Output"}}},"taskInfo":{"name":"print-msg-4"}}'
           - name: container
-            value: '{{workflow.parameters.implementations-6d9fd4a4d18480bfc98d1bbb174a6aaea617e354b4ed0efcc0eadc2414b1e582}}'
+            value: '{{workflow.parameters.implementations-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task-name
             value: print-msg-4
           - name: parent-dag-id
             value: '{{inputs.parameters.parent-dag-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-print-msg-4}}'
         name: print-msg-4-driver
         template: system-container-driver
       - arguments:
@@ -669,15 +693,17 @@ spec:
       - arguments:
           parameters:
           - name: component
-            value: '{{workflow.parameters.components-2c52a38e80b2a374e3ca25334ecf08a91b2565a0eb9fe88129b5d3b4392493b0}}'
+            value: '{{workflow.parameters.components-f1170b2d8b489f7533f5675cb134187e3b1a1f86c7febe015f4113cff3efadaa}}'
           - name: task
             value: '{"cachingOptions":{},"componentRef":{"name":"comp-random-num-2"},"inputs":{"parameters":{"high":{"runtimeValue":{"constant":19}},"low":{"runtimeValue":{"constant":10}}}},"taskInfo":{"name":"random-num-2"}}'
           - name: container
-            value: '{{workflow.parameters.implementations-2c52a38e80b2a374e3ca25334ecf08a91b2565a0eb9fe88129b5d3b4392493b0}}'
+            value: '{{workflow.parameters.implementations-f1170b2d8b489f7533f5675cb134187e3b1a1f86c7febe015f4113cff3efadaa}}'
           - name: task-name
             value: random-num-2
           - name: parent-dag-id
             value: '{{inputs.parameters.parent-dag-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-random-num-2}}'
         name: random-num-2-driver
         template: system-container-driver
       - arguments:
@@ -749,15 +775,17 @@ spec:
       - arguments:
           parameters:
           - name: component
-            value: '{{workflow.parameters.components-6175eb183c8ba935a4c42b40e65a5c3e4623a9c16b38fd5c4bbfc23275f0e9bd}}'
+            value: '{{workflow.parameters.components-54d0c2631d6668bed811927e817e5e2cbe659621bc132697bf31d556d3bf1fdc}}'
           - name: task
             value: '{"cachingOptions":{},"componentRef":{"name":"comp-flip-coin"},"taskInfo":{"name":"flip-coin"}}'
           - name: container
-            value: '{{workflow.parameters.implementations-6175eb183c8ba935a4c42b40e65a5c3e4623a9c16b38fd5c4bbfc23275f0e9bd}}'
+            value: '{{workflow.parameters.implementations-54d0c2631d6668bed811927e817e5e2cbe659621bc132697bf31d556d3bf1fdc}}'
           - name: task-name
             value: flip-coin
           - name: parent-dag-id
             value: '{{inputs.parameters.parent-dag-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-flip-coin}}'
         name: flip-coin-driver
         template: system-container-driver
       - arguments:

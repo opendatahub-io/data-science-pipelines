@@ -13,17 +13,23 @@
 # limitations under the License.
 import os
 
-from kfp import compiler
+from kfp import compiler, kubernetes
 from kfp import dsl
-from kfp.dsl import component
+from kfp.dsl import component, PipelineTask
 
 PACKAGES_TO_INSTALL = ['yapf']
 if 'KFP_PIPELINE_SPEC_PACKAGE_PATH' in os.environ:
     PACKAGES_TO_INSTALL.append(os.environ['KFP_PIPELINE_SPEC_PACKAGE_PATH'])
 
+def add_pip_index_configuration(task: PipelineTask):
+    kubernetes.use_config_map_as_env(
+        task,
+        config_map_name="ds-pipeline-custom-env-vars",
+        config_map_key_to_env={"pip_index_url": "PIP_INDEX_URL", "pip_trusted_host": "PIP_TRUSTED_HOST"},
+    )
+
 
 @component(
-    pip_index_urls=['https://pypi.org/simple'],
     packages_to_install=PACKAGES_TO_INSTALL)
 def component_op():
     import yapf
@@ -32,7 +38,8 @@ def component_op():
 
 @dsl.pipeline(name='v2-component-pip-index-urls')
 def pipeline():
-    component_op()
+    task = component_op()
+    add_pip_index_configuration(task)
 
 
 if __name__ == '__main__':

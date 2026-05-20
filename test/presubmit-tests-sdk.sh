@@ -16,6 +16,7 @@
 source_root=$(pwd)
 SETUP_ENV="${SETUP_ENV:-true}"
 PYTEST_PARALLEL_WORKERS="${PYTEST_PARALLEL_WORKERS:-2}"
+JUNIT_XML="${JUNIT_XML:-sdk-unit.xml}"
 
 if [ "${SETUP_ENV}" = "true" ]; then
   # Create a virtual environment and activate it
@@ -51,7 +52,7 @@ else
   export KFP_PACKAGE_PATH="git+https://github.com/${REPO_NAME}@refs/pull/${PULL_NUMBER}/merge#egg=kfp&subdirectory=sdk/python"
 fi
 
-python -m pytest sdk/python/test -v -m regression --cov=kfp -n "${PYTEST_PARALLEL_WORKERS}"
+python -m pytest sdk/python/test -v -m regression --cov=kfp -n "${PYTEST_PARALLEL_WORKERS}" --junitxml="${JUNIT_XML}"
 
 if [ "${SETUP_ENV}" = "true" ]; then
   # Deactivate the virtual environment
