@@ -6,7 +6,7 @@ toolchain go1.26.2
 
 require (
 	github.com/kubeflow/pipelines/api v0.0.0-00010101000000-000000000000
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.11
 )
 
 require google.golang.org/genproto v0.0.0-20211026145609-4688e4c4e024 // indirect
