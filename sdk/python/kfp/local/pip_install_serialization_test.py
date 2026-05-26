@@ -83,7 +83,7 @@ class TestPipInstallSerialization(
 
         pip_install_manager.reset_stats()
 
-        @dsl.component(packages_to_install=['urllib3==1.26.18'])
+        @dsl.component(packages_to_install=['urllib3==2.6.3'])
         def process_data(value: int) -> int:
             import urllib3
             return value * 2
