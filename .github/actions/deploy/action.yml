@@ -145,7 +145,7 @@ runs:
       shell: bash
       if: ${{ inputs.skip_load_docker_images != 'true' }}
       run: |
-        APPS=("apiserver" "driver" "launcher" "scheduledworkflow" "persistenceagent" "frontend" "metadata-writer" "viewer-crd-controller" "visualization-server" "cache-deployer" "cache-server" "metadata-envoy"  )
+        APPS=("apiserver" "scheduledworkflow" "persistenceagent" "frontend" "metadata-writer" "viewer-crd-controller" "visualization-server" "cache-deployer" "cache-server" "metadata-envoy")
         for app in "${APPS[@]}"; do
           docker image load -i ${{ inputs.image_path }}/$app/$app.tar
           docker tag ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }} localhost:5000/$app:${{ inputs.image_tag }}
@@ -153,6 +153,18 @@ runs:
           rm ${{ inputs.image_path }}/$app/$app.tar
           docker image rm ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }}
           docker image rm localhost:5000/$app:${{ inputs.image_tag }}
+        done
+        RUNTIME_APPS=("driver" "launcher")
+        for app in "${RUNTIME_APPS[@]}"; do
+          docker image load -i ${{ inputs.image_path }}/$app/$app.tar
+          docker tag ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }} localhost:5000/$app:${{ inputs.image_tag }}
+          docker tag ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }} localhost:5000/$app:ci
+          docker push localhost:5000/$app:${{ inputs.image_tag }}
+          docker push localhost:5000/$app:ci
+          rm ${{ inputs.image_path }}/$app/$app.tar
+          docker image rm ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }}
+          docker image rm localhost:5000/$app:${{ inputs.image_tag }}
+          docker image rm localhost:5000/$app:ci
         done
         docker pull python:3.11
         docker pull registry.access.redhat.com/ubi9/python-311:latest

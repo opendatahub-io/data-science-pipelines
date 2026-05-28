@@ -149,11 +149,10 @@ class OperatorDeployer:
         elif self.target_branch == 'stable':
             dspo_tag = 'odh-stable'
         elif self.target_branch == 'master':
-            dspo_tag = 'main'
+            dspo_tag = 'odh-main' if self.repo_owner == 'opendatahub-io' else 'main'
         else:
             dspo_tag = self.target_branch
-        repo = 'opendatahub' if self.repo_owner == 'opendatahub-io' else 'rhoai'
-        operator_image = f'quay.io/{repo}/data-science-pipelines-operator:{dspo_tag}'
+        operator_image = f'quay.io/opendatahub/data-science-pipelines-operator:{dspo_tag}'
 
         print(f'🏷️  Using operator image: {operator_image}')
 

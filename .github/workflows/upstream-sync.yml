@@ -1,0 +1,205 @@
+name: Upstream Sync (kubeflow/pipelines)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '3 13 * * 2'  # Tuesday 13:03 UTC
+
+env:
+  UPSTREAM_REPO: https://github.com/kubeflow/pipelines.git
+  UPSTREAM_BRANCH: master
+  DOWNSTREAM_BRANCH: master
+  GH_USER_NAME: dsp-developers
+  GH_USER_EMAIL: 140449482+dsp-developers@users.noreply.github.com
+  # Paths to keep as downstream versions during sync (supports git pathspecs).
+  IGNORE_FILES: ".tekton/*, .github/renovate.json5, backend/Dockerfile*, **/OWNERS"
+  # Paths to always overwrite with the upstream version during sync.
+  UPSTREAM_OVERWRITE_PATHS: "frontend/"
+
+jobs:
+  sync:
+    if: github.repository_owner == 'opendatahub-io'
+    name: Sync upstream to downstream
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout downstream
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ env.DOWNSTREAM_BRANCH }}
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN_PROJECT_EDIT }}
+
+      - name: Configure git and fetch upstream
+        run: |
+          git config user.name "${{ env.GH_USER_NAME }}"
+          git config user.email "${{ env.GH_USER_EMAIL }}"
+          git remote add upstream "${{ env.UPSTREAM_REPO }}"
+          git fetch upstream "${{ env.UPSTREAM_BRANCH }}"
+
+      - name: Check if sync is needed
+        id: check
+        run: |
+          MERGE_BASE=$(git merge-base HEAD upstream/${{ env.UPSTREAM_BRANCH }})
+          UPSTREAM_HEAD=$(git rev-parse upstream/${{ env.UPSTREAM_BRANCH }})
+
+          if [ "$MERGE_BASE" = "$UPSTREAM_HEAD" ]; then
+            echo "Already up to date with upstream."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Upstream has $(git rev-list --count HEAD..upstream/${{ env.UPSTREAM_BRANCH }}) new commit(s)."
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge upstream and reconcile paths
+        if: steps.check.outputs.needed == 'true'
+        id: merge
+        run: |
+          set -euo pipefail
+
+          BRANCH_NAME="sync/upstream-merge-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH_NAME"
+
+          DOWNSTREAM_HEAD=$(git rev-parse HEAD)
+
+          # Attempt the merge. --no-commit lets us reconcile before committing.
+          # --no-ff ensures a merge commit even if fast-forward is possible.
+          # Allow the merge command itself to fail (conflicts are expected).
+          echo "::group::Merge output"
+          merge_exit=0
+          git merge --no-commit --no-ff upstream/${{ env.UPSTREAM_BRANCH }} 2>&1 || merge_exit=$?
+          echo "::endgroup::"
+          if [ "$merge_exit" -gt 1 ]; then
+            echo "::error::git merge failed with unexpected exit code $merge_exit"
+            exit 1
+          fi
+
+          # --- Overwrite paths: always take upstream version ---
+          echo "::group::Apply upstream overwrite paths"
+          IFS=', ' read -r -a overwrite_paths <<< "${{ env.UPSTREAM_OVERWRITE_PATHS }}"
+          for path in "${overwrite_paths[@]}"; do
+            path=$(echo "$path" | xargs)
+            [ -z "$path" ] && continue
+            # Check if the path still exists upstream; if deleted, mirror the deletion downstream.
+            if git ls-tree --name-only "upstream/${{ env.UPSTREAM_BRANCH }}" -- "$path" | grep -q .; then
+              echo "Overwriting '$path' with upstream version"
+              git checkout "upstream/${{ env.UPSTREAM_BRANCH }}" -- "$path"
+              git add "$path"
+            else
+              echo "Removing '$path' (deleted upstream)"
+              git rm -r --ignore-unmatch -- "$path"
+            fi
+          done
+          echo "::endgroup::"
+
+          # --- Ignored paths: always keep downstream version ---
+          # Handles content conflicts, tree-level adds/deletes, and renames.
+          echo "::group::Restore downstream ignored paths"
+          IFS=', ' read -r -a exclusions <<< "${{ env.IGNORE_FILES }}"
+          for pattern in "${exclusions[@]}"; do
+            pattern=$(echo "$pattern" | xargs)
+            [ -z "$pattern" ] && continue
+
+            changed_files=$(git diff --name-only "$DOWNSTREAM_HEAD" "upstream/${{ env.UPSTREAM_BRANCH }}" -- "$pattern" 2>/dev/null || true)
+            [ -z "$changed_files" ] && continue
+
+            while IFS= read -r file; do
+              if git cat-file -e "${DOWNSTREAM_HEAD}:${file}" 2>/dev/null; then
+                echo "  Keeping downstream: $file"
+                git checkout "$DOWNSTREAM_HEAD" -- "$file"
+              else
+                echo "  Removing upstream-only: $file"
+                git rm -f --quiet -- "$file" 2>/dev/null || true
+              fi
+            done <<< "$changed_files"
+          done
+          echo "::endgroup::"
+
+          # --- Detect remaining conflicts ---
+          CONFLICT_FILES=""
+          if git ls-files --unmerged | grep -q .; then
+            CONFLICT_FILES=$(git ls-files --unmerged | awk -F'\t' '{print $2}' | sort -u)
+            echo "::warning::Merge has unresolved conflicts in the following files:"
+            echo "$CONFLICT_FILES"
+
+            # Stage conflicted files with their conflict markers so we can commit.
+            # This makes the conflicts visible as inline markers in the PR diff.
+            while IFS= read -r f; do git add -- "$f"; done <<< "$CONFLICT_FILES"
+          fi
+
+          git commit --no-edit
+
+          # Persist outputs for subsequent steps.
+          echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
+          if [ -n "$CONFLICT_FILES" ]; then
+            echo "has_conflicts=true" >> "$GITHUB_OUTPUT"
+            echo "$CONFLICT_FILES" > /tmp/conflict_files.txt
+          else
+            echo "has_conflicts=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push and create Pull Request
+        if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN_PROJECT_EDIT }}
+        run: |
+          set -euo pipefail
+
+          git push origin "${{ steps.merge.outputs.branch }}"
+
+          # Build the excluded-files list for the PR body.
+          EXCLUDED_LIST=""
+          IFS=', ' read -r -a exclusions <<< "${{ env.IGNORE_FILES }}"
+          for pattern in "${exclusions[@]}"; do
+            pattern=$(echo "$pattern" | xargs)
+            [ -z "$pattern" ] && continue
+            EXCLUDED_LIST="${EXCLUDED_LIST}- \`${pattern}\`"$'\n'
+          done
+
+          # Build the overwrite-paths list for the PR body.
+          OVERWRITE_LIST=""
+          IFS=', ' read -r -a overwrites <<< "${{ env.UPSTREAM_OVERWRITE_PATHS }}"
+          for path in "${overwrites[@]}"; do
+            path=$(echo "$path" | xargs)
+            [ -z "$path" ] && continue
+            OVERWRITE_LIST="${OVERWRITE_LIST}- \`${path}\`"$'\n'
+          done
+
+          # Build the conflict section if applicable.
+          CONFLICT_SECTION=""
+          if [ "${{ steps.merge.outputs.has_conflicts }}" = "true" ]; then
+            CONFLICT_LIST=""
+            while IFS= read -r file; do
+              CONFLICT_LIST="${CONFLICT_LIST}- \`${file}\`"$'\n'
+            done < /tmp/conflict_files.txt
+
+            CONFLICT_SECTION="
+          > [!CAUTION]
+          > **This PR contains unresolved merge conflicts.** The files listed below have
+          > conflict markers (\`<<<<<<<\`, \`=======\`, \`>>>>>>>\`) that must be resolved
+          > before merging.
+
+          **Files with conflicts:**
+          ${CONFLICT_LIST}"
+          fi
+
+          PR_TITLE="chore: sync upstream kubeflow/pipelines"
+          if [ "${{ steps.merge.outputs.has_conflicts }}" = "true" ]; then
+            PR_TITLE="chore: sync upstream kubeflow/pipelines [conflicts]"
+          fi
+
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --head "${{ steps.merge.outputs.branch }}" \
+            --base "${{ env.DOWNSTREAM_BRANCH }}" \
+            --title "$PR_TITLE" \
+            --body "Automated sync from [kubeflow/pipelines](https://github.com/kubeflow/pipelines) \`${{ env.UPSTREAM_BRANCH }}\` branch.
+          ${CONFLICT_SECTION}
+          **Excluded files** (kept as downstream versions):
+          ${EXCLUDED_LIST}
+          **Overwritten paths** (always taken from upstream):
+          ${OVERWRITE_LIST}
+          ---
+          *Created by the [Upstream Sync](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) workflow.*"

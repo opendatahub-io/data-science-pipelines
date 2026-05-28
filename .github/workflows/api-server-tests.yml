@@ -70,6 +70,8 @@ jobs:
       matrix:
         k8s_version: [ "v1.34.0" ]
         cache_enabled: [ "true", "false" ]
+        proxy: [ "false" ]
+        argo_version: [ "v3.7.3", "v3.5.14", "v4.0.4" ]
         pipeline_store: [ "database" ]
         pod_to_pod_tls_enabled: [ "true" ]
         include:
@@ -163,7 +165,7 @@ jobs:
           num_parallel_nodes: ${{ steps.configure.outputs.NUMBER_OF_NODES }}
           default_namespace: ${{ steps.configure.outputs.NAMESPACE }}
           python_version: ${{ env.PYTHON_VERSION }}
-          report_name: "Standalone_k8sVersion=${{ matrix.k8s_version }}_pipelineStore=${{ matrix.pipeline_store }}_cacheEnabled=${{ matrix.cache_enabled }}_proxyEnabled=${{ matrix.proxy }}_podToPodTlsEnabled=${{ matrix.pod_to_pod_tls_enabled }}"
+          report_name: "Standalone_k8sVersion=${{ matrix.k8s_version }}_pipelineStore=${{ matrix.pipeline_store }}_argo_version=${{ matrix.argo_version }}_cacheEnabled=${{ matrix.cache_enabled }}_proxyEnabled=${{ matrix.proxy }}_podToPodTlsEnabled=${{ matrix.pod_to_pod_tls_enabled }}"
           tls_enabled: ${{ matrix.pod_to_pod_tls_enabled }}
           ca_cert_path: ${{ env.CA_CERT_PATH }}
           # Deployment metadata from deploy action

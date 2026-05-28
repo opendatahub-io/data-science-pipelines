@@ -16,9 +16,11 @@ package end2end
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/kubeflow/pipelines/backend/api/v2beta1/go_http_client/experiment_model"
@@ -92,10 +94,8 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		for _, secret := range secrets {
 			testutil.CreateSecret(k8Client, testutil.GetNamespace(), secret)
 		}
-	})
 
-	AfterEach(func() {
-		logger.Log("################### Global Cleanup after each test #####################")
+		DeferCleanup(cleanupE2ETestResources, testContext)
 	})
 
 	ReportAfterEach(func(specReport types.SpecReport) {
@@ -105,26 +105,6 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		if specReport.Failed() && len(testContext.PipelineRun.CreatedRunIds) > 0 {
 			report, _ := testutil.BuildArchivedWorkflowLogsReport(k8Client, testContext.PipelineRun.CreatedRunIds)
 			AddReportEntry(testutil.ArchivedWorkflowLogsReportTitle, report)
-		}
-
-		logger.Log("Deleting %d run(s)", len(testContext.PipelineRun.CreatedRunIds))
-		for _, runID := range testContext.PipelineRun.CreatedRunIds {
-			runID := runID
-			testutil.TerminatePipelineRun(runClient, runID)
-			testutil.ArchivePipelineRun(runClient, runID)
-			testutil.DeletePipelineRun(runClient, runID)
-		}
-		logger.Log("Deleting %d experiment(s)", len(testContext.Experiment.CreatedExperimentIds))
-		if len(testContext.Experiment.CreatedExperimentIds) > 0 {
-			for _, experimentID := range testContext.Experiment.CreatedExperimentIds {
-				experimentID := experimentID
-				testutil.DeleteExperiment(experimentClient, experimentID)
-			}
-		}
-		logger.Log("Deleting %d pipeline(s)", len(testContext.Pipeline.CreatedPipelines))
-		for _, pipeline := range testContext.Pipeline.CreatedPipelines {
-			pipelineID := pipeline.PipelineID
-			testutil.DeletePipeline(pipelineClient, pipelineID)
 		}
 	})
 
@@ -257,7 +237,68 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 			})
 		}
 	})
+
+	// E2eGpu-labeled specs run even when the package has no --label-filter; see
+	// AGENTS.md (Local testing → Backend Ginkgo test suites → End-to-end tests).
+	Context("GPU component test >", Label(E2eGpu), func() {
+		var pipelineDir = "valid/gpu"
+		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
+		for _, pipelineFile := range pipelineFiles {
+			if !gpuPipelineFixtureSelected(pipelineFile) {
+				continue
+			}
+			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
+				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
+			})
+		}
+	})
 })
+
+// gpuPipelineFixtureSelected returns whether to run an E2E for this IR fixture.
+// Fixtures are vendored from ods-ci (NVIDIA vs AMD); only one vendor typically matches the cluster.
+// KFP_E2E_GPU_VENDOR: unset or "nvidia" → pytorch_nvidia_gpu_availability.yaml only;
+// "amd" → pytorch_amd_gpu_availability.yaml only; "both" → all yaml in valid/gpu.
+func gpuPipelineFixtureSelected(pipelineFile string) bool {
+	vendor := strings.ToLower(strings.TrimSpace(os.Getenv("KFP_E2E_GPU_VENDOR")))
+	switch vendor {
+	case "amd":
+		return strings.Contains(pipelineFile, "amd")
+	case "both", "all":
+		return true
+	default:
+		return strings.Contains(pipelineFile, "nvidia")
+	}
+}
+
+func TestGpuPipelineFixtureSelected(t *testing.T) {
+	nvidiaFixture := "pytorch_nvidia_gpu_availability.yaml"
+	amdFixture := "pytorch_amd_gpu_availability.yaml"
+	testCases := []struct {
+		name                 string
+		vendor               string
+		expectNvidiaSelected bool
+		expectAmdSelected    bool
+	}{
+		{"default selects nvidia only", "", true, false},
+		{"amd selects amd only", "amd", false, true},
+		{"both selects both", "both", true, true},
+		{"all selects both", "all", true, true},
+		{"trim and lowercase for amd", " AMD ", false, true},
+		{"unknown vendor falls back to nvidia", "nvidai", true, false},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv("KFP_E2E_GPU_VENDOR", testCase.vendor)
+			if selected := gpuPipelineFixtureSelected(nvidiaFixture); selected != testCase.expectNvidiaSelected {
+				t.Fatalf("nvidia selection=%t, want %t", selected, testCase.expectNvidiaSelected)
+			}
+			if selected := gpuPipelineFixtureSelected(amdFixture); selected != testCase.expectAmdSelected {
+				t.Fatalf("amd selection=%t, want %t", selected, testCase.expectAmdSelected)
+			}
+		})
+	}
+}
 
 func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testContext *apitests.TestContext) {
 	testutil.CheckIfSkipping(pipelineFile)
@@ -277,4 +318,34 @@ func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testCon
 	compiledWorkflow := workflowutils.UnmarshallWorkflowYAML(filepath.Join(testutil.GetCompiledWorkflowsFilesDir(), pipelineFile))
 	e2e_utils.ValidateComponentStatuses(runClient, k8Client, testContext, createdRunID, compiledWorkflow)
 
+}
+
+func cleanupE2ETestResources(testContext *apitests.TestContext) {
+	logger.Log("################### Global Cleanup after each test #####################")
+	cleanupE2ERuns(testContext)
+	cleanupE2EExperiments(testContext)
+	cleanupE2EPipelines(testContext)
+}
+
+func cleanupE2ERuns(testContext *apitests.TestContext) {
+	logger.Log("Deleting %d run(s)", len(testContext.PipelineRun.CreatedRunIds))
+	for _, runID := range testContext.PipelineRun.CreatedRunIds {
+		testutil.TerminatePipelineRun(runClient, runID)
+		testutil.ArchivePipelineRun(runClient, runID)
+		testutil.DeletePipelineRun(runClient, runID)
+	}
+}
+
+func cleanupE2EExperiments(testContext *apitests.TestContext) {
+	logger.Log("Deleting %d experiment(s)", len(testContext.Experiment.CreatedExperimentIds))
+	for _, experimentID := range testContext.Experiment.CreatedExperimentIds {
+		testutil.DeleteExperiment(experimentClient, experimentID)
+	}
+}
+
+func cleanupE2EPipelines(testContext *apitests.TestContext) {
+	logger.Log("Deleting %d pipeline(s)", len(testContext.Pipeline.CreatedPipelines))
+	for _, pipeline := range testContext.Pipeline.CreatedPipelines {
+		testutil.DeletePipeline(pipelineClient, pipeline.PipelineID, true)
+	}
 }
