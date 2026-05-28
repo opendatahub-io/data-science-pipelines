@@ -69,7 +69,7 @@ setuptools.setup(
                 "grpcio-status<=1.47.0",
             ]
             + [
-                "commonmark==0.9.1",
+                "commonmark==0.9.2",
                 "autodocsumm==0.2.9",
                 "sphinx>=5.0.2,<6.0.0",
                 "sphinx-immaterial==0.9.0",
