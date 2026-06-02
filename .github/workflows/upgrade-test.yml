@@ -40,8 +40,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+<<<<<<< HEAD
         k8s_version: [ "v1.34.0" ]
         tls_enabled : [ "true" ]
+=======
+        k8s_version: [ "v1.35.0" ]
+>>>>>>> upstream/master
     name: KFP upgrade tests - K8s ${{ matrix.k8s_version }}
 
     steps:

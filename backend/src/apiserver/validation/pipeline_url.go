@@ -110,10 +110,17 @@ func initURLConfig() {
 }
 
 // ValidatePipelineURL validates a pipeline URL is safe to fetch
+<<<<<<< HEAD
 // Can be enabled via PIPELINE_URL_VALIDATION_ENABLED=true (but first we need to understand the impact)
 func ValidatePipelineURL(urlStr string) error {
 	// Allow disabling validation
 	if !common.GetBoolConfigWithDefault(common.PipelineURLValidationEnabled, false) {
+=======
+// Can be disabled via PIPELINE_URL_VALIDATION_ENABLED=false (for testing purposes only)
+func ValidatePipelineURL(urlStr string) error {
+	// Allow disabling validation
+	if !common.GetBoolConfigWithDefault(common.PipelineURLValidationEnabled, true) {
+>>>>>>> upstream/master
 		return nil
 	}
 

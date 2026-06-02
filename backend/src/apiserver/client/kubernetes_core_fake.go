@@ -21,6 +21,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	"k8s.io/client-go/kubernetes"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
@@ -37,8 +38,7 @@ func (c *FakeKuberneteCoreClient) PodClient(namespace string) v1.PodInterface {
 }
 
 func (c *FakeKuberneteCoreClient) GetClientSet() kubernetes.Interface {
-	// Return nil for fake implementation - tests that need this should use a mock
-	return nil
+	return k8sfake.NewClientset()
 }
 
 func (c *FakeKuberneteCoreClient) SecretClient(namespace string) v1.SecretInterface {
@@ -71,8 +71,7 @@ func (c *FakeKubernetesCoreClientWithBadPodClient) PodClient(namespace string) v
 }
 
 func (c *FakeKubernetesCoreClientWithBadPodClient) GetClientSet() kubernetes.Interface {
-	// Return nil for fake implementation
-	return nil
+	return k8sfake.NewClientset()
 }
 
 func (c *FakeKubernetesCoreClientWithBadPodClient) SecretClient(namespace string) v1.SecretInterface {
