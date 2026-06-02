@@ -11,20 +11,44 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package proxy
 
 import (
 	"os"
+	"strings"
 
+	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	k8score "k8s.io/api/core/v1"
 )
 
 const (
-	HttpProxyEnv        = "HTTP_PROXY"
-	HttpsProxyEnv       = "HTTPS_PROXY"
-	NoProxyEnv          = "NO_PROXY"
-	defaultNoProxyValue = "localhost,127.0.0.1,.svc.cluster.local,kubernetes.default.svc,minio-service.kubeflow,metadata-grpc-service,metadata-grpc-service.kubeflow,ml-pipeline.kubeflow"
+	HTTPProxyEnv  = "HTTP_PROXY"
+	HTTPSProxyEnv = "HTTPS_PROXY"
+	NoProxyEnv    = "NO_PROXY"
 )
+
+// getDefaultNoProxyValue returns the default NO_PROXY value with the correct cluster domain.
+// This uses GetClusterDomain() to support clusters with custom DNS domains (e.g., cluster.test).
+func getDefaultNoProxyValue() string {
+	clusterDomain := common.GetClusterDomain()
+	return strings.Join([]string{
+		"localhost",
+		"127.0.0.1",
+		".svc",
+		".svc." + clusterDomain,
+		"kubernetes.default.svc",
+		"minio-service.kubeflow",
+		"minio-service.kubeflow.svc",
+		"seaweedfs.kubeflow",
+		"seaweedfs.kubeflow.svc",
+		"metadata-grpc-service",
+		"metadata-grpc-service.kubeflow",
+		"metadata-grpc-service.kubeflow.svc",
+		"ml-pipeline.kubeflow",
+		"ml-pipeline.kubeflow.svc",
+	}, ",")
+}
 
 type Config interface {
 	GetHttpProxy() string
@@ -55,6 +79,9 @@ func GetConfig() Config {
 }
 
 func newConfig(httpProxy string, httpsProxy string, noProxy string) Config {
+	if httpProxy != "" || httpsProxy != "" {
+		noProxy = mergeNoProxyEntries(noProxy, getDefaultNoProxyValue())
+	}
 	return &config{
 		httpProxy:  httpProxy,
 		httpsProxy: httpsProxy,
@@ -62,13 +89,32 @@ func newConfig(httpProxy string, httpsProxy string, noProxy string) Config {
 	}
 }
 
+func mergeNoProxyEntries(values ...string) string {
+	seen := map[string]struct{}{}
+	merged := make([]string, 0)
+	for _, value := range values {
+		for _, entry := range strings.Split(value, ",") {
+			entry = strings.TrimSpace(entry)
+			if entry == "" {
+				continue
+			}
+			if _, ok := seen[entry]; ok {
+				continue
+			}
+			seen[entry] = struct{}{}
+			merged = append(merged, entry)
+		}
+	}
+	return strings.Join(merged, ",")
+}
+
 func newConfigFromEnv() Config {
-	httpProxyValue, isHttpProxySet := os.LookupEnv(HttpProxyEnv)
-	httpsProxyValue, isHttpsProxySet := os.LookupEnv(HttpsProxyEnv)
+	httpProxyValue, isHTTPProxySet := os.LookupEnv(HTTPProxyEnv)
+	httpsProxyValue, isHTTPSProxySet := os.LookupEnv(HTTPSProxyEnv)
 	noProxyValue, isNoProxySet := os.LookupEnv(NoProxyEnv)
 
-	if (isHttpProxySet || isHttpsProxySet) && !isNoProxySet {
-		return newConfig(httpProxyValue, httpsProxyValue, defaultNoProxyValue)
+	if (isHTTPProxySet || isHTTPSProxySet) && !isNoProxySet {
+		return newConfig(httpProxyValue, httpsProxyValue, "")
 	}
 
 	return newConfig(httpProxyValue, httpsProxyValue, noProxyValue)

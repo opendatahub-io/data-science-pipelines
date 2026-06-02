@@ -13,18 +13,18 @@ spec:
           - cluster.local
         options:
           - name: timeout
-            value: "5"
+            value: "10"
           - name: attempts
-            value: "3"
+            value: "5"
           - name: ndots
             value: "2"
       containers:
         - name: ml-pipeline-api-server
           env:
             - name: V2_DRIVER_IMAGE
-              value: kind-registry:5000/driver
+              value: kind-registry:5000/driver:ci
             - name: V2_LAUNCHER_IMAGE
-              value: kind-registry:5000/launcher
+              value: kind-registry:5000/launcher:ci
             - name: LOG_LEVEL
               value: "debug"
             - name: DBCONFIG_HOST_NAME

@@ -4,7 +4,7 @@ This folder contains [Kubeflow Pipelines Standalone](https://www.kubeflow.org/do
 Kustomize manifests.
 
 Kubeflow Pipelines Standalone is one option to install Kubeflow Pipelines. You can review all other options in
-[Installation Options for Kubeflow Pipelines](https://www.kubeflow.org/docs/components/pipelines/installation/overview/).
+[Installation Options for Kubeflow Pipelines](https://www.kubeflow.org/docs/components/pipelines/operator-guides/installation/).
 
 ## Install options for different envs
 
@@ -26,15 +26,6 @@ kubectl port-forward -n kubeflow svc/ml-pipeline-ui 8080:80
 ```
 
 Now you can access Kubeflow Pipelines UI in your browser by <http://localhost:8080>.
-
-Customize:
-
-There are two variations for platform-agnostic that uses different [argo workflow executors](https://argoproj.github.io/argo-workflows/workflow-executors/):
-
-* env/platform-agnostic-emissary
-* env/platform-agnostic-pns
-
-You can install them by changing `KFP_ENV` in above instructions to the variation you want.
 
 Data:
 

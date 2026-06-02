@@ -13,9 +13,9 @@ resources:
 - viewer-controller
 - persistence-agent
 - cache
-- metadata-writer
 - istio-authorization-config.yaml
 - virtual-service.yaml
+
 patches:
 - path: api-service/deployment-patch.yaml
 - path: pipelines-ui/deployment-patch.yaml
@@ -23,11 +23,24 @@ patches:
 - path: scheduled-workflow/deployment-patch.yaml
 - path: viewer-controller/deployment-patch.yaml
 - path: persistence-agent/deployment-patch.yaml
-- path: metadata-writer/deployment-patch.yaml
 - path: cache/deployment-patch.yaml
 
-configurations:
-- params.yaml
+
+replacements:
+- source:
+    kind: ConfigMap
+    name: pipeline-install-config
+    fieldPath: metadata.namespace
+  targets:
+  - select:
+      kind: VirtualService
+      name: ml-pipeline-ui
+    fieldPaths:
+    - spec.http.0.route.0.destination.host
+    options:
+      delimiter: .
+      index: 1
+
 labels:
 - includeSelectors: true
   pairs:

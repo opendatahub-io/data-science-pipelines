@@ -15,7 +15,6 @@
 package proto_tests
 
 import (
-	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -23,12 +22,8 @@ import (
 	pb "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
 )
 
-// This is the commit that contains the proto generated files
-// that were used to generate the test data.
-const commit = "1791485"
-
 func generatePath(path string) string {
-	return filepath.Join(fmt.Sprintf("generated-%s", commit), path)
+	return filepath.Join("generated", path)
 }
 
 func TestRuns(t *testing.T) {
@@ -48,6 +43,12 @@ func TestRuns(t *testing.T) {
 		message:          failedRun,
 		expectedPBPath:   generatePath("run_failed.pb"),
 		expectedJSONPath: generatePath("run_failed.json"),
+	})
+
+	testOBJ(t, caseOpts[*pb.PipelineTask]{
+		message:          pipelineTask,
+		expectedPBPath:   generatePath("pipeline_task.pb"),
+		expectedJSONPath: generatePath("pipeline_task.json"),
 	})
 }
 
@@ -101,5 +102,19 @@ func TestPlatformSpec(t *testing.T) {
 		message:          platformSpec,
 		expectedPBPath:   generatePath("platform_spec.pb"),
 		expectedJSONPath: generatePath("platform_spec.json"),
+	})
+}
+
+func TestArtifacts(t *testing.T) {
+	testOBJ(t, caseOpts[*pb.Artifact]{
+		message:          artifact,
+		expectedPBPath:   generatePath("artifact.pb"),
+		expectedJSONPath: generatePath("artifact.json"),
+	})
+
+	testOBJ(t, caseOpts[*pb.ArtifactTask]{
+		message:          artifactTask,
+		expectedPBPath:   generatePath("artifact_task.pb"),
+		expectedJSONPath: generatePath("artifact_task.json"),
 	})
 }

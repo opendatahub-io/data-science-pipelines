@@ -17,189 +17,20 @@ package objectstore
 import (
 	"context"
 	"fmt"
-	"reflect"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
 	_ "gocloud.dev/blob/gcsblob"
+	"gocloud.dev/blob/memblob"
 )
-
-func Test_parseCloudBucket(t *testing.T) {
-	tests := []struct {
-		name    string
-		path    string
-		want    *Config
-		wantErr bool
-	}{
-		{
-			name: "Parses GCS - Just the bucket",
-			path: "gs://my-bucket",
-			want: &Config{
-				Scheme:     "gs://",
-				BucketName: "my-bucket",
-				Prefix:     "",
-			},
-			wantErr: false,
-		},
-		{
-			name: "Parses GCS - Just the bucket with trailing slash",
-			path: "gs://my-bucket/",
-			want: &Config{
-				Scheme:     "gs://",
-				BucketName: "my-bucket",
-				Prefix:     "",
-			},
-			wantErr: false,
-		},
-		{
-			name: "Parses GCS - Bucket with prefix",
-			path: "gs://my-bucket/my-path",
-			want: &Config{
-				Scheme:     "gs://",
-				BucketName: "my-bucket",
-				Prefix:     "my-path/",
-			},
-			wantErr: false,
-		},
-		{
-			name: "Parses GCS - Bucket with prefix and trailing slash",
-			path: "gs://my-bucket/my-path/",
-			want: &Config{
-				Scheme:     "gs://",
-				BucketName: "my-bucket",
-				Prefix:     "my-path/",
-			},
-			wantErr: false,
-		},
-		{
-			name: "Parses GCS - Bucket with multiple path components in prefix",
-			path: "gs://my-bucket/my-path/123",
-			want: &Config{
-				Scheme:     "gs://",
-				BucketName: "my-bucket",
-				Prefix:     "my-path/123/",
-			},
-			wantErr: false,
-		},
-		{
-			name: "Parses GCS - Bucket with multiple path components in prefix and trailing slash",
-			path: "gs://my-bucket/my-path/123/",
-			want: &Config{
-				Scheme:     "gs://",
-				BucketName: "my-bucket",
-				Prefix:     "my-path/123/",
-			},
-			wantErr: false,
-		},
-		{
-			name: "Parses Minio - Bucket with query string",
-			path: "minio://my-bucket",
-			want: &Config{
-				Scheme:      "minio://",
-				BucketName:  "my-bucket",
-				Prefix:      "",
-				QueryString: "",
-			},
-			wantErr: false,
-		}, {
-			name: "Parses Minio - Bucket with prefix",
-			path: "minio://my-bucket/my-path",
-			want: &Config{
-				Scheme:      "minio://",
-				BucketName:  "my-bucket",
-				Prefix:      "my-path/",
-				QueryString: "",
-			},
-			wantErr: false,
-		}, {
-			name: "Parses Minio - Bucket with multiple path components in prefix",
-			path: "minio://my-bucket/my-path/123",
-			want: &Config{
-				Scheme:      "minio://",
-				BucketName:  "my-bucket",
-				Prefix:      "my-path/123/",
-				QueryString: "",
-			},
-			wantErr: false,
-		}, {
-			name: "Parses S3 - Bucket with session",
-			path: "s3://my-bucket/my-path/123",
-			want: &Config{
-				Scheme:      "s3://",
-				BucketName:  "my-bucket",
-				Prefix:      "my-path/123/",
-				QueryString: "",
-				SessionInfo: &SessionInfo{
-					Provider: "s3",
-					Params: map[string]string{
-						"region":       "us-east-1",
-						"endpoint":     "s3.amazonaws.com",
-						"disableSSL":   "false",
-						"fromEnv":      "false",
-						"secretName":   "s3-testsecret",
-						"accessKeyKey": "s3-testaccessKeyKey",
-						"secretKeyKey": "s3-testsecretKeyKey",
-					},
-				},
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseBucketConfig(tt.path, tt.want.SessionInfo)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("%q: parseCloudBucket() error = %v, wantErr %v", tt.name, err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("%q: parseCloudBucket() = %v, want %v", tt.name, got, tt.want)
-			}
-			assert.Equal(t, got.SessionInfo, tt.want.SessionInfo)
-		})
-	}
-}
-
-func Test_bucketConfig_KeyFromURI(t *testing.T) {
-	tests := []struct {
-		name         string
-		bucketConfig *Config
-		uri          string
-		want         string
-		wantErr      bool
-	}{
-		{
-			name:         "Bucket with empty prefix",
-			bucketConfig: &Config{Scheme: "gs://", BucketName: "my-bucket", Prefix: ""},
-			uri:          "gs://my-bucket/path1/path2",
-			want:         "path1/path2",
-			wantErr:      false,
-		},
-		{
-			name:         "Bucket with non-empty Prefix ",
-			bucketConfig: &Config{Scheme: "gs://", BucketName: "my-bucket", Prefix: "path0/"},
-			uri:          "gs://my-bucket/path0/path1/path2",
-			want:         "path1/path2",
-			wantErr:      false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.bucketConfig.KeyFromURI(tt.uri)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("%q: buckerConfig.keyFromURI() error = %v, wantErr %v", tt.name, err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("bucketConfig.keyFromURI() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
 
 func Test_createS3BucketSession(t *testing.T) {
 	tt := []struct {
@@ -315,14 +146,52 @@ func Test_createS3BucketSession(t *testing.T) {
 			}
 
 			if test.expectValidClient {
-				// confirm that a valid S3 client was returned
 				assert.NotNil(t, actualSession)
-				// In AWS SDK v2, we can't directly access internal config details
-				// but we can verify that the client was created successfully
-				// and would have the expected configuration based on our inputs
+				assert.Equal(t, aws.RequestChecksumCalculationWhenRequired, actualSession.Options().RequestChecksumCalculation)
+				require.Equal(t, aws.ResponseChecksumValidationWhenRequired, actualSession.Options().ResponseChecksumValidation)
 			} else {
 				assert.Nil(t, actualSession)
 			}
 		})
 	}
+}
+
+func TestDownloadBlob_DownloadsSingleFileAtExactPrefix(t *testing.T) {
+	ctx := context.Background()
+	bucket := memblob.OpenBucket(nil)
+	defer bucket.Close()
+
+	err := bucket.WriteAll(ctx, "artifacts/file.txt", []byte("hello world"), nil)
+	assert.NoError(t, err)
+
+	localPath := filepath.Join(t.TempDir(), "file.txt")
+	err = DownloadBlob(ctx, bucket, localPath, "artifacts/file.txt")
+	assert.NoError(t, err)
+
+	data, err := os.ReadFile(localPath)
+	assert.NoError(t, err)
+	assert.Equal(t, "hello world", string(data))
+}
+
+func TestDownloadBlob_SkipsDirectoryMarkerWhenDownloadingNestedObjects(t *testing.T) {
+	ctx := context.Background()
+	bucket := memblob.OpenBucket(nil)
+	defer bucket.Close()
+
+	err := bucket.WriteAll(ctx, "artifacts/out_ds", []byte{}, nil)
+	assert.NoError(t, err)
+	err = bucket.WriteAll(ctx, "artifacts/out_ds/file.txt", []byte("nested content"), nil)
+	assert.NoError(t, err)
+
+	localPath := filepath.Join(t.TempDir(), "out_ds")
+	err = DownloadBlob(ctx, bucket, localPath, "artifacts/out_ds")
+	assert.NoError(t, err)
+
+	info, err := os.Stat(localPath)
+	assert.NoError(t, err)
+	assert.True(t, info.IsDir())
+
+	data, err := os.ReadFile(filepath.Join(localPath, "file.txt"))
+	assert.NoError(t, err)
+	assert.Equal(t, "nested content", string(data))
 }

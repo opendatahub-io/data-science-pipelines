@@ -17,6 +17,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
@@ -30,10 +32,14 @@ import (
 	swfScheme "github.com/kubeflow/pipelines/backend/src/crd/pkg/client/clientset/versioned/scheme"
 	swfinformers "github.com/kubeflow/pipelines/backend/src/crd/pkg/client/informers/externalversions"
 	wraperror "github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/structpb"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -50,6 +56,28 @@ import (
 const (
 	Workflow          = "Workflow"
 	ScheduledWorkflow = "ScheduledWorkflow"
+)
+
+var (
+	processNextItemDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "process_scheduled_workflow_duration_seconds",
+		Help: "The duration of scheduled workflow handling in seconds",
+	}, []string{"status"})
+
+	processNextItemOperationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "scheduled_workflow_duration_operation_seconds",
+		Help: "The duration of scheduled workflow handling in seconds",
+	}, []string{"operation", "status"})
+
+	queueSizeGauge = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "scheduled_workflow_queue_size",
+		Help: "Current number of workflows in the queue",
+	})
+
+	processedWorkflowThroughput = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "scheduled_workflow_throughput_total",
+		Help: "Total number of workflows processed (throughput)",
+	})
 )
 
 var (
@@ -215,6 +243,7 @@ func (c *Controller) enqueueScheduledWorkflow(obj interface{}) {
 		runtime.HandleError(fmt.Errorf("Equeuing object: error: %v: %+v", err, obj))
 		return
 	}
+	queueSizeGauge.Set(float64(c.workqueue.Len()))
 	c.workqueue.AddRateLimited(key)
 }
 
@@ -285,6 +314,16 @@ func (c *Controller) handleWorkflow(obj interface{}) {
 // processNextWorkItem will read a single work item off the workqueue and
 // attempt to process it, by calling the syncHandler.
 func (c *Controller) processNextWorkItem() bool {
+	startTime := time.Now()
+	var err error
+	defer func() {
+		if err != nil {
+			processNextItemDuration.WithLabelValues("error").Observe(time.Since(startTime).Seconds())
+		} else {
+			processNextItemDuration.WithLabelValues("ok").Observe(time.Since(startTime).Seconds())
+			processedWorkflowThroughput.Inc()
+		}
+	}()
 	obj, shutdown := c.workqueue.Get()
 
 	if shutdown {
@@ -344,7 +383,8 @@ func (c *Controller) processNextWorkItem() bool {
 		// Run the syncHandler, passing it the namespace/name string of the
 		// ScheduledWorkflow to be synced.
 		ctx := context.Background()
-		syncAgain, retryOnError, swf, err := c.syncHandler(ctx, key)
+		syncAgain, retryOnError, swf, syncError := c.syncHandler(ctx, key)
+		err = syncError
 		if err != nil && retryOnError {
 			// Transient failure. We will retry.
 			c.workqueue.AddRateLimited(obj) // Exponential backoff.
@@ -399,12 +439,16 @@ func (c *Controller) syncHandler(ctx context.Context, key string) (
 	}
 
 	// Get the ScheduledWorkflow with this namespace/name
+	startTime := time.Now()
 	swf, err = c.swfClient.Get(namespace, name)
 	if err != nil {
 		// Permanent failure.
 		// The ScheduledWorkflow may no longer exist, we stop processing and do not retry.
+		processNextItemOperationDuration.WithLabelValues("swfget", "error").Observe(time.Since(startTime).Seconds())
 		return false, false, nil,
 			wraperror.Wrapf(err, "ScheduledWorkflow (%s) in work queue no longer exists: %v", key, err)
+	} else {
+		processNextItemOperationDuration.WithLabelValues("swfget", "ok").Observe(time.Since(startTime).Seconds())
 	}
 
 	// Get the current time
@@ -413,27 +457,42 @@ func (c *Controller) syncHandler(ctx context.Context, key string) (
 	nowEpoch := c.time.Now().Unix()
 
 	// Get active workflows for this ScheduledWorkflow.
-	active, err := c.workflowClient.List(swf.Name,
-		false, /* active workflow */
-		0 /* retrieve all workflows */)
+	startTime = time.Time{}
+	active, err := c.workflowClient.List(
+		swf.Name,
+		// active workflow
+		false,
+		// retrieve all workflows
+		0,
+	)
 	if err != nil {
+		processNextItemOperationDuration.WithLabelValues("swflist", "error").Observe(time.Since(startTime).Seconds())
 		return false, true, swf,
 			wraperror.Wrapf(err, "Syncing ScheduledWorkflow (%v): transient failure, can't fetch active workflows: %v", name, err)
+	} else {
+		processNextItemOperationDuration.WithLabelValues("swflist", "ok").Observe(time.Since(startTime).Seconds())
 	}
 
+	startTime = time.Now()
 	// Get completed workflows for this ScheduledWorkflow.
 	completed, err := c.workflowClient.List(swf.Name,
 		true, /* completed workflows */
 		swf.MinIndex())
 	if err != nil {
+		processNextItemOperationDuration.WithLabelValues("swflistcompleted", "error").Observe(time.Since(startTime).Seconds())
 		return false, true, swf,
 			wraperror.Wrapf(err, "Syncing ScheduledWorkflow (%v): transient failure, can't fetch completed workflows: %v", name, err)
+	} else {
+		processNextItemOperationDuration.WithLabelValues("swflistcompleted", "ok").Observe(time.Since(startTime).Seconds())
 	}
-
+	startTime = time.Now()
 	submitted, nextScheduledEpoch, err := c.submitNextWorkflowIfNeeded(ctx, swf, len(active), nowEpoch)
 	if err != nil {
+		processNextItemOperationDuration.WithLabelValues("swfsubmit", "error").Observe(time.Since(startTime).Seconds())
 		return false, true, swf,
 			wraperror.Wrapf(err, "Syncing ScheduledWorkflow (%v): transient failure, can't fetch completed workflows: %v", name, err)
+	} else {
+		processNextItemOperationDuration.WithLabelValues("swfsubmit", "ok").Observe(time.Since(startTime).Seconds())
 	}
 
 	err = c.updateStatus(ctx, swf, submitted, active, completed, nextScheduledEpoch, nowEpoch)
@@ -521,6 +580,13 @@ func (c *Controller) submitNewWorkflowIfNotAlreadySubmitted(
 
 	// If the workflow is not found, we need to create it.
 	if swf.Spec.Workflow != nil && swf.Spec.Workflow.Spec != nil {
+		// V1 recurring runs bypass the API server by embedding the workflow spec directly in the ScheduledWorkflow CRD,
+		// so the V1 pipeline block needs to be enforced at the controller level as well.
+
+		if shouldEnforceV1Block(swf) {
+			return false, "", fmt.Errorf(
+				"namespace %s is not allowed to run v1 pipelines; please migrate to KFP v2 pipelines", swf.Namespace)
+		}
 		newWorkflow, err := swf.NewWorkflow(nextScheduledEpoch, nowEpoch)
 		if err != nil {
 			return false, "", err
@@ -602,9 +668,67 @@ func (c *Controller) updateStatus(
 	swfCopy := util.NewScheduledWorkflow(swf.Get().DeepCopy())
 	swfCopy.UpdateStatus(nowEpoch, submitted, nextScheduledEpoch, active, completed, c.location)
 
+	// Pre-update check: determine if the Workflow (wf) object has actually changed
+	// by comparing its Status.Conditions, Status.WorkflowHistory, and Labels
+	// with the previous copy (swfCopy). `updated` will be true if any of these
+	// fields were modified.
+	//
+	// This check prevents unconditional updates: the controller will only
+	// attempt to update the Workflow if meaningful fields have changed, avoiding
+	// unnecessary writes to the Kubernetes API
+	conditionsWasUpdated := !equality.Semantic.DeepEqual(swf.Status.Conditions, swfCopy.Status.Conditions)
+	workHistoryWasUpdated := !equality.Semantic.DeepEqual(swf.Status.WorkflowHistory, swfCopy.Status.WorkflowHistory)
+	labelsWasUpdated := !equality.Semantic.DeepEqual(swf.Labels, swfCopy.Labels)
+	var updated = conditionsWasUpdated ||
+		workHistoryWasUpdated ||
+		labelsWasUpdated
+
 	// Until #38113 is merged, we must use Update instead of UpdateStatus to
 	// update the Status block of the ScheduledWorkflow. UpdateStatus will not
 	// allow changes to the Spec of the resource, which is ideal for ensuring
 	// nothing other than resource status has been updated.
-	return c.swfClient.Update(ctx, swf.Namespace, swfCopy)
+	if updated {
+		startTime := time.Now()
+		err := c.swfClient.Update(ctx, swf.Namespace, swfCopy)
+		if err != nil {
+			processNextItemOperationDuration.WithLabelValues("swfupdate", "error").Observe(time.Since(startTime).Seconds())
+		} else {
+			processNextItemOperationDuration.WithLabelValues("swfupdate", "ok").Observe(time.Since(startTime).Seconds())
+		}
+		return err
+	}
+	return nil
+}
+
+// isV1PipelineBlocked checks if the given namespace is blocked from running V1 pipelines
+// based on the BLOCK_V1_PIPELINES and V1_ALLOWED_NAMESPACES environment variables.
+func isV1PipelineBlocked(namespace string) bool {
+	blockV1Value := viper.GetString("BLOCK_V1_PIPELINES")
+	blockV1, err := strconv.ParseBool(blockV1Value)
+	if err != nil {
+		log.WithError(err).Warnf("Invalid BLOCK_V1_PIPELINES value %q; V1 pipelines are not blocked", blockV1Value)
+		blockV1 = false
+	}
+	if !blockV1 {
+		return false
+	}
+
+	allowedNamespaces := viper.GetString("V1_ALLOWED_NAMESPACES")
+	if allowedNamespaces == "" {
+		return true
+	}
+
+	targetNamespace := strings.ToLower(strings.TrimSpace(namespace))
+	for _, n := range strings.Split(allowedNamespaces, ",") {
+		if strings.ToLower(strings.TrimSpace(n)) == targetNamespace {
+			return false
+		}
+	}
+	return true
+}
+
+// shouldEnforceV1Block checks if the V1 pipeline block should be enforced for the given ScheduledWorkflow.
+// v2 ScheduledWorkflows can also have embedded workflow spec, but should not be blocked with this feature flag.
+func shouldEnforceV1Block(swf *util.ScheduledWorkflow) bool {
+	return strings.HasPrefix(swf.APIVersion, commonutil.ApiVersionV1) && isV1PipelineBlocked(swf.Namespace)
 }

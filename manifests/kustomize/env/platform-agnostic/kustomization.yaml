@@ -3,7 +3,6 @@ kind: Kustomization
 
 resources:
 - ../../base/installs/generic
-- ../../base/metadata/base
 - ../../third-party/argo/installs/namespace
 - ../../third-party/seaweedfs/base
 - ../../third-party/mysql/base
@@ -19,3 +18,32 @@ labels:
 - includeSelectors: true
   pairs:
     application-crd-id: kubeflow-pipelines
+
+replacements:
+- source:
+    kind: ConfigMap
+    name: pipeline-install-config
+    fieldPath: metadata.namespace
+  targets:
+  - select:
+      kind: ConfigMap
+      name: workflow-controller-configmap
+    fieldPaths:
+    - data.artifactRepository
+    options:
+      delimiter: .
+      index: 1
+
+- source:
+    kind: ConfigMap
+    name: pipeline-install-config
+    fieldPath: data.bucketName
+  targets:
+  - select:
+      kind: ConfigMap
+      name: workflow-controller-configmap
+    fieldPaths:
+    - data.artifactRepository
+    options:
+      delimiter: '"'
+      index: 3

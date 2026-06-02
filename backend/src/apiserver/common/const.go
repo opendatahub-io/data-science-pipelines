@@ -27,21 +27,21 @@ const (
 	RbacResourceTypeVisualizations     = "visualizations"
 	RbacResourceTypeScheduledWorkflows = "scheduledworkflows"
 	RbacResourceTypeWorkflows          = "workflows"
-
-	RbacResourceVerbArchive       = "archive"
-	RbacResourceVerbUpdate        = "update"
-	RbacResourceVerbCreate        = "create"
-	RbacResourceVerbDelete        = "delete"
-	RbacResourceVerbDisable       = "disable"
-	RbacResourceVerbEnable        = "enable"
-	RbacResourceVerbGet           = "get"
-	RbacResourceVerbList          = "list"
-	RbacResourceVerbRetry         = "retry"
-	RbacResourceVerbTerminate     = "terminate"
-	RbacResourceVerbUnarchive     = "unarchive"
-	RbacResourceVerbReportMetrics = "reportMetrics"
-	RbacResourceVerbReadArtifact  = "readArtifact"
-	RbacResourceVerbReport        = "report"
+	RbacResourceTypeArtifacts          = "artifacts"
+	RbacResourceVerbArchive            = "archive"
+	RbacResourceVerbUpdate             = "update"
+	RbacResourceVerbCreate             = "create"
+	RbacResourceVerbDelete             = "delete"
+	RbacResourceVerbDisable            = "disable"
+	RbacResourceVerbEnable             = "enable"
+	RbacResourceVerbGet                = "get"
+	RbacResourceVerbList               = "list"
+	RbacResourceVerbRetry              = "retry"
+	RbacResourceVerbTerminate          = "terminate"
+	RbacResourceVerbUnarchive          = "unarchive"
+	RbacResourceVerbReportMetrics      = "reportMetrics"
+	RbacResourceVerbReadArtifact       = "readArtifact"
+	RbacResourceVerbReport             = "report"
 )
 
 const (
@@ -51,9 +51,10 @@ const (
 	AuthorizationBearerTokenPrefix string = "Bearer "
 )
 
-const DefaultTokenReviewAudience string = "pipelines.kubeflow.org"
-
-const DefaultMetadataTLSEnabled = false
+const (
+	DefaultTokenReviewAudience string = "pipelines.kubeflow.org"
+	DefaultMetadataTLSEnabled  bool   = false
+)
 
 const (
 	DefaultPipelineRunnerServiceAccount = "pipeline-runner"
@@ -68,10 +69,23 @@ const (
 )
 
 const (
-	TLSCertCAPath = "/kfp/certs/ca.crt"
-	CABundleDir   = "/kfp/certs"
+	CustomCaCertPath = "/kfp/certs/ca.crt"
+	CABundleDir      = "/kfp/certs"
 )
 
 const (
 	DefaultPodNamespace string = "kubeflow"
 )
+
+const (
+	DefaultMLPipelineServiceName string = "ml-pipeline"
+	DefaultMetadataServiceName   string = "metadata-grpc-service"
+	DefaultClusterDomain         string = "cluster.local"
+)
+
+// ClearTagsMetadataKey is the gRPC metadata key set by the HTTP middleware
+// when the client sends an empty tags map ("tags":{}) to signal that all
+// tags should be removed. Protobuf binary encoding cannot distinguish an
+// empty map from nil, so this header preserves the intent across the
+// HTTP→gRPC proxy roundtrip.
+const ClearTagsMetadataKey = "x-clear-tags"

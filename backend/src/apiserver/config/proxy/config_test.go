@@ -34,33 +34,33 @@ func TestNewConfigFromEnvVars(t *testing.T) {
 		},
 		{
 			envVars: map[string]string{
-				HttpProxyEnv: "http_proxy",
+				HTTPProxyEnv: "http_proxy",
 			},
-			expectedConfig: newConfig("http_proxy", "", defaultNoProxyValue),
+			expectedConfig: newConfig("http_proxy", "", getDefaultNoProxyValue()),
 		},
 		{
 			envVars: map[string]string{
-				HttpProxyEnv:  "http_proxy",
-				HttpsProxyEnv: "https_proxy",
+				HTTPProxyEnv:  "http_proxy",
+				HTTPSProxyEnv: "https_proxy",
 			},
-			expectedConfig: newConfig("http_proxy", "https_proxy", defaultNoProxyValue),
+			expectedConfig: newConfig("http_proxy", "https_proxy", getDefaultNoProxyValue()),
 		},
 		{
 			envVars: map[string]string{
-				HttpProxyEnv: "http_proxy",
+				HTTPProxyEnv: "http_proxy",
 				NoProxyEnv:   "no_proxy",
 			},
 			expectedConfig: newConfig("http_proxy", "", "no_proxy"),
 		},
 		{
 			envVars: map[string]string{
-				HttpsProxyEnv: "https_proxy",
+				HTTPSProxyEnv: "https_proxy",
 			},
-			expectedConfig: newConfig("", "https_proxy", defaultNoProxyValue),
+			expectedConfig: newConfig("", "https_proxy", getDefaultNoProxyValue()),
 		},
 		{
 			envVars: map[string]string{
-				HttpsProxyEnv: "https_proxy",
+				HTTPSProxyEnv: "https_proxy",
 				NoProxyEnv:    "no_proxy",
 			},
 			expectedConfig: newConfig("", "https_proxy", "no_proxy"),
@@ -73,16 +73,16 @@ func TestNewConfigFromEnvVars(t *testing.T) {
 		},
 		{
 			envVars: map[string]string{
-				HttpProxyEnv:  "http_proxy",
-				HttpsProxyEnv: "https_proxy",
+				HTTPProxyEnv:  "http_proxy",
+				HTTPSProxyEnv: "https_proxy",
 				NoProxyEnv:    "no_proxy",
 			},
-			expectedConfig: newConfig("http_proxy", "https_proxy", "no_proxy"),
+			expectedConfig: newConfig("http_proxy", "https_proxy", mergeNoProxyEntries("no_proxy", getDefaultNoProxyValue())),
 		},
 		{
 			envVars: map[string]string{
-				HttpProxyEnv:  "",
-				HttpsProxyEnv: "",
+				HTTPProxyEnv:  "",
+				HTTPSProxyEnv: "",
 				NoProxyEnv:    "",
 			},
 			expectedConfig: EmptyConfig(),
@@ -112,6 +112,8 @@ func TestGetEnvVars(t *testing.T) {
 			[]k8score.EnvVar{
 				{Name: "http_proxy", Value: "http"},
 				{Name: "HTTP_PROXY", Value: "http"},
+				{Name: "no_proxy", Value: getDefaultNoProxyValue()},
+				{Name: "NO_PROXY", Value: getDefaultNoProxyValue()},
 			},
 		},
 		{
@@ -119,6 +121,8 @@ func TestGetEnvVars(t *testing.T) {
 			[]k8score.EnvVar{
 				{Name: "https_proxy", Value: "https"},
 				{Name: "HTTPS_PROXY", Value: "https"},
+				{Name: "no_proxy", Value: getDefaultNoProxyValue()},
+				{Name: "NO_PROXY", Value: getDefaultNoProxyValue()},
 			},
 		},
 		{
@@ -126,6 +130,17 @@ func TestGetEnvVars(t *testing.T) {
 			[]k8score.EnvVar{
 				{Name: "no_proxy", Value: "no"},
 				{Name: "NO_PROXY", Value: "no"},
+			},
+		},
+		{
+			newConfig("http", "https", "no"),
+			[]k8score.EnvVar{
+				{Name: "http_proxy", Value: "http"},
+				{Name: "HTTP_PROXY", Value: "http"},
+				{Name: "https_proxy", Value: "https"},
+				{Name: "HTTPS_PROXY", Value: "https"},
+				{Name: "no_proxy", Value: mergeNoProxyEntries("no", getDefaultNoProxyValue())},
+				{Name: "NO_PROXY", Value: mergeNoProxyEntries("no", getDefaultNoProxyValue())},
 			},
 		},
 	}
