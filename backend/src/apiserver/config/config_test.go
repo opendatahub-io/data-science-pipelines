@@ -946,6 +946,141 @@ func TestLoadManagedPipelinesManifest_SchemaContract(t *testing.T) {
 	assert.Equal(t, "Validates schema contract", got[0].Description)
 }
 
+func TestLoadManagedPipelinesManifest_UnderscoreSanitization(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "autogluon_tabular_training_pipeline.yaml"), []byte("apiVersion: v2"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "simple_name.yaml"), []byte("apiVersion: v2"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "no-underscores.yaml"), []byte("apiVersion: v2"), 0644))
+
+	entries := []managedPipelineManifestEntry{
+		{Name: "autogluon_tabular_training_pipeline", Description: "Pipeline with many underscores"},
+		{Name: "simple_name", Description: "Simple underscore"},
+		{Name: "no-underscores", Description: "No underscores"},
+	}
+	writeManagedPipelinesManifest(t, dir, entries)
+
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+
+	// Names with underscores should be sanitized to dashes
+	assert.Equal(t, "autogluon-tabular-training-pipeline", got[0].Name)
+	assert.Equal(t, "autogluon_tabular_training_pipeline", got[0].DisplayName)
+	assert.Equal(t, "Pipeline with many underscores", got[0].Description)
+
+	assert.Equal(t, "simple-name", got[1].Name)
+	assert.Equal(t, "simple_name", got[1].DisplayName)
+
+	// Names without underscores should not have DisplayName set
+	assert.Equal(t, "no-underscores", got[2].Name)
+	assert.Equal(t, "", got[2].DisplayName)
+
+	// File paths should still use the original name (with underscores)
+	assert.Contains(t, got[0].File, "autogluon_tabular_training_pipeline.yaml")
+	assert.Contains(t, got[1].File, "simple_name.yaml")
+}
+
+func TestLoadManagedPipelinesManifest_UnderscoreSanitizationCollision(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "my_pipeline.yaml"), []byte("apiVersion: v2"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "my-pipeline.yaml"), []byte("apiVersion: v2"), 0644))
+
+	entries := []managedPipelineManifestEntry{
+		{Name: "my_pipeline", Description: "underscore version"},
+		{Name: "my-pipeline", Description: "dash version"},
+	}
+	writeManagedPipelinesManifest(t, dir, entries)
+
+	_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "collide after sanitization")
+}
+
+func TestLoadManagedPipelinesManifest_SanitizedNameCollidesWithExisting(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "my_pipeline.yaml"), []byte("apiVersion: v2"), 0644))
+
+	entries := []managedPipelineManifestEntry{
+		{Name: "my_pipeline", Description: "underscore version"},
+	}
+	writeManagedPipelinesManifest(t, dir, entries)
+
+	// The existing map has "my-pipeline" (from sample config). The managed
+	// entry "my_pipeline" sanitizes to "my-pipeline", which should be
+	// detected as a collision and skipped.
+	existing := map[string]bool{"my-pipeline": true}
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), existing)
+	require.NoError(t, err)
+	assert.Empty(t, got, "managed entry whose sanitized name matches an existing sample config name should be skipped")
+}
+
+func TestLoadManagedPipelinesManifest_UppercaseSanitizedToLowercase(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "MyPipeline.yaml"), []byte("apiVersion: v2"), 0644))
+
+	entries := []managedPipelineManifestEntry{
+		{Name: "MyPipeline", Description: "uppercase name"},
+	}
+	writeManagedPipelinesManifest(t, dir, entries)
+
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "mypipeline", got[0].Name)
+	assert.Equal(t, "MyPipeline", got[0].DisplayName)
+}
+
+func TestLoadManagedPipelinesManifest_UppercaseCollidesWithExisting(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "MyPipeline.yaml"), []byte("apiVersion: v2"), 0644))
+
+	entries := []managedPipelineManifestEntry{
+		{Name: "MyPipeline", Description: "uppercase version"},
+	}
+	writeManagedPipelinesManifest(t, dir, entries)
+
+	// "MyPipeline" sanitizes to "mypipeline", which matches existing.
+	existing := map[string]bool{"mypipeline": true}
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), existing)
+	require.NoError(t, err)
+	assert.Empty(t, got, "managed entry whose lowercased name matches an existing sample config name should be skipped")
+}
+
+func TestLoadSamples_ManagedPipelineWithUnderscores(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "")
+	rm := fakeResourceManager()
+
+	pc := config{
+		LoadSamplesOnRestart: true,
+		Pipelines:            []configPipelines{},
+	}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "my_underscore_pipeline", Description: "Pipeline with underscores"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "my_underscore_pipeline.yaml"), sampleYAML, 0644))
+
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	// Pipeline should be stored with sanitized name (dashes)
+	pipeline, err := rm.GetPipelineByNameAndNamespace("my-underscore-pipeline", "")
+	require.NoError(t, err)
+
+	// DisplayName should preserve the original name with underscores
+	assert.Equal(t, "my_underscore_pipeline", pipeline.DisplayName)
+
+	// Version should also use the sanitized name
+	_, err = rm.GetPipelineVersionByName("my-underscore-pipeline")
+	require.NoError(t, err)
+}
+
 func TestLoadManagedPipelinesManifest_InvalidNamesRejected(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -979,18 +1114,20 @@ func TestLoadManagedPipelinesManifest_InvalidNamesRejected(t *testing.T) {
 
 func TestLoadManagedPipelinesManifest_ValidNamesAccepted(t *testing.T) {
 	cases := []struct {
-		name      string
-		validName string
+		name          string
+		validName     string
+		expectedName  string
+		expectDisplay string
 	}{
-		{"lowercase with hyphens", "my-pipeline"},
-		{"lowercase with underscores", "my_pipeline"},
-		{"with dot", "pipeline.v2"},
-		{"short alphanumeric", "A1"},
-		{"single char", "x"},
-		{"leading digit", "9pipeline"},
-		{"mixed case", "MyPipeline"},
-		{"realistic name", "autorag-documents-indexing"},
-		{"realistic underscore name", "sft_pipeline"},
+		{"lowercase with hyphens", "my-pipeline", "my-pipeline", ""},
+		{"lowercase with underscores", "my_pipeline", "my-pipeline", "my_pipeline"},
+		{"with dot", "pipeline.v2", "pipeline.v2", ""},
+		{"short alphanumeric", "A1", "a1", "A1"},
+		{"single char", "x", "x", ""},
+		{"leading digit", "9pipeline", "9pipeline", ""},
+		{"mixed case", "MyPipeline", "mypipeline", "MyPipeline"},
+		{"realistic name", "autorag-documents-indexing", "autorag-documents-indexing", ""},
+		{"realistic underscore name", "sft_pipeline", "sft-pipeline", "sft_pipeline"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1005,7 +1142,8 @@ func TestLoadManagedPipelinesManifest_ValidNamesAccepted(t *testing.T) {
 			got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
 			require.NoError(t, err)
 			require.Len(t, got, 1)
-			assert.Equal(t, tc.validName, got[0].Name)
+			assert.Equal(t, tc.expectedName, got[0].Name)
+			assert.Equal(t, tc.expectDisplay, got[0].DisplayName)
 		})
 	}
 }
