@@ -1081,6 +1081,38 @@ func TestLoadSamples_ManagedPipelineWithUnderscores(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestLoadManagedPipelinesManifest_TrailingUnderscoreTrimmed(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "pipeline_.yaml"), []byte("apiVersion: v2"), 0644))
+
+	entries := []managedPipelineManifestEntry{
+		{Name: "pipeline_", Description: "trailing underscore"},
+	}
+	writeManagedPipelinesManifest(t, dir, entries)
+
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "pipeline", got[0].Name, "trailing hyphen from underscore→dash conversion must be trimmed")
+	assert.Equal(t, "pipeline_", got[0].DisplayName)
+}
+
+func TestLoadManagedPipelinesManifest_MixedCaseAndUnderscores(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "My_Pipeline_Name.yaml"), []byte("apiVersion: v2"), 0644))
+
+	entries := []managedPipelineManifestEntry{
+		{Name: "My_Pipeline_Name", Description: "mixed case and underscores"},
+	}
+	writeManagedPipelinesManifest(t, dir, entries)
+
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "my-pipeline-name", got[0].Name)
+	assert.Equal(t, "My_Pipeline_Name", got[0].DisplayName)
+}
+
 func TestLoadManagedPipelinesManifest_InvalidNamesRejected(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -1128,6 +1160,8 @@ func TestLoadManagedPipelinesManifest_ValidNamesAccepted(t *testing.T) {
 		{"mixed case", "MyPipeline", "mypipeline", "MyPipeline"},
 		{"realistic name", "autorag-documents-indexing", "autorag-documents-indexing", ""},
 		{"realistic underscore name", "sft_pipeline", "sft-pipeline", "sft_pipeline"},
+		{"mixed case with underscores", "My_Pipeline_Name", "my-pipeline-name", "My_Pipeline_Name"},
+		{"trailing underscore trimmed", "pipeline_", "pipeline", "pipeline_"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

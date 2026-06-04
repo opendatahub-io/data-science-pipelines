@@ -144,6 +144,10 @@ func loadManagedPipelinesManifest(manifestPath string, existing map[string]bool)
 		// Replace underscores with dashes and lowercase the result, preserving
 		// the original name as DisplayName so users see the human-readable form.
 		sanitizedName := strings.ToLower(strings.ReplaceAll(entry.Name, "_", "-"))
+		sanitizedName = strings.TrimRight(sanitizedName, "-.")
+		if sanitizedName == "" {
+			return nil, fmt.Errorf("managed pipeline %q: sanitized name is empty after trimming invalid characters", entry.Name)
+		}
 		if existing[sanitizedName] {
 			glog.Infof("Skipping managed pipeline %q: sanitized name %q already in sample config", entry.Name, sanitizedName)
 			continue
