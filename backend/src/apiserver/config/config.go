@@ -120,7 +120,7 @@ func loadManagedPipelinesManifest(manifestPath string, existing map[string]bool)
 	}
 
 	seen := make(map[string]bool, len(entries))
-	seenSanitized := make(map[string]bool, len(entries))
+	seenSanitized := make(map[string]string, len(entries))
 	var pipelines []configPipelines
 	for _, entry := range entries {
 		if entry.Name == "" {
@@ -152,10 +152,10 @@ func loadManagedPipelinesManifest(manifestPath string, existing map[string]bool)
 			glog.Infof("Skipping managed pipeline %q: sanitized name %q already in sample config", entry.Name, sanitizedName)
 			continue
 		}
-		if seenSanitized[sanitizedName] {
-			return nil, fmt.Errorf("managed pipelines manifest %s contains names that collide after sanitization: %q", manifestPath, entry.Name)
+		if previousName, collision := seenSanitized[sanitizedName]; collision {
+			return nil, fmt.Errorf("managed pipelines manifest %s: names %q and %q collide after sanitization (both become %q)", manifestPath, previousName, entry.Name, sanitizedName)
 		}
-		seenSanitized[sanitizedName] = true
+		seenSanitized[sanitizedName] = entry.Name
 
 		var displayName string
 		if sanitizedName != entry.Name {

@@ -994,6 +994,8 @@ func TestLoadManagedPipelinesManifest_UnderscoreSanitizationCollision(t *testing
 	_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "collide after sanitization")
+	assert.Contains(t, err.Error(), "my_pipeline")
+	assert.Contains(t, err.Error(), "my-pipeline")
 }
 
 func TestLoadManagedPipelinesManifest_SanitizedNameCollidesWithExisting(t *testing.T) {
