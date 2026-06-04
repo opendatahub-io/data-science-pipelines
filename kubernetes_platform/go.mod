@@ -5,7 +5,7 @@ go 1.26
 toolchain go1.26.2
 
 require (
-	github.com/kubeflow/pipelines/api v0.0.0-00010101000000-000000000000
+	github.com/kubeflow/pipelines/api v0.0.0-20260604204720-1665dc5fd8d2
 	google.golang.org/protobuf v1.36.6
 )
 
