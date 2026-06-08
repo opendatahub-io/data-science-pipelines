@@ -1737,6 +1737,121 @@ func TestDeletePipeline(t *testing.T) {
 	assert.Contains(t, err.Error(), fmt.Sprintf("as it has existing pipeline versions (e.g. %v)", FakeUUIDOne))
 }
 
+// Tests DeletePipeline with cascade=true deletes pipeline versions first
+func TestDeletePipeline_Cascade(t *testing.T) {
+	initEnvVars()
+	store := NewFakeClientManagerOrFatal(util.NewFakeTimeForEpoch())
+	defer store.Close()
+	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
+
+	// Create a pipeline.
+	p1 := createPipelineV1(
+		"pipeline1",
+	)
+	pnew1, err := manager.CreatePipeline(p1)
+	assert.Nil(t, err)
+
+	// Create a version under the above pipeline.
+	pv := createPipelineVersion(
+		pnew1.UUID,
+		"pipeline_version",
+		"",
+		"",
+		"apiVersion: argoproj.io/v1alpha1\nkind: Workflow",
+		"",
+		"",
+	)
+
+	pipelineStore, ok := store.pipelineStore.(*storage.PipelineStore)
+	assert.True(t, ok)
+
+	pipelineStore.SetUUIDGenerator(util.NewFakeUUIDGeneratorOrFatal(FakeUUIDOne, nil))
+	_, err = manager.CreatePipelineVersion(pv)
+	assert.Nil(t, err)
+
+	// Verify the pipeline version exists before deletion.
+	_, err = manager.GetPipelineVersion(FakeUUIDOne)
+	assert.Nil(t, err)
+
+	// Delete pipeline with cascade=true should succeed even with existing versions.
+	err = manager.DeletePipeline(pnew1.UUID, true)
+	assert.Nil(t, err)
+
+	// Verify the pipeline version was deleted.
+	_, err = manager.GetPipelineVersion(FakeUUIDOne)
+	assert.Equal(t, codes.NotFound, err.(*util.UserError).ExternalStatusCode())
+
+	// Verify the pipeline was deleted.
+	_, err = manager.GetPipeline(pnew1.UUID)
+	assert.Equal(t, codes.NotFound, err.(*util.UserError).ExternalStatusCode())
+}
+
+// Tests DeletePipeline with cascade=true and multiple pipeline versions
+func TestDeletePipeline_CascadeMultipleVersions(t *testing.T) {
+	initEnvVars()
+	store := NewFakeClientManagerOrFatal(util.NewFakeTimeForEpoch())
+	defer store.Close()
+	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
+
+	// Create a pipeline.
+	p1 := createPipelineV1(
+		"pipeline1",
+	)
+	pnew1, err := manager.CreatePipeline(p1)
+	assert.Nil(t, err)
+
+	pipelineStore, ok := store.pipelineStore.(*storage.PipelineStore)
+	assert.True(t, ok)
+
+	// Create first version under the pipeline.
+	pv1 := createPipelineVersion(
+		pnew1.UUID,
+		"pipeline_version_1",
+		"",
+		"",
+		"apiVersion: argoproj.io/v1alpha1\nkind: Workflow",
+		"",
+		"",
+	)
+	pipelineStore.SetUUIDGenerator(util.NewFakeUUIDGeneratorOrFatal(FakeUUIDOne, nil))
+	_, err = manager.CreatePipelineVersion(pv1)
+	assert.Nil(t, err)
+
+	// Create second version under the pipeline.
+	pv2 := createPipelineVersion(
+		pnew1.UUID,
+		"pipeline_version_2",
+		"",
+		"",
+		"apiVersion: argoproj.io/v1alpha1\nkind: Workflow",
+		"",
+		"",
+	)
+	pipelineStore.SetUUIDGenerator(util.NewFakeUUIDGeneratorOrFatal(DefaultFakePipelineIdThree, nil))
+	_, err = manager.CreatePipelineVersion(pv2)
+	assert.Nil(t, err)
+
+	// Verify both versions exist.
+	_, err = manager.GetPipelineVersion(FakeUUIDOne)
+	assert.Nil(t, err)
+	_, err = manager.GetPipelineVersion(DefaultFakePipelineIdThree)
+	assert.Nil(t, err)
+
+	// Delete pipeline with cascade=true should succeed and delete all versions.
+	err = manager.DeletePipeline(pnew1.UUID, true)
+	assert.Nil(t, err)
+
+	// Verify both versions were deleted.
+	_, err = manager.GetPipelineVersion(FakeUUIDOne)
+	assert.Equal(t, codes.NotFound, err.(*util.UserError).ExternalStatusCode())
+	_, err = manager.GetPipelineVersion(DefaultFakePipelineIdThree)
+	assert.Equal(t, codes.NotFound, err.(*util.UserError).ExternalStatusCode())
+
+	// Verify the pipeline was deleted.
+	_, err = manager.GetPipeline(pnew1.UUID)
+	assert.Equal(t, codes.NotFound, err.(*util.UserError).ExternalStatusCode())
+}
+
 func TestIsNamespaceAllowed(t *testing.T) {
 	tt := []struct {
 		msg               string
