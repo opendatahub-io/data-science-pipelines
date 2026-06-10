@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM alpine as downloader
+FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d as downloader
 
 COPY third_party /third_party
 
@@ -23,7 +23,7 @@ RUN sh /third_party/download_source.sh </third_party/minio/repo-MPL.txt
 
 
 # Minio image
-FROM minio/minio:RELEASE.2019-08-14T20-37-41Z
+FROM minio/minio:RELEASE.2019-08-14T20-37-41Z@sha256:b897f6c0bf815956a26bd7cb202c4b771d7c89c2e2a8edaa62f127cea5175522
 
 # Copy concatenated license file
 COPY third_party/minio/license.txt /third_party/license.txt

@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lts/ubuntu:18.04_stable
+FROM public.ecr.aws/lts/ubuntu:18.04_stable@sha256:975b418c2c6c72bdfb978ac631c3fae2f42b752f5ab29dec706a01f3f6acc14b
 
 RUN apt-get update --allow-releaseinfo-change && apt-get install -y --no-install-recommends \
     curl \

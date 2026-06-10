@@ -1,11 +1,11 @@
-FROM registry.access.redhat.com/ubi9/go-toolset:1.22 as builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.22@sha256:e4193e71ea9f2e2504f6b4ee93cadef0fe5d7b37bba57484f4d4229801a7c063 as builder
 
 WORKDIR /tmp
 RUN git clone https://github.com/openshift/build-machinery-go.git && \
     cd /tmp/build-machinery-go/commitchecker && \
     go build
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:a50731d3397a4ee28583f1699842183d4d24fadcc565c4688487af9ee4e13a44
 
 WORKDIR /bin
 

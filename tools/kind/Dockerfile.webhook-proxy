@@ -1,6 +1,6 @@
 # This Dockerfile creates a containerized NGINX reverse proxy for handling webhook requests.
 # It enables HTTPS communication and forwards requests to the API Server in KIND cluster using a self-signed SSL certificate for secure traffic.
-FROM registry.access.redhat.com/ubi9/nginx-124
+FROM registry.access.redhat.com/ubi9/nginx-124@sha256:96a847e9e4617470c4df6fb07a41241a523bfb54cf6af96711f867306972ed9f
 
 EXPOSE 8443
 
