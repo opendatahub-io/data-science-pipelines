@@ -36,8 +36,11 @@ import (
 func TestIsAuthorized_TokenReviewWinsOverSpoofedHeader(t *testing.T) {
 	const spoofedUser = "attacker@evil.com"
 
+	previousMultiUserMode := viper.GetString(common.MultiUserMode)
 	viper.Set(common.MultiUserMode, "true")
-	defer viper.Set(common.MultiUserMode, "false")
+	t.Cleanup(func() {
+		viper.Set(common.MultiUserMode, previousMultiUserMode)
+	})
 
 	recordingSARClient := &client.RecordingSubjectAccessReviewClient{}
 
