@@ -33,6 +33,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/kubeflow/pipelines/backend/test/config"
+	"github.com/kubeflow/pipelines/backend/test/constants"
 	"github.com/kubeflow/pipelines/backend/test/logger"
 	"github.com/onsi/gomega"
 
@@ -85,7 +86,7 @@ func CheckIfSkipping(stringValue string) {
 	}
 	// Skip pipeline 'pipeline_submit_request' test if TLS is not enabled
 	if !*config.TLSEnabled && strings.Contains(strings.ToLower(stringValue), "pipeline_submit_request") {
-		ginkgo.Skip("Skipping pipeline run test because TLS is not enabled")
+		ginkgo.Skip(fmt.Sprintf("%s Skipping pipeline run test because TLS is not enabled", constants.FilteredTests))
 	}
 }
 

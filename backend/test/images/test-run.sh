@@ -8,8 +8,6 @@ set +o allexport
 export DEPLOYMENT_NAME="ds-pipeline-$DSPA_NAME"
 
 SKIP_DEPLOYMENT="${SKIP_DEPLOYMENT:-true}"
-RANDOM_SUFFIX=$(head /dev/urandom | tr -dc a-z0-9 | head -c 8)
-export NAMESPACE="$NAMESPACE-$RANDOM_SUFFIX"
 
 TEST_LABEL="smoke"
 DSPO_OWNER="opendatahub-io"
@@ -60,8 +58,10 @@ DISCONNECTED_RESULT="$(check_disconnected_cluster)" || {
   exit 1
 }
 if [[ "$DISCONNECTED_RESULT" == "true" ]]; then
-  echo "Disconnected cluster detected, setting test label to 'disconnected'"
-  TEST_LABEL="disconnected"
+  echo "Disconnected cluster detected"
+  if [[ "$TEST_LABEL" != *"Upgrade"* ]]; then
+    TEST_LABEL="disconnected"
+  fi
   CLUSTER_BASE_DOMAIN=""
   for attempt in 1 2 3; do
     CLUSTER_BASE_DOMAIN=$(oc get dns cluster -o jsonpath='{.spec.baseDomain}' 2>/dev/null) && break
@@ -81,6 +81,13 @@ if [[ "$DISCONNECTED_RESULT" == "true" ]]; then
   CUSTOM_PIP_INDEX_URL="https://${BASTION_HOST}:9443/root/pypi/+simple/"
   CUSTOM_PIP_TRUSTED_HOST="${BASTION_HOST}"
   DISCONNECTED_CLUSTER="true"
+fi
+
+if [[ "$TEST_LABEL" == *"Upgrade"* ]]; then
+  TEST_DIRECTORY="v2/api"
+else
+  RANDOM_SUFFIX=$(head /dev/urandom | tr -dc a-z0-9 | head -c 8)
+  export NAMESPACE="$NAMESPACE-$RANDOM_SUFFIX"
 fi
 
 # 1. Create a temporary file to store dspa config
@@ -175,14 +182,12 @@ fi
 
 #################### DEPLOY DSPA #######################
 
-# Create Namespace
-echo "Creating namespace: $NAMESPACE"
-oc create namespace "$NAMESPACE"
-
 # Define cleanup function
 cleanup() {
   echo "Cleaning up resources..."
-  if [ -n "$NAMESPACE" ] && oc get namespace "$NAMESPACE" &> /dev/null; then
+  if [[ "$TEST_LABEL" == "UpgradePreparation" ]] && oc -n "$NAMESPACE" get deployment "$DEPLOYMENT_NAME" &> /dev/null; then
+    echo "Skipping namespace deletion for UpgradePreparation tests (namespace: $NAMESPACE)"
+  elif [ -n "$NAMESPACE" ] && oc get namespace "$NAMESPACE" &> /dev/null; then
     echo "Deleting namespace: $NAMESPACE"
     oc delete namespace "$NAMESPACE"
   fi
@@ -198,32 +203,40 @@ cleanup() {
 # Set trap to run cleanup on script exit (success or failure)
 trap cleanup EXIT
 
-# Create AWS Secret (only for S3 storage)
-if [ "$STORAGE_TYPE" = "s3" ]; then
-  echo "Creating AWS credentials secret for S3 storage"
-  oc -n "$NAMESPACE" create secret generic "$SECRET_NAME" \
-    --from-literal=AWS_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
-    --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+if [[ "$TEST_LABEL" == "UpgradeVerification" ]]; then
+  echo "UpgradeVerification: reusing existing namespace $NAMESPACE and DSPA deployment"
 else
-  echo "Skipping AWS secret creation (using Minio storage)"
-fi
+  # Create Namespace
+  echo "Creating namespace: $NAMESPACE"
+  oc create namespace "$NAMESPACE"
 
-# Create DSPA deployment
-echo "Creating DSPA deployment"
-cat "$dspa_deployment"
-oc apply -n "$NAMESPACE" -f "$dspa_deployment"
-timeout 1m bash -c \
-  "until oc -n $NAMESPACE get deployment $DEPLOYMENT_NAME &> /dev/null; do echo 'Waiting for the deployment $DEPLOYMENT_NAME...'; sleep 10; done"
-if oc wait --for=condition=available deployment/ds-pipeline-"$DSPA_NAME" --timeout=10m -n "$NAMESPACE"; then
-  echo "Operator pod is ready"
-else
-  echo "Warning: Operator pod did not become ready within timeout, continuing anyway..."
-  exit 1
-fi
+  # Create AWS Secret (only for S3 storage)
+  if [ "$STORAGE_TYPE" = "s3" ]; then
+    echo "Creating AWS credentials secret for S3 storage"
+    oc -n "$NAMESPACE" create secret generic "$SECRET_NAME" \
+      --from-literal=AWS_ACCESS_KEY="$AWS_ACCESS_KEY_ID" \
+      --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+  else
+    echo "Skipping AWS secret creation (using Minio storage)"
+  fi
 
-# Create Role Binding
-echo "Create role binding to allow service account access to DSPA API"
-oc apply -f "$dspa_role_binding" -n "$NAMESPACE"
+  # Create DSPA deployment
+  echo "Creating DSPA deployment"
+  cat "$dspa_deployment"
+  oc apply -n "$NAMESPACE" -f "$dspa_deployment"
+  timeout 1m bash -c \
+    "until oc -n $NAMESPACE get deployment $DEPLOYMENT_NAME &> /dev/null; do echo 'Waiting for the deployment $DEPLOYMENT_NAME...'; sleep 10; done"
+  if oc wait --for=condition=available deployment/ds-pipeline-"$DSPA_NAME" --timeout=10m -n "$NAMESPACE"; then
+    echo "Operator pod is ready"
+  else
+    echo "Warning: Operator pod did not become ready within timeout, continuing anyway..."
+    exit 1
+  fi
+
+  # Create Role Binding
+  echo "Create role binding to allow service account access to DSPA API"
+  oc apply -f "$dspa_role_binding" -n "$NAMESPACE"
+fi
 
 # Get API URL
 echo "Fetching route to $DEPLOYMENT_NAME"
@@ -237,10 +250,6 @@ export API_TOKEN=$(oc create token "$DEPLOYMENT_NAME" --namespace "$NAMESPACE" -
 
 
 #################### TESTS #######################
-# Run Tests
-if [[ "$TEST_LABEL" == *"Upgrade"* ]]; then
-  TEST_DIRECTORY="v2/api"
-fi
 
 # Traverse up directories until we find a directory containing $TEST_DIRECTORY
 current_dir="$(pwd)"

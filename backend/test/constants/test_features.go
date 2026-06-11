@@ -60,4 +60,7 @@ const (
 	MLflowParallelLoop string = "MLflowParallelLoop"
 	// MLflowFailure — failed pipelines and RetryRun semantics with MLflow tracking.
 	MLflowFailure string = "MLflowFailure"
+
+	// FilteredTests is a skip-message marker that excludes a test from JUnit/JSON reports.
+	FilteredTests string = "[filtered]"
 )

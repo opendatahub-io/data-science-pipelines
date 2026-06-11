@@ -21,11 +21,13 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	apiserver "github.com/kubeflow/pipelines/backend/src/common/client/api_server/v2"
 	"github.com/kubeflow/pipelines/backend/test/config"
+	"github.com/kubeflow/pipelines/backend/test/constants"
 	"github.com/kubeflow/pipelines/backend/test/logger"
 	"github.com/kubeflow/pipelines/backend/test/testutil"
 	. "github.com/onsi/ginkgo/v2"
@@ -168,7 +170,9 @@ var _ = ReportAfterSuite("Generate filtered JUnit report", func(report Report) {
 	filtered := report
 	filteredSpecs := make([]types.SpecReport, 0, len(report.SpecReports))
 	for _, spec := range report.SpecReports {
-		if spec.State == types.SpecStateSkipped && spec.Failure.Message == "" || spec.LeafNodeType.Is(types.NodeTypesForSuiteLevelNodes) {
+		if spec.State == types.SpecStateSkipped &&
+			(spec.Failure.Message == "" || strings.Contains(spec.Failure.Message, constants.FilteredTests)) ||
+			spec.LeafNodeType.Is(types.NodeTypesForSuiteLevelNodes) {
 			continue
 		}
 		filteredSpecs = append(filteredSpecs, spec)

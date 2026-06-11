@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kubeflow/pipelines/backend/test/constants"
 	runparams "github.com/kubeflow/pipelines/backend/api/v2beta1/go_http_client/run_client/run_service"
 	"github.com/kubeflow/pipelines/backend/api/v2beta1/go_http_client/run_model"
 	apiserver "github.com/kubeflow/pipelines/backend/src/common/client/api_server/v2"
@@ -93,7 +94,7 @@ func RetryPipelineRun(runClient *apiserver.RunClient, runID string) {
 func SkipIfMLflowDisabled() {
 	ginkgo.GinkgoHelper()
 	if !*config.MLflowEnabled {
-		ginkgo.Skip("MLflow is not enabled; skipping MLflow integration test")
+		ginkgo.Skip(fmt.Sprintf("%s MLflow is not enabled; skipping MLflow integration test", constants.FilteredTests))
 	}
 }
 
