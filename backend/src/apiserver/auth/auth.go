@@ -34,12 +34,12 @@ var IdentityHeaderMissingError = util.NewUnauthenticatedError(
 
 func GetAuthenticators(tokenReviewClient client.TokenReviewInterface) []Authenticator {
 	return []Authenticator{
-		NewHTTPHeaderAuthenticator(common.GetKubeflowUserIDHeader(), common.GetKubeflowUserIDPrefix()),
 		NewTokenReviewAuthenticator(
 			common.AuthorizationBearerTokenHeader,
 			common.AuthorizationBearerTokenPrefix,
 			[]string{common.GetTokenReviewAudience()},
 			tokenReviewClient,
 		),
+		NewHTTPHeaderAuthenticator(common.GetKubeflowUserIDHeader(), common.GetKubeflowUserIDPrefix()),
 	}
 }

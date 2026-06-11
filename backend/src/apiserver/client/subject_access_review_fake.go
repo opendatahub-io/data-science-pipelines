@@ -27,6 +27,7 @@ var (
 	_ SubjectAccessReviewInterface = FakeSubjectAccessReviewClient{}
 	_ SubjectAccessReviewInterface = FakeSubjectAccessReviewClientUnauthorized{}
 	_ SubjectAccessReviewInterface = FakeSubjectAccessReviewClientError{}
+	_ SubjectAccessReviewInterface = &RecordingSubjectAccessReviewClient{}
 )
 
 type FakeSubjectAccessReviewClient struct{}
@@ -67,4 +68,15 @@ func (FakeSubjectAccessReviewClientError) Create(context.Context, *authzv1.Subje
 
 func NewFakeSubjectAccessReviewClientError() FakeSubjectAccessReviewClientError {
 	return FakeSubjectAccessReviewClientError{}
+}
+
+type RecordingSubjectAccessReviewClient struct {
+	LastUser string
+}
+
+func (r *RecordingSubjectAccessReviewClient) Create(_ context.Context, sar *authzv1.SubjectAccessReview, _ v1.CreateOptions) (*authzv1.SubjectAccessReview, error) {
+	r.LastUser = sar.Spec.User
+	return &authzv1.SubjectAccessReview{Status: authzv1.SubjectAccessReviewStatus{
+		Allowed: true,
+	}}, nil
 }
