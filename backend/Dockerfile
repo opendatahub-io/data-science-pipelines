@@ -53,7 +53,7 @@ RUN if [ "${FIPS_ENABLED}" = "0" ]; then \
     dnf clean all
 
 # 2. Compile preloaded pipeline samples
-FROM registry.access.redhat.com/ubi9/python-311 AS compiler
+FROM registry.access.redhat.com/ubi9/python-311@sha256:a0bdb55576fc5b8d6704279307817828ef027e1065533ceba133fe9516003a6c AS compiler
 
 ARG TARGETOS TARGETARCH
 
@@ -82,7 +82,7 @@ RUN set -e; \
     echo "Compiling: \"$pipeline_py\"" && python3 "$pipeline_py" && echo -n "Output: " && ls "$pipeline_py.yaml"; \
     done
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:a50731d3397a4ee28583f1699842183d4d24fadcc565c4688487af9ee4e13a44
 
 WORKDIR /bin
 
