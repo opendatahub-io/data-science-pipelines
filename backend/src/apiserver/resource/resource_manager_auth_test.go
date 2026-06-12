@@ -36,15 +36,13 @@ import (
 func TestIsAuthorized_TokenReviewWinsOverSpoofedHeader(t *testing.T) {
 	const spoofedUser = "attacker@evil.com"
 
-	previousMultiUserMode := viper.GetString(common.MultiUserMode)
 	viper.Set(common.MultiUserMode, "true")
-	t.Cleanup(func() {
-		viper.Set(common.MultiUserMode, previousMultiUserMode)
-	})
+	defer viper.Set(common.MultiUserMode, "false")
 
 	recordingSARClient := &client.RecordingSubjectAccessReviewClient{}
 
 	fakeClientManager := NewFakeClientManagerOrFatal(util.NewFakeTimeForEpoch())
+	defer fakeClientManager.Close()
 	fakeClientManager.SubjectAccessReviewClientFake = recordingSARClient
 
 	resourceManager := NewResourceManager(fakeClientManager, &ResourceManagerOptions{CollectMetrics: false})
