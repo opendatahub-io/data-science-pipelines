@@ -4,6 +4,6 @@ runs:
   using: composite
   steps:
     - name: Set up Go
-      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+      uses: actions/setup-go@4a2405e6aebff6aabd8e43618539aa35cf90ac92
       with:
         go-version-file: go.mod
