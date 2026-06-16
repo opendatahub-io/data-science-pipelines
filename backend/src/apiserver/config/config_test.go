@@ -547,7 +547,7 @@ func TestLoadManagedPipelinesManifest_HappyPath(t *testing.T) {
 	}
 	writeManagedPipelinesManifest(t, dir, entries)
 
-	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 
@@ -563,7 +563,7 @@ func TestLoadManagedPipelinesManifest_HappyPath(t *testing.T) {
 }
 
 func TestLoadManagedPipelinesManifest_DirNotExist(t *testing.T) {
-	got, err := loadManagedPipelinesManifest("/nonexistent/managed-pipelines.json", nil)
+	got, err := loadManagedPipelinesManifest("/nonexistent/managed-pipelines.json", nil, "")
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
@@ -579,7 +579,7 @@ func TestLoadManagedPipelinesManifest_SkipDuplicates(t *testing.T) {
 	writeManagedPipelinesManifest(t, dir, entries)
 
 	existing := map[string]bool{"existing-pipeline": true}
-	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), existing)
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), existing, "")
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "new-pipeline", got[0].Name)
@@ -589,7 +589,7 @@ func TestLoadManagedPipelinesManifest_EmptyManifest(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "managed-pipelines.json"), []byte("[]"), 0644))
 
-	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
@@ -601,7 +601,7 @@ func TestLoadManagedPipelinesManifest_EmptyNameRejected(t *testing.T) {
 	}
 	writeManagedPipelinesManifest(t, dir, entries)
 
-	_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty name")
 }
@@ -610,7 +610,7 @@ func TestLoadManagedPipelinesManifest_MalformedJSON(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "managed-pipelines.json"), []byte("{bad json"), 0644))
 
-	_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
 	require.Error(t, err)
 }
 
@@ -622,7 +622,7 @@ func TestLoadManagedPipelinesManifest_DuplicateNamesRejected(t *testing.T) {
 	}
 	writeManagedPipelinesManifest(t, dir, entries)
 
-	_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate name")
 }
@@ -638,7 +638,7 @@ func TestLoadManagedPipelinesManifest_SymlinkEscapeRejected(t *testing.T) {
 	}
 	writeManagedPipelinesManifest(t, dir, entries)
 
-	_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "escapes directory")
 }
@@ -771,7 +771,7 @@ func TestLoadManagedPipelinesManifest_AllDuplicates(t *testing.T) {
 	writeManagedPipelinesManifest(t, dir, entries)
 
 	existing := map[string]bool{"dup-a": true, "dup-b": true}
-	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), existing)
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), existing, "")
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
@@ -880,7 +880,7 @@ func TestLoadManagedPipelinesManifest_InitContainerContract(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "my-training-pipeline.yaml"), []byte("apiVersion: v2"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "my-evaluation-pipeline.yaml"), []byte("apiVersion: v2"), 0644))
 
-	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 
@@ -939,7 +939,7 @@ func TestLoadManagedPipelinesManifest_SchemaContract(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "managed-pipelines.json"), []byte(rawJSON), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "schema-test.yaml"), []byte("apiVersion: v2"), 0644))
 
-	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "schema-test", got[0].Name)
@@ -970,7 +970,7 @@ func TestLoadManagedPipelinesManifest_InvalidNamesRejected(t *testing.T) {
 			}
 			writeManagedPipelinesManifest(t, dir, entries)
 
-			_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+			_, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "invalid")
 		})
@@ -1002,10 +1002,174 @@ func TestLoadManagedPipelinesManifest_ValidNamesAccepted(t *testing.T) {
 			}
 			writeManagedPipelinesManifest(t, dir, entries)
 
-			got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil)
+			got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
 			require.NoError(t, err)
 			require.Len(t, got, 1)
 			assert.Equal(t, tc.validName, got[0].Name)
 		})
 	}
+}
+
+func TestParseManagedPipelinesVersionSuffix(t *testing.T) {
+	tests := []struct {
+		name   string
+		envVal string
+		want   string
+	}{
+		{
+			name:   "typical release suffix",
+			envVal: "rhoai-3.5-ea.2",
+			want:   "rhoai-3.5-ea.2",
+		},
+		{
+			name:   "empty string returns empty",
+			envVal: "",
+			want:   "",
+		},
+		{
+			name:   "whitespace only returns empty",
+			envVal: "   ",
+			want:   "",
+		},
+		{
+			name:   "surrounding whitespace is trimmed",
+			envVal: "  rhoai-3.5  ",
+			want:   "rhoai-3.5",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(managedPipelinesVersionSuffixEnv, tt.envVal)
+			got := parseManagedPipelinesVersionSuffix()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestLoadManagedPipelinesManifest_VersionSuffixApplied(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "pipeline-a.yaml"), []byte("apiVersion: v2"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "pipeline-b.yaml"), []byte("apiVersion: v2"), 0644))
+
+	entries := []managedPipelineManifestEntry{
+		{Name: "pipeline-a", Description: "Pipeline A"},
+		{Name: "pipeline-b", Description: "Pipeline B"},
+	}
+	writeManagedPipelinesManifest(t, dir, entries)
+
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "rhoai-3.5-ea.2")
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+
+	assert.Equal(t, "pipeline-a", got[0].Name)
+	assert.Equal(t, "pipeline-a-rhoai-3.5-ea.2", got[0].VersionName)
+	assert.Equal(t, "pipeline-b", got[1].Name)
+	assert.Equal(t, "pipeline-b-rhoai-3.5-ea.2", got[1].VersionName)
+}
+
+func TestLoadManagedPipelinesManifest_NoVersionSuffix(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "pipeline-a.yaml"), []byte("apiVersion: v2"), 0644))
+
+	entries := []managedPipelineManifestEntry{
+		{Name: "pipeline-a", Description: "Pipeline A"},
+	}
+	writeManagedPipelinesManifest(t, dir, entries)
+
+	got, err := loadManagedPipelinesManifest(filepath.Join(dir, "managed-pipelines.json"), nil, "")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+
+	assert.Equal(t, "pipeline-a", got[0].Name)
+	assert.Equal(t, "", got[0].VersionName)
+}
+
+func TestLoadSamples_VersionSuffixAppliedToManagedPipelines(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "")
+	t.Setenv(managedPipelinesVersionSuffixEnv, "rhoai-3.5-ea.2")
+	rm := fakeResourceManager()
+
+	pc := config{
+		LoadSamplesOnRestart: true,
+		Pipelines:            []configPipelines{},
+	}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "documents-rag-optimization-pipeline", Description: "RAG pipeline"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "documents-rag-optimization-pipeline.yaml"), sampleYAML, 0644))
+
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	// Pipeline should exist with the original name
+	_, err = rm.GetPipelineByNameAndNamespace("documents-rag-optimization-pipeline", "")
+	require.NoError(t, err)
+
+	// Version should have the suffix appended
+	version, err := rm.GetPipelineVersionByName("documents-rag-optimization-pipeline-rhoai-3.5-ea.2")
+	require.NoError(t, err)
+	assert.Equal(t, "documents-rag-optimization-pipeline-rhoai-3.5-ea.2", version.Name)
+}
+
+func TestLoadSamples_VersionSuffixNotAppliedToExplicitPipelines(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "")
+	t.Setenv(managedPipelinesVersionSuffixEnv, "rhoai-3.5-ea.2")
+	rm := fakeResourceManager()
+
+	pc := config{
+		LoadSamplesOnRestart: true,
+		Pipelines: []configPipelines{
+			{
+				Name:        "Explicit Pipeline",
+				Description: "from sample_config.json",
+				File:        "testdata/sample_pipeline.yaml",
+				VersionName: "Explicit Pipeline - Ver 1",
+			},
+		},
+	}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	require.NoError(t, LoadSamples(rm, samplePath, ""))
+
+	// Explicit pipeline version should keep its original version name
+	_, err = rm.GetPipelineVersionByName("Explicit Pipeline - Ver 1")
+	require.NoError(t, err)
+}
+
+func TestLoadSamples_VersionSuffixEmptyNoEffect(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "")
+	t.Setenv(managedPipelinesVersionSuffixEnv, "")
+	rm := fakeResourceManager()
+
+	pc := config{
+		LoadSamplesOnRestart: true,
+		Pipelines:            []configPipelines{},
+	}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "managed-no-suffix", Description: "No suffix"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-no-suffix.yaml"), sampleYAML, 0644))
+
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	// With no suffix, version name defaults to pipeline name
+	_, err = rm.GetPipelineVersionByName("managed-no-suffix")
+	require.NoError(t, err)
 }

@@ -34,6 +34,7 @@ import (
 )
 
 const managedPipelinesUploadTagsEnv = "MANAGED_PIPELINES_UPLOAD_TAGS"
+const managedPipelinesVersionSuffixEnv = "MANAGED_PIPELINES_VERSION_SUFFIX"
 
 var validPipelineName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
@@ -58,6 +59,13 @@ func parseManagedPipelinesTags() (map[string]string, error) {
 		tags[key] = entry[idx+1:]
 	}
 	return tags, nil
+}
+
+// parseManagedPipelinesVersionSuffix reads MANAGED_PIPELINES_VERSION_SUFFIX
+// from the environment and returns the trimmed value. Returns an empty string
+// when the variable is unset or empty (backward-compatible no-op).
+func parseManagedPipelinesVersionSuffix() string {
+	return strings.TrimSpace(os.Getenv(managedPipelinesVersionSuffixEnv))
 }
 
 // deprecated
@@ -97,9 +105,11 @@ type managedPipelineManifestEntry struct {
 
 // loadManagedPipelinesManifest reads a managed-pipelines.json manifest and
 // returns configPipelines entries for any pipeline whose name is not already
-// in the existing set. Returns nil without error when the manifest file does
-// not exist (volume not mounted / flag not set).
-func loadManagedPipelinesManifest(manifestPath string, existing map[string]bool) ([]configPipelines, error) {
+// in the existing set. When versionSuffix is non-empty, each entry's
+// VersionName is set to "<Name>-<versionSuffix>" so the pipeline version
+// carries the release identifier. Returns nil without error when the manifest
+// file does not exist (volume not mounted / flag not set).
+func loadManagedPipelinesManifest(manifestPath string, existing map[string]bool, versionSuffix string) ([]configPipelines, error) {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -153,10 +163,15 @@ func loadManagedPipelinesManifest(manifestPath string, existing map[string]bool)
 			}
 			filePath = resolvedPath
 		}
+		versionName := ""
+		if versionSuffix != "" {
+			versionName = entry.Name + "-" + versionSuffix
+		}
 		pipelines = append(pipelines, configPipelines{
 			Name:        entry.Name,
 			Description: entry.Description,
 			File:        filePath,
+			VersionName: versionName,
 		})
 	}
 	if len(pipelines) > 0 {
@@ -226,8 +241,9 @@ func LoadSamples(resourceManager *resource.ResourceManager, sampleConfigPath str
 		for _, p := range pipelineConfig.Pipelines {
 			existing[p.Name] = true
 		}
+		versionSuffix := parseManagedPipelinesVersionSuffix()
 		manifestPath := filepath.Join(managedPipelinesDir, "managed-pipelines.json")
-		managedPipelines, mergeErr := loadManagedPipelinesManifest(manifestPath, existing)
+		managedPipelines, mergeErr := loadManagedPipelinesManifest(manifestPath, existing, versionSuffix)
 		if mergeErr != nil {
 			return mergeErr
 		}
