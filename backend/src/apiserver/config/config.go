@@ -37,6 +37,7 @@ const managedPipelinesUploadTagsEnv = "MANAGED_PIPELINES_UPLOAD_TAGS"
 const managedPipelinesVersionSuffixEnv = "MANAGED_PIPELINES_VERSION_SUFFIX"
 
 var validPipelineName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+var validVersionSuffix = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 // parseManagedPipelinesTags reads MANAGED_PIPELINES_UPLOAD_TAGS from the
 // environment and returns the parsed key=value pairs. Returns nil when the
@@ -63,9 +64,18 @@ func parseManagedPipelinesTags() (map[string]string, error) {
 
 // parseManagedPipelinesVersionSuffix reads MANAGED_PIPELINES_VERSION_SUFFIX
 // from the environment and returns the trimmed value. Returns an empty string
-// when the variable is unset or empty (backward-compatible no-op).
-func parseManagedPipelinesVersionSuffix() string {
-	return strings.TrimSpace(os.Getenv(managedPipelinesVersionSuffixEnv))
+// when the variable is unset or empty (backward-compatible no-op). Returns an
+// error if the suffix contains characters outside the allowed set
+// (alphanumeric, dot, hyphen, underscore, must start with alphanumeric).
+func parseManagedPipelinesVersionSuffix() (string, error) {
+	versionSuffix := strings.TrimSpace(os.Getenv(managedPipelinesVersionSuffixEnv))
+	if versionSuffix == "" {
+		return "", nil
+	}
+	if !validVersionSuffix.MatchString(versionSuffix) {
+		return "", fmt.Errorf("invalid %s value %q: must match %s", managedPipelinesVersionSuffixEnv, versionSuffix, validVersionSuffix.String())
+	}
+	return versionSuffix, nil
 }
 
 // deprecated
@@ -241,7 +251,10 @@ func LoadSamples(resourceManager *resource.ResourceManager, sampleConfigPath str
 		for _, p := range pipelineConfig.Pipelines {
 			existing[p.Name] = true
 		}
-		versionSuffix := parseManagedPipelinesVersionSuffix()
+		versionSuffix, suffixErr := parseManagedPipelinesVersionSuffix()
+		if suffixErr != nil {
+			return suffixErr
+		}
 		manifestPath := filepath.Join(managedPipelinesDir, "managed-pipelines.json")
 		managedPipelines, mergeErr := loadManagedPipelinesManifest(manifestPath, existing, versionSuffix)
 		if mergeErr != nil {

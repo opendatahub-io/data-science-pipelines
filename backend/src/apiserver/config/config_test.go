@@ -1012,9 +1012,10 @@ func TestLoadManagedPipelinesManifest_ValidNamesAccepted(t *testing.T) {
 
 func TestParseManagedPipelinesVersionSuffix(t *testing.T) {
 	tests := []struct {
-		name   string
-		envVal string
-		want   string
+		name    string
+		envVal  string
+		want    string
+		wantErr bool
 	}{
 		{
 			name:   "typical release suffix",
@@ -1036,11 +1037,67 @@ func TestParseManagedPipelinesVersionSuffix(t *testing.T) {
 			envVal: "  rhoai-3.5  ",
 			want:   "rhoai-3.5",
 		},
+		{
+			name:    "contains space is rejected",
+			envVal:  "rhoai 3.5",
+			wantErr: true,
+		},
+		{
+			name:    "contains semicolon is rejected",
+			envVal:  "rhoai;3.5",
+			wantErr: true,
+		},
+		{
+			name:    "contains slash is rejected",
+			envVal:  "rhoai/3.5",
+			wantErr: true,
+		},
+		{
+			name:    "leading hyphen is rejected",
+			envVal:  "-rhoai-3.5",
+			wantErr: true,
+		},
+		{
+			name:    "leading dot is rejected",
+			envVal:  ".rhoai-3.5",
+			wantErr: true,
+		},
+		{
+			name:    "shell metacharacter is rejected",
+			envVal:  "$(whoami)",
+			wantErr: true,
+		},
+		{
+			name:    "backtick injection is rejected",
+			envVal:  "`id`",
+			wantErr: true,
+		},
+		{
+			name:    "newline is rejected",
+			envVal:  "rhoai\n3.5",
+			wantErr: true,
+		},
+		{
+			name:   "numeric only is valid",
+			envVal: "123",
+			want:   "123",
+		},
+		{
+			name:   "alphanumeric with dots hyphens underscores is valid",
+			envVal: "v2.18.0_rc-1",
+			want:   "v2.18.0_rc-1",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(managedPipelinesVersionSuffixEnv, tt.envVal)
-			got := parseManagedPipelinesVersionSuffix()
+			got, err := parseManagedPipelinesVersionSuffix()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "invalid")
+				return
+			}
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -1116,6 +1173,34 @@ func TestLoadSamples_VersionSuffixAppliedToManagedPipelines(t *testing.T) {
 	version, err := rm.GetPipelineVersionByName("documents-rag-optimization-pipeline-rhoai-3.5-ea.2")
 	require.NoError(t, err)
 	assert.Equal(t, "documents-rag-optimization-pipeline-rhoai-3.5-ea.2", version.Name)
+}
+
+func TestLoadSamples_InvalidVersionSuffixReturnsError(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "")
+	t.Setenv(managedPipelinesVersionSuffixEnv, "$(whoami)")
+	rm := fakeResourceManager()
+
+	pc := config{
+		LoadSamplesOnRestart: true,
+		Pipelines:            []configPipelines{},
+	}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "should-not-load", Description: "Pipeline"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "should-not-load.yaml"), sampleYAML, 0644))
+
+	err = LoadSamples(rm, samplePath, managedDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid")
+	assert.Contains(t, err.Error(), managedPipelinesVersionSuffixEnv)
 }
 
 func TestLoadSamples_VersionSuffixNotAppliedToExplicitPipelines(t *testing.T) {
