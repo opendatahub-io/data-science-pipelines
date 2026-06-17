@@ -80,6 +80,8 @@ var (
 	managedPipelinesDir           = flag.String("managedPipelinesDir", "", "Directory containing managed-pipelines.json manifest")
 	tlsCertPath                   = flag.String("tlsCertPath", "", "Path to the public TLS cert.")
 	tlsCertKeyPath                = flag.String("tlsCertKeyPath", "", "Path to the private TLS key cert.")
+	tlsMinVersion                 = flag.String("tlsMinVersion", "VersionTLS12", "Minimum TLS version (VersionTLS12 or VersionTLS13)")
+	tlsCipherSuites               = flag.String("tlsCipherSuites", "", "Comma-separated list of TLS cipher suites (Go names). If empty, Go defaults are used.")
 	collectMetricsFlag            = flag.Bool("collectMetricsFlag", true, "Whether to collect Prometheus metrics in API server.")
 	usePipelinesKubernetesStorage = flag.Bool("pipelinesStoreKubernetes", false, "Store and run pipeline versions in Kubernetes")
 	disableWebhook                = flag.Bool("disableWebhook", false, "Set this if pipelinesStoreKubernetes is on but using a global webhook in a separate pod")
@@ -102,6 +104,49 @@ type HTTPRouterDeps struct {
 	ReadArtifact            http.HandlerFunc
 }
 
+func parseTLSVersion(version string) uint16 {
+	switch version {
+	case "VersionTLS13":
+		return tls.VersionTLS13
+	default:
+		return tls.VersionTLS12
+	}
+}
+
+func parseTLSCipherSuites(commaSeparated string) []uint16 {
+	if commaSeparated == "" {
+		return nil
+	}
+	allCiphers := make(map[string]uint16)
+	for _, cs := range tls.CipherSuites() {
+		allCiphers[cs.Name] = cs.ID
+	}
+	var ids []uint16
+	for _, name := range strings.Split(commaSeparated, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if id, ok := allCiphers[name]; ok {
+			ids = append(ids, id)
+		} else {
+			glog.Warningf("Unknown TLS cipher suite %q, skipping", name)
+		}
+	}
+	return ids
+}
+
+func buildTLSConfig() *tls.Config {
+	cfg := &tls.Config{
+		MinVersion: parseTLSVersion(*tlsMinVersion),
+		NextProtos: []string{"h2", "http/1.1"},
+	}
+	if suites := parseTLSCipherSuites(*tlsCipherSuites); len(suites) > 0 {
+		cfg.CipherSuites = suites
+	}
+	return cfg
+}
+
 func initCerts() (*tls.Config, error) {
 	switch {
 	case *tlsCertPath == "" && *tlsCertKeyPath == "":
@@ -117,11 +162,10 @@ func initCerts() (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	tlsCfg := &tls.Config{
-		ServerName:   common.GetMLPipelineServiceName() + "." + common.GetPodNamespace() + ".svc." + common.GetClusterDomain(),
-		Certificates: []tls.Certificate{serverCert},
-	}
-	glog.Info("TLS cert key/pair loaded.")
+	tlsCfg := buildTLSConfig()
+	tlsCfg.ServerName = common.GetMLPipelineServiceName() + "." + common.GetPodNamespace() + ".svc." + common.GetClusterDomain()
+	tlsCfg.Certificates = []tls.Certificate{serverCert}
+	glog.Infof("TLS cert key/pair loaded (MinVersion: %d)", tlsCfg.MinVersion)
 	return tlsCfg, err
 }
 
@@ -548,8 +592,9 @@ func startWebhook(client ctrlclient.Client, clientNoCahe ctrlclient.Client, wg *
 	topMux.Handle("/webhooks/mutate-pipelineversion", pvMutateWebhook)
 
 	webhookServer := &http.Server{
-		Addr:    *webhookPortFlag,
-		Handler: topMux,
+		Addr:      *webhookPortFlag,
+		Handler:   topMux,
+		TLSConfig: buildTLSConfig(),
 	}
 
 	go func() {
