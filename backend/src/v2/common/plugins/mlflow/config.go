@@ -59,10 +59,22 @@ func ParseKfpMLflowRuntimeConfig() (*commonmlflow.MLflowRuntimeConfig, error) {
 	if cfg.AuthType != "kubernetes" {
 		return nil, fmt.Errorf("unsupported auth type: %s", cfg.AuthType)
 	}
-	// Only InsecureSkipVerify is propagated from the API server. Driver/launcher CA trust is configured
-	// separately (e.g., cluster-wide trusted CA injection).
+	// Disabling TLS verification is not supported in the driver/launcher
+	// to prevent CWE-295 (improper certificate validation).
+	if cfg.InsecureSkipVerify {
+		return nil, fmt.Errorf("insecureSkipVerify is not supported")
+	}
+	// Preserve the CABundlePath from the runtime config (propagated by the
+	// API server) so the driver/launcher can verify certificates signed by
+	// an internal CA (e.g., cert-manager). InsecureSkipVerify is always
+	// forced to false.
+	caBundlePath := ""
+	if cfg.TLS != nil {
+		caBundlePath = cfg.TLS.CABundlePath
+	}
 	cfg.TLS = &commonplugins.TLSConfig{
-		InsecureSkipVerify: cfg.InsecureSkipVerify,
+		InsecureSkipVerify: false,
+		CABundlePath:       caBundlePath,
 	}
 	return &cfg, nil
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/golang/glog"
 	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
 	apiserverPlugins "github.com/kubeflow/pipelines/backend/src/apiserver/plugins"
+	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
 	commonmlflow "github.com/kubeflow/pipelines/backend/src/common/plugins/mlflow"
 )
 
@@ -110,29 +111,33 @@ func (h *Handler) OnBeforeRunCreation(ctx context.Context, run *apiserverPlugins
 		return FailedPluginOutput(mlflowExperiment.ID, mlflowExperiment.Name, "", "", endpoint, err.Error()), nil, err
 	}
 
-	insecureSkipVerify := false
-	if resolvedCfg.TLS != nil {
-		insecureSkipVerify = resolvedCfg.TLS.InsecureSkipVerify
-	}
 	workspace := ""
 	if settings.WorkspacesEnabled != nil && *settings.WorkspacesEnabled {
 		workspace = run.Namespace
 	}
-	// TLS.CABundlePath is intentionally omitted: driver/launcher pods do not
-	// have access to the API server's CA bundle file. CA trust for those pods
-	// is configured via cluster-wide trusted CA injection or volume mounts
-	// managed outside the plugin config. Only InsecureSkipVerify is carried
-	// over because it is a boolean flag independent of filesystem context.
+	// TLS.InsecureSkipVerify is intentionally omitted: disabling TLS
+	// verification is not supported in the driver/launcher (CWE-295).
+	// TLS.CABundlePath IS propagated so that driver/launcher pods can
+	// verify certificates signed by an internal CA (e.g., cert-manager).
+	// The operator is responsible for ensuring this path is available in
+	// driver/launcher pods (via platform spec volume mounts, trusted CA
+	// injection, or similar mechanisms).
+	var runtimeTLS *commonplugins.TLSConfig
+	if runCfg.TLS != nil && runCfg.TLS.CABundlePath != "" {
+		runtimeTLS = &commonplugins.TLSConfig{
+			CABundlePath: runCfg.TLS.CABundlePath,
+		}
+	}
 	mlflowRuntimeConfig := commonmlflow.MLflowRuntimeConfig{
-		Endpoint:           mlflowRequestCtx.BaseURL.String(),
-		Workspace:          workspace,
-		WorkspacesEnabled:  settings.WorkspacesEnabled != nil && *settings.WorkspacesEnabled,
-		ParentRunID:        parentRunID,
-		ExperimentID:       mlflowExperiment.ID,
-		AuthType:           commonmlflow.AuthTypeKubernetes,
-		Timeout:            resolvedCfg.Timeout,
-		InsecureSkipVerify: insecureSkipVerify,
-		InjectUserEnvVars:  settings.InjectUserEnvVars != nil && *settings.InjectUserEnvVars,
+		Endpoint:          mlflowRequestCtx.BaseURL.String(),
+		Workspace:         workspace,
+		WorkspacesEnabled: settings.WorkspacesEnabled != nil && *settings.WorkspacesEnabled,
+		ParentRunID:       parentRunID,
+		ExperimentID:      mlflowExperiment.ID,
+		AuthType:          commonmlflow.AuthTypeKubernetes,
+		Timeout:           resolvedCfg.Timeout,
+		InjectUserEnvVars: settings.InjectUserEnvVars != nil && *settings.InjectUserEnvVars,
+		TLS:               runtimeTLS,
 	}
 	mlflowConfigJSON, err := json.Marshal(mlflowRuntimeConfig)
 	if err != nil {
