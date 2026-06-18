@@ -180,12 +180,13 @@ if [ -n "${GITHUB_ENV:-}" ]; then
   echo "MLFLOW_PORT_FORWARD_NS=$MLFLOW_NAMESPACE" >> "$GITHUB_ENV"
   echo "MLFLOW_PORT_FORWARD_SVC=$MLFLOW_SVC" >> "$GITHUB_ENV"
   echo "MLFLOW_PORT_FORWARD_REMOTE_PORT=$MLFLOW_PORT" >> "$GITHUB_ENV"
+  echo "MLFLOW_CA_BUNDLE_PATH=$CA_CERT_FILE" >> "$GITHUB_ENV"
   if [ -n "$SA_TOKEN" ]; then
     echo "MLFLOW_BEARER_TOKEN=$SA_TOKEN" >> "$GITHUB_ENV"
-    echo "Exported MLFLOW_BEARER_TOKEN and MLFLOW_WORKSPACE for test helpers"
+    echo "Exported MLFLOW_BEARER_TOKEN, MLFLOW_WORKSPACE, and MLFLOW_CA_BUNDLE_PATH for test helpers"
   else
     echo "WARNING: Could not create SA token; MLflow requests may be unauthenticated"
-    echo "Exported MLFLOW_WORKSPACE only"
+    echo "Exported MLFLOW_WORKSPACE and MLFLOW_CA_BUNDLE_PATH only"
   fi
 fi
 
@@ -198,7 +199,7 @@ CURL_HEADERS=(-H "X-MLflow-Workspace: $KFP_NAMESPACE")
 
 STATUS=000
 for i in $(seq 1 30); do
-  STATUS=$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 \
+  STATUS=$(curl -s --cacert "$CA_CERT_FILE" -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 \
     "${CURL_HEADERS[@]}" "$HEALTH_URL" 2>/dev/null || echo "000")
   if [ "$STATUS" != "000" ] && [ "$STATUS" -lt 500 ] 2>/dev/null; then
     echo "MLflow backend is healthy on localhost:8080 (HTTPS, status=$STATUS)"
