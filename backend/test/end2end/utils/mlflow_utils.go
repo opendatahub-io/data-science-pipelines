@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -38,24 +39,37 @@ import (
 )
 
 const (
-	mlflowEndpointEnv    = "MLFLOW_TRACKING_URI"
-	mlflowInsecureTLSEnv = "MLFLOW_TRACKING_INSECURE_TLS"
-	mlflowBearerTokenEnv = "MLFLOW_BEARER_TOKEN"
-	mlflowWorkspaceEnv   = "MLFLOW_WORKSPACE"
-	mlflowPluginKey      = "MLflow"
+	mlflowEndpointEnv      = "MLFLOW_TRACKING_URI"
+	mlflowCABundlePathEnv  = "MLFLOW_CA_BUNDLE_PATH"
+	mlflowBearerTokenEnv   = "MLFLOW_BEARER_TOKEN"
+	mlflowWorkspaceEnv     = "MLFLOW_WORKSPACE"
+	mlflowPluginKey        = "MLflow"
 )
 
 func getMLflowClient(endpoint string) (*mlflowclient.Client, error) {
-	insecure := strings.EqualFold(os.Getenv(mlflowInsecureTLSEnv), "true")
 	workspace := os.Getenv(mlflowWorkspaceEnv)
 	bearerToken := os.Getenv(mlflowBearerTokenEnv)
+
+	tlsConfig := &tls.Config{}
+	if caBundlePath := os.Getenv(mlflowCABundlePathEnv); caBundlePath != "" {
+		caCert, err := os.ReadFile(caBundlePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA bundle from %s: %w", caBundlePath, err)
+		}
+		pool, err := x509.SystemCertPool()
+		if err != nil {
+			pool = x509.NewCertPool()
+		}
+		if !pool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to parse CA certificate from %s", caBundlePath)
+		}
+		tlsConfig.RootCAs = pool
+		logger.Log("MLflow client initialized with CA bundle from %s", caBundlePath)
+	}
+
 	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: insecure, //nolint:gosec
-			},
-		},
+		Timeout:   30 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: tlsConfig},
 	}
 	client, err := mlflowclient.NewClient(mlflowclient.Config{
 		Endpoint:          endpoint,
@@ -72,9 +86,6 @@ func getMLflowClient(endpoint string) (*mlflowclient.Client, error) {
 	}
 	if workspace != "" {
 		logger.Log("MLflow client initialized with workspace header: %s", workspace)
-	}
-	if insecure {
-		logger.Log("MLflow client initialized with InsecureSkipVerify=true")
 	}
 	return client, nil
 }
