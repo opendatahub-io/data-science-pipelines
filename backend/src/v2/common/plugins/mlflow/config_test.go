@@ -154,6 +154,43 @@ func TestParseKfpMLflowRuntimeConfig_MissingTimeout_Failure(t *testing.T) {
 	assert.Equal(t, "missing one or more of the following required fields in KFP_MLFLOW_CONFIG: Timeout", err.Error())
 }
 
+func TestParseKfpMLflowRuntimeConfig_InsecureSkipVerify_Failure(t *testing.T) {
+	cfg := commonmlflow.MLflowRuntimeConfig{
+		Endpoint:           "http://localhost",
+		ParentRunID:        "test-parent-run-id",
+		ExperimentID:       "test-exp",
+		AuthType:           "kubernetes",
+		Timeout:            "10s",
+		InsecureSkipVerify: true,
+	}
+	setRuntimeCfg(cfg)
+	runtimeCfg, err := ParseKfpMLflowRuntimeConfig()
+
+	assert.Nil(t, runtimeCfg)
+	assert.Error(t, err)
+	assert.Equal(t, "insecureSkipVerify is not supported", err.Error())
+}
+
+func TestParseKfpMLflowRuntimeConfig_CABundlePath_Preserved(t *testing.T) {
+	cfg := commonmlflow.MLflowRuntimeConfig{
+		Endpoint:     "http://localhost",
+		ParentRunID:  "test-parent-run-id",
+		ExperimentID: "test-exp",
+		AuthType:     "kubernetes",
+		Timeout:      "10s",
+		TLS: &commonplugins.TLSConfig{
+			CABundlePath: "/etc/pki/tls/certs/ca-bundle.crt",
+		},
+	}
+	setRuntimeCfg(cfg)
+	runtimeCfg, err := ParseKfpMLflowRuntimeConfig()
+
+	assert.NotNil(t, runtimeCfg)
+	assert.NoError(t, err)
+	assert.Equal(t, "/etc/pki/tls/certs/ca-bundle.crt", runtimeCfg.TLS.CABundlePath)
+	assert.False(t, runtimeCfg.TLS.InsecureSkipVerify)
+}
+
 func TestParseKfpMLflowRuntimeConfig_InvalidAuthType_Failure(t *testing.T) {
 	cfg := commonmlflow.MLflowRuntimeConfig{
 		Endpoint:     "http://localhost",

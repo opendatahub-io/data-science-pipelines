@@ -16,13 +16,23 @@ package mlflow
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
@@ -41,6 +51,29 @@ func setupSAToken(t *testing.T) func() {
 	t.Helper()
 	setupFakeKubernetesConfig(t, "test-sa-token")
 	return func() {} // cleanup handled by t.Cleanup in setupFakeKubernetesConfig
+}
+
+func writeTempCABundle(t *testing.T) string {
+	t.Helper()
+	// Generate a self-signed CA cert for testing. The httptest servers use
+	// plain HTTP so this CA is never used for real TLS; it just needs to be
+	// valid PEM so BuildHTTPClient can parse it.
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{Organization: []string{"Test CA"}},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	p := filepath.Join(t.TempDir(), "ca-bundle.crt")
+	require.NoError(t, os.WriteFile(p, pemBytes, 0600))
+	return p
 }
 
 func testPluginConfig(endpoint string) *apiserverPlugins.PluginConfig {
@@ -155,6 +188,94 @@ func TestOnBeforeRunCreation_Success(t *testing.T) {
 	assert.Equal(t, "exp-42", rtCfg.ExperimentID)
 	assert.Equal(t, "kubernetes", rtCfg.AuthType)
 	assert.False(t, rtCfg.InjectUserEnvVars, "InjectUserEnvVars should default to false")
+}
+
+func TestOnBeforeRunCreation_CABundlePath_Propagated(t *testing.T) {
+	cleanup := setupSAToken(t)
+	defer cleanup()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/2.0/mlflow/experiments/get-by-name":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"experiment":{"experiment_id":"exp-42","name":"Default"}}`))
+		case "/api/2.0/mlflow/runs/create":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"run":{"info":{"run_id":"mlflow-run-1"}}}`))
+		case "/api/2.0/mlflow/runs/set-tag":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	viper.Set(common.MultiUserMode, false)
+	t.Cleanup(func() { viper.Set(common.MultiUserMode, nil) })
+
+	caBundlePath := writeTempCABundle(t)
+
+	handler := NewMLflowRunHandler()
+	run := testPendingRun("kfp-run-1", "my-run", &MLflowPluginInput{})
+	cfg := &apiserverPlugins.PluginConfig{
+		Endpoint: server.URL,
+		Timeout:  "10s",
+		TLS: &commonplugins.TLSConfig{
+			CABundlePath: caBundlePath,
+		},
+		Settings: map[string]interface{}{
+			"WorkspacesEnabled": "true",
+		},
+	}
+	output, env, err := handler.OnBeforeRunCreation(context.Background(), run, cfg)
+	require.NoError(t, err)
+	require.NotEmpty(t, env)
+	require.NotNil(t, output)
+
+	assert.Equal(t, apiv2beta1.PluginState_PLUGIN_SUCCEEDED, output.State)
+
+	var rtCfg commonmlflow.MLflowRuntimeConfig
+	require.NoError(t, json.Unmarshal([]byte(env[commonmlflow.EnvMLflowConfig]), &rtCfg))
+	require.NotNil(t, rtCfg.TLS)
+	assert.Equal(t, caBundlePath, rtCfg.TLS.CABundlePath)
+	assert.False(t, rtCfg.TLS.InsecureSkipVerify)
+}
+
+func TestOnBeforeRunCreation_NoTLS_OmitsTLSFromRuntimeConfig(t *testing.T) {
+	cleanup := setupSAToken(t)
+	defer cleanup()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/2.0/mlflow/experiments/get-by-name":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"experiment":{"experiment_id":"exp-42","name":"Default"}}`))
+		case "/api/2.0/mlflow/runs/create":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"run":{"info":{"run_id":"mlflow-run-1"}}}`))
+		case "/api/2.0/mlflow/runs/set-tag":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	viper.Set(common.MultiUserMode, false)
+	t.Cleanup(func() { viper.Set(common.MultiUserMode, nil) })
+
+	handler := NewMLflowRunHandler()
+	run := testPendingRun("kfp-run-1", "my-run", &MLflowPluginInput{})
+	output, env, err := handler.OnBeforeRunCreation(context.Background(), run, testPluginConfig(server.URL))
+	require.NoError(t, err)
+	require.NotEmpty(t, env)
+	require.NotNil(t, output)
+
+	var rtCfg commonmlflow.MLflowRuntimeConfig
+	require.NoError(t, json.Unmarshal([]byte(env[commonmlflow.EnvMLflowConfig]), &rtCfg))
+	assert.Nil(t, rtCfg.TLS)
 }
 
 func TestOnBeforeRunCreation_NilInput_UtilizesDefaults(t *testing.T) {
