@@ -2057,6 +2057,16 @@ func (r *ResourceManager) GetPipelineVersionByName(name string) (*model.Pipeline
 	return pipelineVersion, nil
 }
 
+// GetPipelineVersionByPipelineIdAndName returns a pipeline version by pipeline ID and version name.
+// Tags are loaded at the store level.
+func (r *ResourceManager) GetPipelineVersionByPipelineIdAndName(pipelineId string, name string) (*model.PipelineVersion, error) {
+	pipelineVersion, err := r.pipelineStore.GetPipelineVersionByPipelineIdAndName(pipelineId, name)
+	if err != nil {
+		return nil, util.Wrapf(err, "Failed to get a pipeline version with pipelineId %v and name %v", pipelineId, name)
+	}
+	return pipelineVersion, nil
+}
+
 // GetLatestPipelineVersion returns the latest pipeline version for a specified pipeline id. Tags are loaded at the store level.
 func (r *ResourceManager) GetLatestPipelineVersion(pipelineId string) (*model.PipelineVersion, error) {
 	// Verify pipeline exists

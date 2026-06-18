@@ -388,6 +388,27 @@ func (k *PipelineStoreKubernetes) GetPipelineVersionByName(name string) (*model.
 	return pipelineVersion.ToModel()
 }
 
+func (k *PipelineStoreKubernetes) GetPipelineVersionByPipelineIdAndName(pipelineId string, name string) (*model.PipelineVersion, error) {
+	pipelineVersions, err := k.getK8sPipelineVersions(context.TODO(), pipelineId, "")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pipelineVersion := range pipelineVersions.Items {
+		if pipelineVersion.Name == name {
+			modelVersion, err := pipelineVersion.ToModel()
+			if err != nil {
+				return nil, err
+			}
+			if modelVersion.Status == model.PipelineVersionReady {
+				return modelVersion, nil
+			}
+		}
+	}
+
+	return nil, util.NewResourceNotFoundError("PipelineVersion", name)
+}
+
 func (k *PipelineStoreKubernetes) GetPipelineVersionWithStatus(pipelineVersionId string, status model.PipelineVersionStatus) (*model.PipelineVersion, error) {
 	pipelineVersion, err := k.GetPipelineVersion(pipelineVersionId)
 	if err != nil {

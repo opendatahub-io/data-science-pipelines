@@ -977,6 +977,102 @@ func TestLoadManagedPipelinesManifest_InvalidNamesRejected(t *testing.T) {
 	}
 }
 
+// TestLoadSamples_ManagedPipelineCreatedDespiteVersionNameCollision verifies that
+// managed pipeline definitions are created even when a user-created pipeline
+// under a DIFFERENT pipeline already has a version with the same name. This is
+// the scenario described in RHOAIENG-70075: the version collision check must be
+// scoped to the owning pipeline, not global.
+func TestLoadSamples_ManagedPipelineCreatedDespiteVersionNameCollision(t *testing.T) {
+	previousPodNamespace := viper.Get("POD_NAMESPACE")
+	viper.Set("POD_NAMESPACE", "")
+	t.Cleanup(func() { viper.Set("POD_NAMESPACE", previousPodNamespace) })
+	t.Setenv(managedPipelinesUploadTagsEnv, "")
+	rm := fakeResourceManager()
+
+	// Step 1: User creates their own pipeline "user-pipeline" with a version
+	// named "tabular" (the same name that a managed pipeline will use as its
+	// version name). This simulates a user who happened to name a pipeline
+	// version the same as a managed pipeline before enabling managed pipelines.
+	userPipeline, err := rm.CreatePipeline(&model.Pipeline{
+		Name:        "user-pipeline",
+		DisplayName: "user-pipeline",
+		Description: "user-created pipeline",
+	})
+	require.NoError(t, err)
+
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+
+	_, err = rm.CreatePipelineVersion(&model.PipelineVersion{
+		Name:         "tabular",
+		DisplayName:  "tabular",
+		Description:  "user-created version with name matching a managed pipeline",
+		PipelineId:   userPipeline.UUID,
+		PipelineSpec: model.LargeText(string(sampleYAML)),
+	})
+	require.NoError(t, err)
+
+	// Step 2: Load samples with managed pipelines that include "tabular".
+	// Before the fix, the managed "tabular" pipeline version would NOT be
+	// created because GetPipelineVersionByName("tabular") found the user's
+	// version under a different pipeline.
+	pc := config{
+		LoadSamplesOnRestart: true,
+		Pipelines:            []configPipelines{},
+	}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "tabular", Description: "Managed tabular pipeline"},
+		{Name: "timeseries", Description: "Managed timeseries pipeline"},
+		{Name: "rag", Description: "Managed rag pipeline"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "tabular.yaml"), sampleYAML, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "timeseries.yaml"), sampleYAML, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "rag.yaml"), sampleYAML, 0644))
+
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	// Step 3: Verify ALL three managed pipelines were created, including
+	// "tabular" which should not be blocked by the user's version of the
+	// same name under a different pipeline.
+	managedTabular, err := rm.GetPipelineByNameAndNamespace("tabular", "")
+	require.NoError(t, err)
+	assert.NotEmpty(t, managedTabular.UUID)
+
+	managedTimeseries, err := rm.GetPipelineByNameAndNamespace("timeseries", "")
+	require.NoError(t, err)
+	assert.NotEmpty(t, managedTimeseries.UUID)
+
+	managedRag, err := rm.GetPipelineByNameAndNamespace("rag", "")
+	require.NoError(t, err)
+	assert.NotEmpty(t, managedRag.UUID)
+
+	// Each managed pipeline should have exactly 1 version.
+	opts, err := list.NewOptions(&model.PipelineVersion{}, 10, "id", nil)
+	require.NoError(t, err)
+
+	_, totalSize, _, err := rm.ListPipelineVersions(managedTabular.UUID, opts, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, totalSize, "managed pipeline 'tabular' should have its own version")
+
+	_, totalSize, _, err = rm.ListPipelineVersions(managedTimeseries.UUID, opts, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, totalSize)
+
+	_, totalSize, _, err = rm.ListPipelineVersions(managedRag.UUID, opts, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, totalSize)
+
+	// The user's pipeline should still have only its original version.
+	_, totalSize, _, err = rm.ListPipelineVersions(userPipeline.UUID, opts, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, totalSize, "user pipeline should still have only its original version")
+}
+
 func TestLoadManagedPipelinesManifest_ValidNamesAccepted(t *testing.T) {
 	cases := []struct {
 		name      string

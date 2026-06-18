@@ -308,10 +308,12 @@ func LoadSamples(resourceManager *resource.ResourceManager, sampleConfigPath str
 			pvDisplayName = p.DisplayName
 		}
 
-		// If the Pipeline Version exists, do nothing
-		// Otherwise upload new Pipeline Version for
-		// this pipeline.
-		_, fetchErr = resourceManager.GetPipelineVersionByName(pvName)
+		// If the Pipeline Version exists within this pipeline, do nothing.
+		// Otherwise upload new Pipeline Version for this pipeline.
+		// The lookup is scoped to the owning pipeline so that a version
+		// with the same name under a different pipeline does not prevent
+		// creation of the managed pipeline version.
+		_, fetchErr = resourceManager.GetPipelineVersionByPipelineIdAndName(p.UUID, pvName)
 		if fetchErr != nil {
 			if util.IsUserErrorCodeMatch(fetchErr, codes.NotFound) {
 				_, configErr = resourceManager.CreatePipelineVersion(
