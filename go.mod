@@ -13,7 +13,7 @@ require (
 	github.com/aws/aws-sdk-go v1.55.5 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/eapache/go-resiliency v1.2.0
-	github.com/fsnotify/fsnotify v1.9.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-openapi/errors v0.22.7
 	github.com/go-openapi/runtime v0.29.3
 	github.com/go-openapi/strfmt v0.26.0
