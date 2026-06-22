@@ -18,6 +18,7 @@ DEPLOY_DSPO="true"
 NUM_PARALLEL_NODES=10
 CUSTOM_PIP_INDEX_URL="https://pypi.org/simple"
 CUSTOM_PIP_TRUSTED_HOST="pypi.org"
+GPU_VENDOR="nvidia"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -47,6 +48,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --num-parallel-tests=*)
       NUM_PARALLEL_NODES="${1#*=}"
+      shift
+      ;;
+    --gpu-vendor=*)
+      GPU_VENDOR="${1#*=}"
       shift
       ;;
   esac
@@ -282,6 +287,7 @@ go run github.com/onsi/ginkgo/v2/ginkgo -r -v -p \
   -apiUrl="$API_URL" \
   -authToken="$API_TOKEN" \
   -disableTlsCheck=true \
+  -gpuVendor=$GPU_VENDOR \
   -customPipIndexURL=$CUSTOM_PIP_INDEX_URL \
   -customPipTrustedHost=$CUSTOM_PIP_TRUSTED_HOST \
   -serviceAccountName=pipeline-runner-"$DSPA_NAME" \

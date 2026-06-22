@@ -38,6 +38,7 @@ var (
 	CustomPipIndexURL             = flag.String("customPipIndexURL", "https://pypi.org/simple", "Pip index URL for installing Python packages")
 	CustomPipTrustedHost          = flag.String("customPipTrustedHost", "pypi.org", "Pip trusted host for the custom index URL")
 	CustomPipelineEnvVars         = flag.String("customConfigEnvVars", "ds-pipeline-custom-env-vars", "Config Map name to specify custom env vars like pypi index")
+	GpuVendor                     = flag.String("gpuVendor", "nvidia", "The GPU vendor to use i.e. nvidia, amd, both or all")
 )
 
 var (
