@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
 	commonmlflow "github.com/kubeflow/pipelines/backend/src/common/plugins/mlflow"
 	"github.com/spf13/viper"
 )
@@ -58,10 +59,22 @@ func ParseKfpMLflowRuntimeConfig() (*commonmlflow.MLflowRuntimeConfig, error) {
 	if cfg.AuthType != "kubernetes" {
 		return nil, fmt.Errorf("unsupported auth type: %s", cfg.AuthType)
 	}
-	// Only InsecureSkipVerify is propagated from the API server. Driver/launcher CA trust is configured
-	// separately (e.g., cluster-wide trusted CA injection).
-	cfg.TLS = &commonmlflow.TLSConfig{
-		InsecureSkipVerify: cfg.InsecureSkipVerify,
+	// Disabling TLS verification is not supported in the driver/launcher
+	// to prevent CWE-295 (improper certificate validation).
+	if cfg.InsecureSkipVerify {
+		return nil, fmt.Errorf("insecureSkipVerify is not supported")
+	}
+	// Preserve the CABundlePath from the runtime config (propagated by the
+	// API server) so the driver/launcher can verify certificates signed by
+	// an internal CA (e.g., cert-manager). InsecureSkipVerify is always
+	// forced to false.
+	caBundlePath := ""
+	if cfg.TLS != nil {
+		caBundlePath = cfg.TLS.CABundlePath
+	}
+	cfg.TLS = &commonplugins.TLSConfig{
+		InsecureSkipVerify: false,
+		CABundlePath:       caBundlePath,
 	}
 	return &cfg, nil
 }
@@ -73,7 +86,7 @@ func IsEnabled() bool {
 }
 
 // BuildMLflowTaskRequestContext constructs a fully initialized RequestContext
-// by delegating to the common BuildRequestContext with task-specific parameters.
+// by delegating to the common BuildMLflowRequestContext with task-specific parameters.
 func BuildMLflowTaskRequestContext(runtimeCfg commonmlflow.MLflowRuntimeConfig) (*commonmlflow.RequestContext, error) {
 	mlflowPluginSettings := &commonmlflow.MLflowPluginSettings{
 		WorkspacesEnabled: &runtimeCfg.WorkspacesEnabled,
@@ -81,7 +94,7 @@ func BuildMLflowTaskRequestContext(runtimeCfg commonmlflow.MLflowRuntimeConfig) 
 		InjectUserEnvVars: &runtimeCfg.InjectUserEnvVars,
 	}
 
-	pluginCfg := commonmlflow.PluginConfig{
+	pluginCfg := commonmlflow.MLflowPluginConfig{
 		Endpoint: runtimeCfg.Endpoint,
 		Timeout:  runtimeCfg.Timeout,
 		TLS:      runtimeCfg.TLS,
