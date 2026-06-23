@@ -23,14 +23,15 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
-	argoclient "github.com/argoproj/argo-workflows/v3/pkg/client/clientset/versioned"
-	argoclientwf "github.com/argoproj/argo-workflows/v3/pkg/client/clientset/versioned/typed/workflow/v1alpha1"
-	argoinformer "github.com/argoproj/argo-workflows/v3/pkg/client/informers/externalversions"
-	"github.com/argoproj/argo-workflows/v3/pkg/client/informers/externalversions/workflow/v1alpha1"
-	"github.com/argoproj/argo-workflows/v3/workflow/common"
-	"github.com/argoproj/argo-workflows/v3/workflow/packer"
-	"github.com/argoproj/argo-workflows/v3/workflow/validate"
+	workflowapi "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
+	argoclient "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned"
+	argoclientwf "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned/typed/workflow/v1alpha1"
+	argoinformer "github.com/argoproj/argo-workflows/v4/pkg/client/informers/externalversions"
+	"github.com/argoproj/argo-workflows/v4/pkg/client/informers/externalversions/workflow/v1alpha1"
+	argologging "github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/workflow/common"
+	"github.com/argoproj/argo-workflows/v4/workflow/packer"
+	"github.com/argoproj/argo-workflows/v4/workflow/validate"
 	"github.com/golang/glog"
 	api "github.com/kubeflow/pipelines/backend/api/v1beta1/go_client"
 	"github.com/kubeflow/pipelines/backend/src/agent/persistence/client/artifactclient"
@@ -53,6 +54,8 @@ import (
 type Workflow struct {
 	*workflowapi.Workflow
 }
+
+var argoContext = argologging.NewSlogLogger(argologging.Info, argologging.Text).NewBackgroundContext()
 
 func NewWorkflowFromBytes(bytes []byte) (*Workflow, error) {
 	var workflow workflowapi.Workflow
@@ -775,8 +778,11 @@ func (w *Workflow) SetCannonicalLabels(name string, nextScheduledEpoch int64, in
 	w.SetLabels(LabelKeyWorkflowIsOwnedByScheduledWorkflow, "true")
 }
 
-// FindObjectStoreArtifactKeyOrEmpty loops through all node running statuses and look up the first
-// S3 artifact with the specified nodeID and artifactName. Returns empty if nothing is found.
+// FindObjectStoreArtifactKeyOrEmpty looks up the first S3 artifact with the specified artifactName
+// on the specified nodeName. If the node has no outputs (e.g., a retry parent or step group node),
+// it recursively checks the node's children up to a bounded depth. This handles the hierarchy
+// introduced by templateDefaults.retryStrategy: StepGroup → Retry → Pod.
+// Returns empty string if nothing is found.
 func (w *Workflow) FindObjectStoreArtifactKeyOrEmpty(nodeName string, artifactName string) string {
 	if w.Status.Nodes == nil {
 		return ""
@@ -785,17 +791,40 @@ func (w *Workflow) FindObjectStoreArtifactKeyOrEmpty(nodeName string, artifactNa
 	if !found {
 		return ""
 	}
+	// maxDepth of 3 covers: StepGroup → Retry → Pod (deepest expected path).
+	return w.findArtifactKeyRecursive(node, artifactName, 3)
+}
+
+// findArtifactKeyRecursive searches the node and its children (up to maxDepth levels)
+// for an S3 artifact with the given name.
+func (w *Workflow) findArtifactKeyRecursive(node workflowapi.NodeStatus, artifactName string, maxDepth int) string {
+	if s3Key := findArtifactS3KeyFromNode(node, artifactName); s3Key != "" {
+		return s3Key
+	}
+	if maxDepth <= 0 {
+		return ""
+	}
+	for _, childNodeID := range node.Children {
+		if childNode, childFound := w.Status.Nodes[childNodeID]; childFound {
+			if s3Key := w.findArtifactKeyRecursive(childNode, artifactName, maxDepth-1); s3Key != "" {
+				return s3Key
+			}
+		}
+	}
+	return ""
+}
+
+// findArtifactS3KeyFromNode extracts the S3 key for a named artifact from a node's outputs.
+func findArtifactS3KeyFromNode(node workflowapi.NodeStatus, artifactName string) string {
 	if node.Outputs == nil || node.Outputs.Artifacts == nil {
 		return ""
 	}
-	var s3Key string
 	for _, artifact := range node.Outputs.Artifacts {
-		if artifact.Name != artifactName || artifact.S3 == nil || artifact.S3.Key == "" {
-			continue
+		if artifact.Name == artifactName && artifact.S3 != nil && artifact.S3.Key != "" {
+			return artifact.S3.Key
 		}
-		s3Key = artifact.S3.Key
 	}
-	return s3Key
+	return ""
 }
 
 // IsInFinalState whether the workflow is in a final state.
@@ -823,7 +852,7 @@ func (w *Workflow) IsV2Compatible() bool {
 }
 
 func (w *Workflow) Validate(lint, ignoreEntrypoint bool) error {
-	err := validate.ValidateWorkflow(nil, nil, w.Workflow, nil, validate.ValidateOpts{
+	err := validate.ValidateWorkflow(ArgoContext(), nil, nil, w.Workflow, nil, validate.ValidateOpts{
 		Lint:                       lint,
 		IgnoreEntrypoint:           ignoreEntrypoint,
 		WorkflowTemplateValidation: false, // not used by kubeflow
@@ -833,7 +862,11 @@ func (w *Workflow) Validate(lint, ignoreEntrypoint bool) error {
 }
 
 func (w *Workflow) Decompress() error {
-	return packer.DecompressWorkflow(w.Workflow)
+	return packer.DecompressWorkflow(ArgoContext(), w.Workflow)
+}
+
+func ArgoContext() context.Context {
+	return argoContext
 }
 
 func (w *Workflow) CanRetry() error {
