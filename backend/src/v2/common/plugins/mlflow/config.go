@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
 	commonmlflow "github.com/kubeflow/pipelines/backend/src/common/plugins/mlflow"
 	"github.com/spf13/viper"
 )
@@ -59,22 +58,11 @@ func ParseKfpMLflowRuntimeConfig() (*commonmlflow.MLflowRuntimeConfig, error) {
 	if cfg.AuthType != "kubernetes" {
 		return nil, fmt.Errorf("unsupported auth type: %s", cfg.AuthType)
 	}
-	// Disabling TLS verification is not supported in the driver/launcher
-	// to prevent CWE-295 (improper certificate validation).
-	if cfg.InsecureSkipVerify {
+	if cfg.InsecureSkipVerify || (cfg.TLS != nil && cfg.TLS.InsecureSkipVerify) {
 		return nil, fmt.Errorf("insecureSkipVerify is not supported")
 	}
-	// Preserve the CABundlePath from the runtime config (propagated by the
-	// API server) so the driver/launcher can verify certificates signed by
-	// an internal CA (e.g., cert-manager). InsecureSkipVerify is always
-	// forced to false.
-	caBundlePath := ""
-	if cfg.TLS != nil {
-		caBundlePath = cfg.TLS.CABundlePath
-	}
-	cfg.TLS = &commonplugins.TLSConfig{
-		InsecureSkipVerify: false,
-		CABundlePath:       caBundlePath,
+	if cfg.TLS == nil || cfg.TLS.CABundlePath == "" {
+		return nil, fmt.Errorf("tls.caBundlePath is required")
 	}
 	return &cfg, nil
 }

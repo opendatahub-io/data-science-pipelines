@@ -29,6 +29,10 @@ KFP_NAMESPACE="${1:?KFP namespace required}"
 MLFLOW_NAMESPACE="${2:?MLflow namespace required}"
 CONFIG_JSON_PATH="${3:?Path to source config.json required}"
 
+MLFLOW_CA_CONFIGMAP="mlflow-ca-cert"
+KFP_CA_BUNDLE_DIR="/kfp/certs"
+KFP_CA_BUNDLE_PATH="${KFP_CA_BUNDLE_DIR}/ca.crt"
+
 echo "Services in ${MLFLOW_NAMESPACE} namespace:"
 kubectl get svc -n "$MLFLOW_NAMESPACE" --no-headers
 MLFLOW_SVC=$(kubectl get svc -n "$MLFLOW_NAMESPACE" --no-headers -o custom-columns=":metadata.name" | grep -i mlflow | head -1)
@@ -43,7 +47,6 @@ MLFLOW_ENDPOINT="https://${MLFLOW_HOST}:${MLFLOW_PORT}${MLFLOW_STATIC_PREFIX}"
 echo "MLflow service: $MLFLOW_SVC port=$MLFLOW_PORT endpoint=$MLFLOW_ENDPOINT"
 
 # --- Extract CA certificate from the MLflow TLS secret ---
-CA_MOUNT_PATH="/etc/mlflow/tls/ca.crt"
 CA_CERT_FILE="/tmp/mlflow-ca.crt"
 
 echo "Extracting MLflow CA certificate..."
@@ -70,71 +73,12 @@ fi
 echo "$CA_DATA" | base64 -d > "$CA_CERT_FILE"
 echo "CA certificate extracted to $CA_CERT_FILE ($(wc -l < "$CA_CERT_FILE") lines)"
 
-# Create a ConfigMap with the CA cert in the KFP namespace for workflow pods
-kubectl create configmap mlflow-ca-cert -n "$KFP_NAMESPACE" \
+# ConfigMap consumed by the API server (plugin config) and compiler (driver/launcher pods).
+kubectl create configmap "$MLFLOW_CA_CONFIGMAP" -n "$KFP_NAMESPACE" \
   --from-file=ca.crt="$CA_CERT_FILE" --dry-run=client -o yaml | kubectl apply -f -
 
-# --- Patch Argo workflow-controller-configmap to mount the CA cert into all workflow pods ---
-echo "Patching workflow-controller-configmap to inject MLflow CA into workflow pods..."
-
-EXISTING_MAIN_CONTAINER=$(kubectl get configmap workflow-controller-configmap -n "$KFP_NAMESPACE" \
-  -o jsonpath='{.data.mainContainer}' 2>/dev/null || echo "")
-if [ -n "$EXISTING_MAIN_CONTAINER" ]; then
-  MAIN_CONTAINER_PATCH=$(echo "$EXISTING_MAIN_CONTAINER" | \
-    python3 -c "
-import sys, json
-raw = sys.stdin.read().strip()
-try:
-    cfg = json.loads(raw)
-except json.JSONDecodeError:
-    import yaml
-    cfg = yaml.safe_load(raw) or {}
-vms = cfg.get('volumeMounts', [])
-vms = [vm for vm in vms if vm.get('name') != 'mlflow-ca']
-vms.append({'name': 'mlflow-ca', 'mountPath': '/etc/mlflow/tls', 'readOnly': True})
-cfg['volumeMounts'] = vms
-print(json.dumps(cfg))
-")
-else
-  MAIN_CONTAINER_PATCH='{"volumeMounts":[{"name":"mlflow-ca","mountPath":"/etc/mlflow/tls","readOnly":true}]}'
-fi
-
-EXISTING_WF_DEFAULTS=$(kubectl get configmap workflow-controller-configmap -n "$KFP_NAMESPACE" \
-  -o jsonpath='{.data.workflowDefaults}' 2>/dev/null || echo "")
-if [ -n "$EXISTING_WF_DEFAULTS" ]; then
-  WF_DEFAULTS_PATCH=$(echo "$EXISTING_WF_DEFAULTS" | \
-    python3 -c "
-import sys, yaml
-cfg = yaml.safe_load(sys.stdin) or {}
-spec = cfg.setdefault('spec', {})
-volumes = spec.setdefault('volumes', [])
-volumes = [v for v in volumes if v.get('name') != 'mlflow-ca']
-volumes.append({'name': 'mlflow-ca', 'configMap': {'name': 'mlflow-ca-cert'}})
-spec['volumes'] = volumes
-cfg['spec'] = spec
-print(yaml.dump(cfg, default_flow_style=False))
-")
-else
-  WF_DEFAULTS_PATCH=$(cat <<'YAML'
-spec:
-  volumes:
-  - name: mlflow-ca
-    configMap:
-      name: mlflow-ca-cert
-YAML
-)
-fi
-
-kubectl patch configmap workflow-controller-configmap -n "$KFP_NAMESPACE" --type=merge \
-  -p "$(jq -n --arg mc "$MAIN_CONTAINER_PATCH" --arg wd "$WF_DEFAULTS_PATCH" \
-    '{"data":{"mainContainer":$mc,"workflowDefaults":$wd}}')"
-
-# Restart workflow controller to pick up configmap changes
-kubectl rollout restart deployment/workflow-controller -n "$KFP_NAMESPACE"
-kubectl rollout status deployment/workflow-controller -n "$KFP_NAMESPACE" --timeout=120s
-
 # --- Build the MLflow plugin config with caBundlePath ---
-MLFLOW_PATCH=$(jq -n --arg endpoint "$MLFLOW_ENDPOINT" --arg caBundlePath "$CA_MOUNT_PATH" '{
+MLFLOW_PATCH=$(jq -n --arg endpoint "$MLFLOW_ENDPOINT" --arg caBundlePath "$KFP_CA_BUNDLE_PATH" '{
   endpoint: $endpoint,
   tls: { caBundlePath: $caBundlePath },
   settings: { workspacesEnabled: true }
@@ -146,11 +90,11 @@ jq --argjson mlflow "$MLFLOW_PATCH" '. + { plugins: { mlflow: $mlflow } }' \
 echo "Patched config.json plugins.mlflow:"
 jq '.plugins.mlflow' /tmp/kfp-config.json
 
-# --- Deploy the config and mount the CA cert into the API server ---
+# --- Deploy plugin config and wire CA trust on the API server + compiler ---
 kubectl create configmap kfp-mlflow-config -n "$KFP_NAMESPACE" \
   --from-file=config.json=/tmp/kfp-config.json --dry-run=client -o yaml | kubectl apply -f -
 kubectl patch deployment ml-pipeline -n "$KFP_NAMESPACE" --type=strategic -p \
-  '{"spec":{"template":{"spec":{"volumes":[{"name":"mlflow-cfg","configMap":{"name":"kfp-mlflow-config"}},{"name":"mlflow-ca","configMap":{"name":"mlflow-ca-cert"}}],"containers":[{"name":"ml-pipeline-api-server","volumeMounts":[{"name":"mlflow-cfg","mountPath":"/config/config.json","subPath":"config.json"},{"name":"mlflow-ca","mountPath":"/etc/mlflow/tls","readOnly":true}]}]}}}}'
+  '{"spec":{"template":{"spec":{"volumes":[{"name":"mlflow-cfg","configMap":{"name":"kfp-mlflow-config"}},{"name":"mlflow-ca","configMap":{"name":"'"$MLFLOW_CA_CONFIGMAP"'"}}],"containers":[{"name":"ml-pipeline-api-server","env":[{"name":"CABUNDLE_CONFIGMAP_NAME","value":"'"$MLFLOW_CA_CONFIGMAP"'"}],"volumeMounts":[{"name":"mlflow-cfg","mountPath":"/config/config.json","subPath":"config.json"},{"name":"mlflow-ca","mountPath":"'"$KFP_CA_BUNDLE_DIR"'","readOnly":true}]}]}}}}'
 kubectl rollout status deployment/ml-pipeline -n "$KFP_NAMESPACE" --timeout=180s
 
 pkill -f "kubectl port-forward.*ml-pipeline.*8888" || true

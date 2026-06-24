@@ -27,6 +27,8 @@ func TestExecutionStateToMLflowTerminalStatus(t *testing.T) {
 	assert.Equal(t, "FAILED", ExecutionStateToMLflowTerminalStatus("UNKNOWN"))
 }
 
+const testCABundlePath = "/etc/pki/tls/certs/ca-bundle.crt"
+
 func TestParseKfpMLflowRuntimeConfig_Success(t *testing.T) {
 	cfg := commonmlflow.MLflowRuntimeConfig{
 		Endpoint:     "http://localhost",
@@ -34,6 +36,9 @@ func TestParseKfpMLflowRuntimeConfig_Success(t *testing.T) {
 		ExperimentID: "test-exp",
 		AuthType:     "kubernetes",
 		Timeout:      "10s",
+		TLS: &commonplugins.TLSConfig{
+			CABundlePath: testCABundlePath,
+		},
 	}
 	expectedCfg := &commonmlflow.MLflowRuntimeConfig{
 		Endpoint:           "http://localhost",
@@ -46,7 +51,7 @@ func TestParseKfpMLflowRuntimeConfig_Success(t *testing.T) {
 		InsecureSkipVerify: false,
 		InjectUserEnvVars:  false,
 		TLS: &commonplugins.TLSConfig{
-			InsecureSkipVerify: false,
+			CABundlePath: testCABundlePath,
 		},
 	}
 
@@ -169,6 +174,39 @@ func TestParseKfpMLflowRuntimeConfig_InsecureSkipVerify_Failure(t *testing.T) {
 	assert.Nil(t, runtimeCfg)
 	assert.Error(t, err)
 	assert.Equal(t, "insecureSkipVerify is not supported", err.Error())
+}
+
+func TestParseKfpMLflowRuntimeConfig_MissingTLS_Failure(t *testing.T) {
+	cfg := commonmlflow.MLflowRuntimeConfig{
+		Endpoint:     "http://localhost",
+		ParentRunID:  "test-parent-run-id",
+		ExperimentID: "test-exp",
+		AuthType:     "kubernetes",
+		Timeout:      "10s",
+	}
+	setRuntimeCfg(cfg)
+	runtimeCfg, err := ParseKfpMLflowRuntimeConfig()
+
+	assert.Nil(t, runtimeCfg)
+	assert.Error(t, err)
+	assert.Equal(t, "tls.caBundlePath is required", err.Error())
+}
+
+func TestParseKfpMLflowRuntimeConfig_EmptyCABundlePath_Failure(t *testing.T) {
+	cfg := commonmlflow.MLflowRuntimeConfig{
+		Endpoint:     "http://localhost",
+		ParentRunID:  "test-parent-run-id",
+		ExperimentID: "test-exp",
+		AuthType:     "kubernetes",
+		Timeout:      "10s",
+		TLS:          &commonplugins.TLSConfig{},
+	}
+	setRuntimeCfg(cfg)
+	runtimeCfg, err := ParseKfpMLflowRuntimeConfig()
+
+	assert.Nil(t, runtimeCfg)
+	assert.Error(t, err)
+	assert.Equal(t, "tls.caBundlePath is required", err.Error())
 }
 
 func TestParseKfpMLflowRuntimeConfig_CABundlePath_Preserved(t *testing.T) {
