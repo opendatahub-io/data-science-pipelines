@@ -3,6 +3,7 @@ package mlflow
 import (
 	"testing"
 
+	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
 	commonmlflow "github.com/kubeflow/pipelines/backend/src/common/plugins/mlflow"
 	"github.com/kubeflow/pipelines/backend/src/v2/common/plugins"
 	"github.com/spf13/viper"
@@ -43,6 +44,9 @@ func TestMlflowHandlerFactory_Create_Success(t *testing.T) {
 		ExperimentID: "exp-1",
 		AuthType:     "kubernetes",
 		Timeout:      "10s",
+		TLS: &commonplugins.TLSConfig{
+			CABundlePath: testCABundlePath,
+		},
 	})
 	t.Cleanup(func() { viper.Set(commonmlflow.EnvMLflowConfig, "") })
 
@@ -63,6 +67,24 @@ func TestMlflowHandlerFactory_Create_MissingConfig(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, handler)
 	assert.Contains(t, err.Error(), "KFP_MLFLOW_CONFIG env var not set")
+}
+
+func TestMlflowHandlerFactory_Create_MissingCABundlePath(t *testing.T) {
+	setRuntimeCfg(commonmlflow.MLflowRuntimeConfig{
+		Endpoint:     "http://localhost",
+		ParentRunID:  "parent-run-1",
+		ExperimentID: "exp-1",
+		AuthType:     "kubernetes",
+		Timeout:      "10s",
+	})
+	t.Cleanup(func() { viper.Set(commonmlflow.EnvMLflowConfig, "") })
+
+	factory := &mlflowHandlerFactory{}
+	handler, err := factory.Create()
+
+	require.Error(t, err)
+	assert.Nil(t, handler)
+	assert.Contains(t, err.Error(), "tls.caBundlePath is required")
 }
 
 func TestMLflowHandlerFactory_Create_MissingConfigField(t *testing.T) {
