@@ -324,7 +324,7 @@ func TestLoadSamples_SameVersionNameDifferentPipelines(t *testing.T) {
 
 	path, err := writeSampleConfig(t, pc, "sample.json")
 	require.NoError(t, err)
-	require.NoError(t, LoadSamples(rm, path))
+	require.NoError(t, LoadSamples(rm, path, ""))
 
 	pipelineA, err := rm.GetPipelineByNameAndNamespace("Pipeline A", "")
 	require.NoError(t, err)
@@ -552,7 +552,7 @@ func TestLoadSamples_MultiUserMode_PipelinesVisibleWithoutNamespace(t *testing.T
 
 	path, err := writeSampleConfig(t, pc, "sample.json")
 	require.NoError(t, err)
-	require.NoError(t, LoadSamples(rm, path))
+	require.NoError(t, LoadSamples(rm, path, ""))
 
 	// A client querying without a namespace (empty namespace) must still
 	// find the sample pipelines. This matches the artifact proxy test
@@ -597,7 +597,7 @@ func TestLoadSamples_MultiUserMode_RestartIdempotency(t *testing.T) {
 
 	path, err := writeSampleConfig(t, pc, "sample.json")
 	require.NoError(t, err)
-	require.NoError(t, LoadSamples(rm, path))
+	require.NoError(t, LoadSamples(rm, path, ""))
 
 	pipeline, err := rm.GetPipelineByNameAndNamespace("Sample Pipeline", "")
 	require.NoError(t, err)
@@ -607,7 +607,7 @@ func TestLoadSamples_MultiUserMode_RestartIdempotency(t *testing.T) {
 	// triggering the AlreadyExists fallback.
 	path, err = writeSampleConfig(t, pc, "sample.json")
 	require.NoError(t, err)
-	require.NoError(t, LoadSamples(rm, path))
+	require.NoError(t, LoadSamples(rm, path, ""))
 
 	opts, err := list.NewOptions(&model.PipelineVersion{}, 10, "id", nil)
 	require.NoError(t, err)
@@ -639,7 +639,7 @@ func TestLoadSamples_MultiUserMode_RestartNewVersion(t *testing.T) {
 
 	path, err := writeSampleConfig(t, pc, "sample.json")
 	require.NoError(t, err)
-	require.NoError(t, LoadSamples(rm, path))
+	require.NoError(t, LoadSamples(rm, path, ""))
 
 	pipeline, err := rm.GetPipelineByNameAndNamespace("Sample Pipeline", "")
 	require.NoError(t, err)
@@ -648,7 +648,7 @@ func TestLoadSamples_MultiUserMode_RestartNewVersion(t *testing.T) {
 	pc.Pipelines[0].VersionName = "v2"
 	path, err = writeSampleConfig(t, pc, "sample.json")
 	require.NoError(t, err)
-	require.NoError(t, LoadSamples(rm, path))
+	require.NoError(t, LoadSamples(rm, path, ""))
 
 	opts, err := list.NewOptions(&model.PipelineVersion{}, 10, "id", nil)
 	require.NoError(t, err)
@@ -709,7 +709,7 @@ func TestLoadSamples_PreExistingPipelineNamespaceSwitch(t *testing.T) {
 	}
 	path, err := writeSampleConfig(t, pc, "sample.json")
 	require.NoError(t, err)
-	require.NoError(t, LoadSamples(rm, path))
+	require.NoError(t, LoadSamples(rm, path, ""))
 
 	pipeline, err := rm.GetPipelineByNameAndNamespace("My Pipeline", "")
 	require.NoError(t, err)
@@ -720,7 +720,7 @@ func TestLoadSamples_PreExistingPipelineNamespaceSwitch(t *testing.T) {
 	pc.Pipelines[0].VersionName = "v2"
 	path, err = writeSampleConfig(t, pc, "sample.json")
 	require.NoError(t, err)
-	require.NoError(t, LoadSamples(rm, path))
+	require.NoError(t, LoadSamples(rm, path, ""))
 
 	// Step 3: Assert: the new version was created under the existing pipeline
 	opts, err := list.NewOptions(&model.PipelineVersion{}, 10, "id", nil)
@@ -748,7 +748,7 @@ func TestLoadSamples_IdempotencyAcrossNamespaceSwitch(t *testing.T) {
 	}
 	path, err := writeSampleConfig(t, pc, "sample.json")
 	require.NoError(t, err)
-	require.NoError(t, LoadSamples(rm, path))
+	require.NoError(t, LoadSamples(rm, path, ""))
 
 	pipeline, err := rm.GetPipelineByNameAndNamespace("My Pipeline", "")
 	require.NoError(t, err)
@@ -758,7 +758,7 @@ func TestLoadSamples_IdempotencyAcrossNamespaceSwitch(t *testing.T) {
 	viper.Set("POD_NAMESPACE", "test-namespace")
 	path, err = writeSampleConfig(t, pc, "sample.json")
 	require.NoError(t, err)
-	require.NoError(t, LoadSamples(rm, path))
+	require.NoError(t, LoadSamples(rm, path, ""))
 
 	// Step 3: Assert: no duplicate version was created
 	opts, err := list.NewOptions(&model.PipelineVersion{}, 10, "id", nil)
@@ -935,18 +935,18 @@ func TestLoadSamples_MergesManagedManifest(t *testing.T) {
 
 	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
 
-	_, err = rm.GetPipelineByNameAndNamespace("Explicit Pipeline", "")
+	explicitPipeline, err := rm.GetPipelineByNameAndNamespace("Explicit Pipeline", "")
 	require.NoError(t, err)
-	_, err = rm.GetPipelineByNameAndNamespace("managed-a", "")
+	managedA, err := rm.GetPipelineByNameAndNamespace("managed-a", "")
 	require.NoError(t, err)
-	_, err = rm.GetPipelineByNameAndNamespace("managed-b", "")
+	managedB, err := rm.GetPipelineByNameAndNamespace("managed-b", "")
 	require.NoError(t, err)
 
-	_, err = rm.GetPipelineVersionByName("Explicit Pipeline - Ver 1")
+	_, err = rm.GetPipelineVersionByName(explicitPipeline.UUID, "Explicit Pipeline - Ver 1")
 	require.NoError(t, err)
-	_, err = rm.GetPipelineVersionByName("managed-a")
+	_, err = rm.GetPipelineVersionByName(managedA.UUID, "managed-a")
 	require.NoError(t, err)
-	_, err = rm.GetPipelineVersionByName("managed-b")
+	_, err = rm.GetPipelineVersionByName(managedB.UUID, "managed-b")
 	require.NoError(t, err)
 }
 
