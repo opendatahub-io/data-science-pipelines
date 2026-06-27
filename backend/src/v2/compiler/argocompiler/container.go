@@ -28,7 +28,7 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/config/proxy"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	wfapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	wfapi "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 	"github.com/golang/glog"
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
@@ -245,6 +245,9 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 	}
 	if c.defaultRunAsNonRoot != nil {
 		args = append(args, "--default_run_as_non_root", strconv.FormatBool(*c.defaultRunAsNonRoot))
+	}
+	if c.defaultHostUsers != nil {
+		args = append(args, "--default_host_users", strconv.FormatBool(*c.defaultHostUsers))
 	}
 
 	template := &wfapi.Template{
