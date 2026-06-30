@@ -5,7 +5,7 @@ RUN git clone https://github.com/openshift/build-machinery-go.git && \
     cd /tmp/build-machinery-go/commitchecker && \
     go build
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8-1782797275
 
 WORKDIR /bin
 
