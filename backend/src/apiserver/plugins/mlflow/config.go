@@ -25,8 +25,12 @@ import (
 	"strconv"
 	"strings"
 
+<<<<<<< HEAD
 	"github.com/golang/glog"
 	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
+=======
+	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
+>>>>>>> upstream/master
 	apiserverPlugins "github.com/kubeflow/pipelines/backend/src/apiserver/plugins"
 	commonmlflow "github.com/kubeflow/pipelines/backend/src/common/plugins/mlflow"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
@@ -46,6 +50,53 @@ const (
 	TagKFPPipelineVersionID      = "kfp.pipeline_version_id"
 )
 
+<<<<<<< HEAD
+=======
+const (
+	LauncherConfigMapName = "kfp-launcher"
+	LauncherConfigKey     = "plugins.mlflow"
+)
+
+// LauncherNamespaceConfig is the restricted MLflow override shape allowed in the
+// namespace-scoped kfp-launcher ConfigMap.
+type LauncherNamespaceConfig struct {
+	Settings *LauncherNamespaceSettings `json:"settings,omitempty"`
+}
+
+// LauncherNamespaceSettings lists the only MLflow settings that a namespace may
+// override through the kfp-launcher ConfigMap.
+type LauncherNamespaceSettings struct {
+	ExperimentDescription *string `json:"experimentDescription,omitempty"`
+	DefaultExperimentName string  `json:"defaultExperimentName,omitempty"`
+	InjectUserEnvVars     *bool   `json:"injectUserEnvVars,omitempty"`
+}
+
+// ApplySettingsDefaults applies default values to a parsed MLflowPluginSettings.
+func ApplySettingsDefaults(settings *commonmlflow.MLflowPluginSettings) *commonmlflow.MLflowPluginSettings {
+	if settings == nil {
+		settings = &commonmlflow.MLflowPluginSettings{}
+	}
+	if settings.WorkspacesEnabled == nil {
+		defaultEnabled := true
+		settings.WorkspacesEnabled = &defaultEnabled
+	}
+	if settings.DefaultExperimentName == "" {
+		settings.DefaultExperimentName = DefaultExperimentName
+	}
+	if settings.ExperimentDescription == nil {
+		d := DefaultExperimentDescription
+		settings.ExperimentDescription = &d
+	}
+	return settings
+}
+
+// ResolvedConfig bundles the merged plugin configuration and its parsed settings.
+type ResolvedConfig struct {
+	Settings *commonmlflow.MLflowPluginSettings
+	Config   *commonmlflow.PluginConfig
+}
+
+>>>>>>> upstream/master
 // MLflowPluginInput represents the user-facing plugins_input.mlflow schema.
 type MLflowPluginInput struct {
 	ExperimentName string `json:"experiment_name,omitempty"`
@@ -64,6 +115,7 @@ type Experiment struct {
 	Name string
 }
 
+<<<<<<< HEAD
 // ResolveMLflowPluginConfig builds an MLflowPluginConfig for the given input generic PluginConfig.
 func ResolveMLflowPluginConfig(runPluginConfig *apiserverPlugins.PluginConfig, resolvedMLflowSettings *commonmlflow.MLflowPluginSettings) (*commonmlflow.MLflowPluginConfig, error) {
 	if runPluginConfig == nil || resolvedMLflowSettings == nil {
@@ -80,6 +132,139 @@ func ResolveMLflowPluginConfig(runPluginConfig *apiserverPlugins.PluginConfig, r
 		Timeout:  resolvedTimeout,
 		TLS:      runPluginConfig.TLS,
 		Settings: resolvedMLflowSettings,
+=======
+// GetServerSideNamespaceMLflowConfig reads an optional per-namespace MLflow
+// override from the API server's plugins.mlflow.namespaces config.
+func GetServerSideNamespaceMLflowConfig(namespace string) (*commonmlflow.PluginConfig, error) {
+	if namespace == "" || !viper.IsSet("plugins.mlflow.namespaces") {
+		return nil, nil
+	}
+	raw := viper.Get("plugins.mlflow.namespaces")
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil, util.NewInvalidInputError("failed to marshal global plugins.mlflow.namespaces config: %v", err)
+	}
+	var namespaceCfgs map[string]json.RawMessage
+	if err := json.Unmarshal(data, &namespaceCfgs); err != nil {
+		return nil, util.NewInvalidInputError("failed to parse global plugins.mlflow.namespaces config: %v", err)
+	}
+	namespaceRaw, ok := namespaceCfgs[namespace]
+	if !ok {
+		return nil, nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(namespaceRaw))
+	decoder.DisallowUnknownFields()
+	var cfg commonmlflow.PluginConfig
+	if err := decoder.Decode(&cfg); err != nil {
+		return nil, util.NewInvalidInputError("failed to parse global plugins.mlflow.namespaces[%q] config: %v", namespace, err)
+	}
+	var trailing json.RawMessage
+	if trailingErr := decoder.Decode(&trailing); trailingErr != io.EOF {
+		if trailingErr == nil {
+			trailingErr = fmt.Errorf("unexpected trailing JSON content")
+		}
+		return nil, util.NewInvalidInputError("failed to parse global plugins.mlflow.namespaces[%q] config: %v", namespace, trailingErr)
+	}
+	return &cfg, nil
+}
+
+// GetLauncherNamespaceMLflowConfig reads the namespace-level MLflow launcher
+// fragment from the kfp-launcher ConfigMap. Returns nil (no error) when the
+// ConfigMap or key is absent.
+func GetLauncherNamespaceMLflowConfig(ctx context.Context, clientSet kubernetes.Interface, namespace string) (*LauncherNamespaceConfig, error) {
+	if namespace == "" {
+		return nil, util.NewInternalServerError(fmt.Errorf("namespace is empty"), "namespace must be specified when reading MLflow config")
+	}
+	if clientSet == nil {
+		return nil, util.NewInternalServerError(fmt.Errorf("clientSet is nil"), "Kubernetes clientset must be provided when reading MLflow namespace config")
+	}
+	cm, err := clientSet.CoreV1().ConfigMaps(namespace).Get(ctx, LauncherConfigMapName, v1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, util.NewInternalServerError(err, "failed to read MLflow namespace config from configmap %q in namespace %q", LauncherConfigMapName, namespace)
+	}
+	raw, ok := cm.Data[LauncherConfigKey]
+	if !ok || raw == "" {
+		return nil, nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader([]byte(raw)))
+	decoder.DisallowUnknownFields()
+	var cfg LauncherNamespaceConfig
+	if err := decoder.Decode(&cfg); err != nil {
+		return nil, util.NewInternalServerError(err, "failed to parse MLflow config from key %q in configmap %q/%q", LauncherConfigKey, namespace, LauncherConfigMapName)
+	}
+	var trailing json.RawMessage
+	if trailingErr := decoder.Decode(&trailing); trailingErr != io.EOF {
+		if trailingErr == nil {
+			trailingErr = fmt.Errorf("unexpected trailing JSON content")
+		}
+		return nil, util.NewInternalServerError(trailingErr, "failed to parse MLflow config from key %q in configmap %q/%q", LauncherConfigKey, namespace, LauncherConfigMapName)
+	}
+	return &cfg, nil
+}
+
+func applyLauncherNamespaceOverrides(base commonmlflow.PluginConfig, launcherCfg *LauncherNamespaceConfig) commonmlflow.PluginConfig {
+	if launcherCfg == nil {
+		return base
+	}
+	base.Settings = mergeLauncherNamespaceSettings(base.Settings, launcherCfg.Settings)
+	return base
+}
+
+func mergeLauncherNamespaceSettings(base *commonmlflow.MLflowPluginSettings, overrides *LauncherNamespaceSettings) *commonmlflow.MLflowPluginSettings {
+	if overrides == nil {
+		return base
+	}
+	if base == nil {
+		base = &commonmlflow.MLflowPluginSettings{}
+	}
+	merged := *base
+	if overrides.ExperimentDescription != nil {
+		merged.ExperimentDescription = overrides.ExperimentDescription
+	}
+	if overrides.DefaultExperimentName != "" {
+		merged.DefaultExperimentName = overrides.DefaultExperimentName
+	}
+	if overrides.InjectUserEnvVars != nil {
+		merged.InjectUserEnvVars = overrides.InjectUserEnvVars
+	}
+	return &merged
+}
+
+// ResolveMLflowRequestConfig builds a merged and validated ResolvedConfig for the
+// given namespace, combining global config, optional server-side namespace
+// overrides, and the restricted launcher fragment.
+func ResolveMLflowRequestConfig(ctx context.Context, kubeClients KubeClientProvider, namespace string) (*ResolvedConfig, error) {
+	globalCfg, hasGlobal, err := GetGlobalMLflowConfig()
+	if err != nil {
+		return nil, err
+	}
+	if !hasGlobal {
+		return nil, nil
+	}
+
+	mergedCfg := globalCfg
+	if common.IsMultiUserMode() {
+		serverSideNamespaceCfg, err := GetServerSideNamespaceMLflowConfig(namespace)
+		if err != nil {
+			return nil, err
+		}
+		mergedCfg = commonmlflow.MergePluginConfig(mergedCfg, serverSideNamespaceCfg)
+
+		if kubeClients == nil {
+			return nil, util.NewInternalServerError(fmt.Errorf("kubeClients is nil"), "Kubernetes clients must be provided when reading MLflow namespace config")
+		}
+		launcherNamespaceCfg, err := GetLauncherNamespaceMLflowConfig(ctx, kubeClients.GetClientSet(), namespace)
+		if err != nil {
+			return nil, err
+		}
+		mergedCfg = applyLauncherNamespaceOverrides(mergedCfg, launcherNamespaceCfg)
+	}
+	if mergedCfg.Timeout == "" {
+		mergedCfg.Timeout = DefaultTimeout
+>>>>>>> upstream/master
 	}
 	return resolvedMLflowCfg, nil
 }

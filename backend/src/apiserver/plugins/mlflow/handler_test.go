@@ -31,6 +31,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -43,6 +44,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
 // ---- Helpers ----
@@ -118,6 +120,19 @@ func testPersistedRunWithPluginOutput(id string, pluginOutput *apiv2beta1.Plugin
 		r.PluginsOutput[PluginName] = pluginOutput
 	}
 	return r
+}
+
+func addLegacyEndpointEntry(pluginOutput *apiv2beta1.PluginOutput, endpoint string) *apiv2beta1.PluginOutput {
+	if pluginOutput == nil {
+		return nil
+	}
+	if pluginOutput.Entries == nil {
+		pluginOutput.Entries = make(map[string]*apiv2beta1.MetadataValue)
+	}
+	pluginOutput.Entries["endpoint"] = &apiv2beta1.MetadataValue{
+		Value: structpb.NewStringValue(endpoint),
+	}
+	return pluginOutput
 }
 
 // ---- OnBeforeRunCreation tests ----
@@ -355,7 +370,7 @@ func TestOnRunEnd_MissingRootRunID_SetsFailedState(t *testing.T) {
 	handler := NewMLflowRunHandler()
 
 	// Build a run with plugin output that has no root_run_id
-	pluginOutput := SuccessfulPluginOutput("42", "Default", "", "", "")
+	pluginOutput := SuccessfulPluginOutput("42", "Default", "", "")
 	run := testPersistedRunWithPluginOutput("r-missing-root", pluginOutput)
 
 	err := handler.OnRunEnd(context.Background(), run, testPluginConfig("http://localhost"))
@@ -368,6 +383,24 @@ func TestOnRunEnd_MissingRootRunID_SetsFailedState(t *testing.T) {
 	assert.Contains(t, result.StateMessage, "missing parent root_run_id")
 }
 
+<<<<<<< HEAD
+=======
+func TestOnRunEnd_NilConfig_SetsFailedState(t *testing.T) {
+	handler := NewHandler(nil, "ns1")
+
+	pluginOutput := SuccessfulPluginOutput("42", "Default", "parent-1", "")
+	run := testPersistedRunWithPluginOutput("r-nil-config", pluginOutput)
+
+	err := handler.OnRunEnd(context.Background(), run, nil)
+	require.NoError(t, err)
+
+	result := run.PluginsOutput[PluginName]
+	require.NotNil(t, result)
+	assert.Equal(t, apiv2beta1.PluginState_PLUGIN_FAILED, result.State)
+	assert.Contains(t, result.StateMessage, "config unavailable")
+}
+
+>>>>>>> upstream/master
 func TestOnRunEnd_Success(t *testing.T) {
 	cleanup := setupSAToken(t)
 	defer cleanup()
@@ -391,7 +424,7 @@ func TestOnRunEnd_Success(t *testing.T) {
 
 	handler := NewMLflowRunHandler()
 
-	pluginOutput := SuccessfulPluginOutput("exp-1", "Default", "mlflow-parent-1", "", server.URL)
+	pluginOutput := SuccessfulPluginOutput("exp-1", "Default", "mlflow-parent-1", "")
 	run := testPersistedRunWithPluginOutput("r-end-1", pluginOutput)
 	run.State = "SUCCEEDED"
 
@@ -423,7 +456,7 @@ func TestHandleRetry_NoPluginOutput_NoOp(t *testing.T) {
 func TestHandleRetry_MissingRootRunID_SetsFailedState(t *testing.T) {
 	handler := NewMLflowRunHandler()
 
-	pluginOutput := SuccessfulPluginOutput("42", "Default", "", "", "")
+	pluginOutput := SuccessfulPluginOutput("42", "Default", "", "")
 	run := testPersistedRunWithPluginOutput("r-retry-no-root", pluginOutput)
 
 	handler.HandleRetry(context.Background(), run, testPluginConfig("http://localhost"))
@@ -434,6 +467,23 @@ func TestHandleRetry_MissingRootRunID_SetsFailedState(t *testing.T) {
 	assert.Contains(t, result.StateMessage, "missing parent root_run_id")
 }
 
+<<<<<<< HEAD
+=======
+func TestHandleRetry_NilConfig_SetsFailedState(t *testing.T) {
+	handler := NewHandler(nil, "ns1")
+
+	pluginOutput := SuccessfulPluginOutput("42", "Default", "parent-1", "")
+	run := testPersistedRunWithPluginOutput("r-retry-nil-config", pluginOutput)
+
+	handler.HandleRetry(context.Background(), run, nil)
+
+	result := run.PluginsOutput[PluginName]
+	require.NotNil(t, result)
+	assert.Equal(t, apiv2beta1.PluginState_PLUGIN_FAILED, result.State)
+	assert.Contains(t, result.StateMessage, "config unavailable")
+}
+
+>>>>>>> upstream/master
 func TestHandleRetry_Success(t *testing.T) {
 	cleanup := setupSAToken(t)
 	defer cleanup()
@@ -458,7 +508,7 @@ func TestHandleRetry_Success(t *testing.T) {
 
 	handler := NewMLflowRunHandler()
 
-	pluginOutput := FailedPluginOutput("exp-1", "Default", "parent-1", "", server.URL, "previous failure")
+	pluginOutput := FailedPluginOutput("exp-1", "Default", "parent-1", "", "previous failure")
 	run := testPersistedRunWithPluginOutput("r-retry-ok", pluginOutput)
 
 	handler.HandleRetry(context.Background(), run, testPluginConfig(server.URL))
@@ -474,6 +524,96 @@ func TestHandleRetry_Success(t *testing.T) {
 	result := run.PluginsOutput[PluginName]
 	require.NotNil(t, result)
 	assert.Equal(t, apiv2beta1.PluginState_PLUGIN_SUCCEEDED, result.State)
+}
+
+func TestPostRunSyncUsesResolvedConfigInsteadOfLegacyPluginOutputEndpoint(t *testing.T) {
+	tests := []struct {
+		name             string
+		pluginOutput     *apiv2beta1.PluginOutput
+		runState         string
+		wantUpdateStatus string
+		invoke           func(*Handler, *apiserverPlugins.PersistedRun, *commonmlflow.PluginConfig) error
+	}{
+		{
+			name:             "terminal sync ignores legacy endpoint entry",
+			pluginOutput:     SuccessfulPluginOutput("exp-1", "Default", "parent-1", ""),
+			runState:         "SUCCEEDED",
+			wantUpdateStatus: "FINISHED",
+			invoke: func(handler *Handler, run *apiserverPlugins.PersistedRun, config *commonmlflow.PluginConfig) error {
+				return handler.OnRunEnd(context.Background(), run, config)
+			},
+		},
+		{
+			name:             "retry sync ignores legacy endpoint entry",
+			pluginOutput:     FailedPluginOutput("exp-1", "Default", "parent-1", "", "previous failure"),
+			wantUpdateStatus: "RUNNING",
+			invoke: func(handler *Handler, run *apiserverPlugins.PersistedRun, config *commonmlflow.PluginConfig) error {
+				handler.HandleRetry(context.Background(), run, config)
+				return nil
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			cleanup := setupSAToken(t)
+			defer cleanup()
+
+			var mu sync.Mutex
+			var staleCalls int
+			staleServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				staleCalls++
+				mu.Unlock()
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"error_code":"INTERNAL_ERROR","message":"stale endpoint should not be used"}`))
+			}))
+			defer staleServer.Close()
+
+			searchCalls := 0
+			updatePayloads := []string{}
+			freshServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/2.0/mlflow/runs/update":
+					body, _ := io.ReadAll(r.Body)
+					mu.Lock()
+					updatePayloads = append(updatePayloads, string(body))
+					mu.Unlock()
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`{}`))
+				case "/api/2.0/mlflow/runs/search":
+					mu.Lock()
+					searchCalls++
+					mu.Unlock()
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`{"runs":[]}`))
+				default:
+					t.Fatalf("unexpected path: %s", r.URL.Path)
+				}
+			}))
+			defer freshServer.Close()
+
+			handler := NewHandler(nil, "ns1")
+			pluginOutput := addLegacyEndpointEntry(testCase.pluginOutput, staleServer.URL)
+			run := testPersistedRunWithPluginOutput("r-sync-fresh-config", pluginOutput)
+			run.State = testCase.runState
+
+			err := testCase.invoke(handler, run, testPluginConfig(freshServer.URL))
+			require.NoError(t, err)
+
+			mu.Lock()
+			defer mu.Unlock()
+			require.Zero(t, staleCalls, "legacy plugins_output endpoint should be ignored")
+			require.Len(t, updatePayloads, 1)
+			assert.Equal(t, 1, searchCalls)
+			assert.Contains(t, updatePayloads[0], "parent-1")
+			assert.Contains(t, updatePayloads[0], testCase.wantUpdateStatus)
+
+			result := run.PluginsOutput[PluginName]
+			require.NotNil(t, result)
+			assert.Equal(t, apiv2beta1.PluginState_PLUGIN_SUCCEEDED, result.State)
+		})
+	}
 }
 
 // ---- BuildKFPRunURL tests ----
@@ -685,7 +825,11 @@ func TestModelToPersistedRun_BasicFields(t *testing.T) {
 
 func TestSerializeDeserializePluginsOutput_RoundTrip(t *testing.T) {
 	original := map[string]*apiv2beta1.PluginOutput{
+<<<<<<< HEAD
 		"MLflow":       SuccessfulPluginOutput("exp-1", "Default", "parent-1", "", ""),
+=======
+		"mlflow":       SuccessfulPluginOutput("exp-1", "Default", "parent-1", ""),
+>>>>>>> upstream/master
 		"other_plugin": {State: apiv2beta1.PluginState_PLUGIN_SUCCEEDED},
 	}
 	lt, err := apiserverPlugins.SerializePluginsOutput(original)

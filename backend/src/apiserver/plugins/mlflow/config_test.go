@@ -25,8 +25,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	workflowapi "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
+	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	apiserverPlugins "github.com/kubeflow/pipelines/backend/src/apiserver/plugins"
 	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
 	commonmlflow "github.com/kubeflow/pipelines/backend/src/common/plugins/mlflow"
@@ -432,7 +433,7 @@ func TestCreateRunWithKFPTags(t *testing.T) {
 }
 
 func TestBuildPluginOutput(t *testing.T) {
-	output := SuccessfulPluginOutput("exp-1", "my-exp", "run-1", "https://mlflow.example/runs/run-1", "https://mlflow.example")
+	output := SuccessfulPluginOutput("exp-1", "my-exp", "run-1", "https://mlflow.example/runs/run-1")
 	require.NotNil(t, output)
 	assert.Equal(t, apiv2beta1.PluginState_PLUGIN_SUCCEEDED, output.State)
 	require.Contains(t, output.Entries, "run_url")
@@ -447,8 +448,13 @@ func TestSetPendingRunPluginOutput(t *testing.T) {
 		RunID:         "run-1",
 		PluginsOutput: &existing,
 	}
+<<<<<<< HEAD
 	mlflowOutput := SuccessfulPluginOutput("exp-1", "my-exp", "run-1", "https://mlflow.example/runs/run-1", "https://mlflow.example")
 	err := apiserverPlugins.SetPendingRunPluginOutput(run, "MLflow", mlflowOutput)
+=======
+	mlflowOutput := SuccessfulPluginOutput("exp-1", "my-exp", "run-1", "https://mlflow.example/runs/run-1")
+	err := SetPendingRunPluginOutput(run, "mlflow", mlflowOutput)
+>>>>>>> upstream/master
 	require.NoError(t, err)
 	require.NotNil(t, run.PluginsOutput)
 
@@ -483,6 +489,343 @@ func (f *fakeKubeClientProvider) GetClientSet() kubernetes.Interface {
 	return f.clientSet
 }
 
+<<<<<<< HEAD
+=======
+// TestResolveMLflowRequestConfig_NamespaceOnlyIsDisabled verifies that MLflow
+// is disabled when no global plugins.mlflow config exists, even if the namespace
+// has a valid kfp-launcher ConfigMap.  Global config is required to opt in.
+func TestResolveMLflowRequestConfig_NamespaceOnlyIsDisabled(t *testing.T) {
+	// Ensure no global config.
+	originalPlugins := viper.Get("plugins")
+	viper.Set("plugins", nil)
+	t.Cleanup(func() {
+		viper.Set("plugins", originalPlugins)
+	})
+
+	// Verify global is absent.
+	_, hasGlobal, err := GetGlobalMLflowConfig()
+	require.NoError(t, err)
+	require.False(t, hasGlobal, "global config should be absent for this test")
+
+	// Create a fake namespace ConfigMap with MLflow config.
+	clientSet := k8sfake.NewClientset(
+		&corev1.ConfigMap{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      LauncherConfigMapName,
+				Namespace: "ns-only",
+			},
+			Data: map[string]string{
+				LauncherConfigKey: `{
+					"settings": {
+						"defaultExperimentName": "NamespaceDefault",
+						"injectUserEnvVars": true
+					}
+				}`,
+			},
+		},
+	)
+	kubeClients := &fakeKubeClientProvider{clientSet: clientSet}
+
+	resolved, err := ResolveMLflowRequestConfig(context.Background(), kubeClients, "ns-only")
+	require.NoError(t, err)
+	require.Nil(t, resolved, "namespace-only config should NOT enable MLflow without global opt-in")
+}
+
+// TestResolveMLflowRequestConfig_NeitherGlobalNorNamespace verifies that MLflow
+// is disabled (nil return) when both global and namespace configs are absent.
+func TestResolveMLflowRequestConfig_NeitherGlobalNorNamespace(t *testing.T) {
+	originalPlugins := viper.Get("plugins")
+	viper.Set("plugins", nil)
+	t.Cleanup(func() {
+		viper.Set("plugins", originalPlugins)
+	})
+
+	clientSet := k8sfake.NewClientset() // no ConfigMap
+	kubeClients := &fakeKubeClientProvider{clientSet: clientSet}
+
+	resolved, err := ResolveMLflowRequestConfig(context.Background(), kubeClients, "empty-ns")
+	require.NoError(t, err)
+	assert.Nil(t, resolved, "MLflow should be disabled when neither global nor namespace config exists")
+}
+
+func TestResolveMLflowRequestConfig_StandaloneIgnoresNamespaceLayers(t *testing.T) {
+	originalPlugins := viper.Get("plugins")
+	viper.Set("plugins", map[string]interface{}{
+		"mlflow": map[string]interface{}{
+			"endpoint": "https://global-mlflow.example.com",
+			"timeout":  "10s",
+			"settings": map[string]interface{}{
+				"defaultExperimentName": "GlobalDefault",
+			},
+			"namespaces": map[string]interface{}{
+				"ns1": map[string]interface{}{
+					"endpoint": "https://server-side-override.example.com",
+					"settings": map[string]interface{}{
+						"defaultExperimentName": "ServerDefault",
+					},
+				},
+			},
+		},
+	})
+	t.Cleanup(func() {
+		viper.Set("plugins", originalPlugins)
+	})
+	viper.Set(common.MultiUserMode, false)
+	t.Cleanup(func() {
+		viper.Set(common.MultiUserMode, nil)
+	})
+
+	clientSet := k8sfake.NewClientset(
+		&corev1.ConfigMap{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      LauncherConfigMapName,
+				Namespace: "ns1",
+			},
+			Data: map[string]string{
+				LauncherConfigKey: `{
+					"settings": {
+						"defaultExperimentName": "StandaloneIgnored"
+					}
+				}`,
+			},
+		},
+	)
+	kubeClients := &fakeKubeClientProvider{clientSet: clientSet}
+
+	resolved, err := ResolveMLflowRequestConfig(context.Background(), kubeClients, "ns1")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	require.NotNil(t, resolved.Config)
+	assert.Equal(t, "https://global-mlflow.example.com", resolved.Config.Endpoint)
+	require.NotNil(t, resolved.Settings)
+	assert.Equal(t, "GlobalDefault", resolved.Settings.DefaultExperimentName)
+}
+
+func TestResolveMLflowRequestConfig_MultiUserAppliesServerAndLauncherOverrides(t *testing.T) {
+	originalPlugins := viper.Get("plugins")
+	viper.Set("plugins", map[string]interface{}{
+		"mlflow": map[string]interface{}{
+			"endpoint": "https://global-mlflow.example.com",
+			"timeout":  "10s",
+			"settings": map[string]interface{}{
+				"workspacesEnabled": true,
+				"kfpBaseURL":        "https://global-kfp.example.com",
+			},
+			"namespaces": map[string]interface{}{
+				"ns1": map[string]interface{}{
+					"endpoint": "https://server-side-override.example.com",
+					"timeout":  "25s",
+					"settings": map[string]interface{}{
+						"workspacesEnabled": false,
+						"kfpBaseURL":        "https://server-kfp.example.com",
+					},
+				},
+			},
+		},
+	})
+	t.Cleanup(func() {
+		viper.Set("plugins", originalPlugins)
+	})
+	viper.Set(common.MultiUserMode, true)
+	t.Cleanup(func() {
+		viper.Set(common.MultiUserMode, nil)
+	})
+
+	clientSet := k8sfake.NewClientset(
+		&corev1.ConfigMap{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      LauncherConfigMapName,
+				Namespace: "ns1",
+			},
+			Data: map[string]string{
+				LauncherConfigKey: `{
+					"settings": {
+						"defaultExperimentName": "LauncherDefault",
+						"injectUserEnvVars": true
+					}
+				}`,
+			},
+		},
+	)
+	kubeClients := &fakeKubeClientProvider{clientSet: clientSet}
+
+	resolved, err := ResolveMLflowRequestConfig(context.Background(), kubeClients, "ns1")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	require.NotNil(t, resolved.Config)
+	assert.Equal(t, "https://server-side-override.example.com", resolved.Config.Endpoint)
+	assert.Equal(t, "25s", resolved.Config.Timeout)
+	require.NotNil(t, resolved.Settings)
+	require.NotNil(t, resolved.Settings.WorkspacesEnabled)
+	assert.False(t, *resolved.Settings.WorkspacesEnabled)
+	assert.Equal(t, "https://server-kfp.example.com", resolved.Settings.KFPBaseURL)
+	assert.Equal(t, "LauncherDefault", resolved.Settings.DefaultExperimentName)
+	require.NotNil(t, resolved.Settings.InjectUserEnvVars)
+	assert.True(t, *resolved.Settings.InjectUserEnvVars)
+}
+
+func TestResolveMLflowRequestConfig_MultiUserLauncherOnlyOverridesAllowedSettings(t *testing.T) {
+	originalPlugins := viper.Get("plugins")
+	viper.Set("plugins", map[string]interface{}{
+		"mlflow": map[string]interface{}{
+			"endpoint": "https://global-mlflow.example.com",
+			"timeout":  "10s",
+		},
+	})
+	t.Cleanup(func() {
+		viper.Set("plugins", originalPlugins)
+	})
+	viper.Set(common.MultiUserMode, true)
+	t.Cleanup(func() {
+		viper.Set(common.MultiUserMode, nil)
+	})
+
+	clientSet := k8sfake.NewClientset(
+		&corev1.ConfigMap{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      LauncherConfigMapName,
+				Namespace: "ns1",
+			},
+			Data: map[string]string{
+				LauncherConfigKey: `{
+					"settings": {
+						"experimentDescription": "LauncherDescription",
+						"defaultExperimentName": "LauncherDefault"
+					}
+				}`,
+			},
+		},
+	)
+	kubeClients := &fakeKubeClientProvider{clientSet: clientSet}
+
+	resolved, err := ResolveMLflowRequestConfig(context.Background(), kubeClients, "ns1")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	require.NotNil(t, resolved.Config)
+	assert.Equal(t, "https://global-mlflow.example.com", resolved.Config.Endpoint)
+	require.NotNil(t, resolved.Settings)
+	require.NotNil(t, resolved.Settings.ExperimentDescription)
+	assert.Equal(t, "LauncherDescription", *resolved.Settings.ExperimentDescription)
+	assert.Equal(t, "LauncherDefault", resolved.Settings.DefaultExperimentName)
+}
+
+func TestResolveMLflowRequestConfig_MultiUserGlobalOnlyAllowsEmptyNamespacePlaceholders(t *testing.T) {
+	originalPlugins := viper.Get("plugins")
+	viper.Set("plugins", map[string]interface{}{
+		"mlflow": map[string]interface{}{
+			"endpoint": "https://global-mlflow.example.com",
+			"timeout":  "10s",
+			"namespaces": map[string]interface{}{
+				"ns1": map[string]interface{}{},
+			},
+		},
+	})
+	t.Cleanup(func() {
+		viper.Set("plugins", originalPlugins)
+	})
+	viper.Set(common.MultiUserMode, true)
+	t.Cleanup(func() {
+		viper.Set(common.MultiUserMode, nil)
+	})
+
+	clientSet := k8sfake.NewClientset(
+		&corev1.ConfigMap{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      LauncherConfigMapName,
+				Namespace: "ns1",
+			},
+			Data: map[string]string{
+				LauncherConfigKey: `{}`,
+			},
+		},
+	)
+	kubeClients := &fakeKubeClientProvider{clientSet: clientSet}
+
+	resolved, err := ResolveMLflowRequestConfig(context.Background(), kubeClients, "ns1")
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, "https://global-mlflow.example.com", resolved.Config.Endpoint)
+	require.NotNil(t, resolved.Settings)
+}
+
+func TestResolveMLflowRequestConfig_MultiUserRejectsForbiddenLauncherFields(t *testing.T) {
+	originalPlugins := viper.Get("plugins")
+	viper.Set("plugins", map[string]interface{}{
+		"mlflow": map[string]interface{}{
+			"endpoint": "https://global-mlflow.example.com",
+		},
+	})
+	t.Cleanup(func() {
+		viper.Set("plugins", originalPlugins)
+	})
+	viper.Set(common.MultiUserMode, true)
+	t.Cleanup(func() {
+		viper.Set(common.MultiUserMode, nil)
+	})
+
+	clientSet := k8sfake.NewClientset(
+		&corev1.ConfigMap{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      LauncherConfigMapName,
+				Namespace: "ns1",
+			},
+			Data: map[string]string{
+				LauncherConfigKey: `{
+					"endpoint": "https://forbidden-launcher-endpoint.example.com"
+				}`,
+			},
+		},
+	)
+	kubeClients := &fakeKubeClientProvider{clientSet: clientSet}
+
+	resolved, err := ResolveMLflowRequestConfig(context.Background(), kubeClients, "ns1")
+	require.Error(t, err)
+	assert.Nil(t, resolved)
+	assert.Contains(t, err.Error(), `unknown field "endpoint"`)
+}
+
+func TestGetLauncherNamespaceMLflowConfig_RejectsTrailingJSON(t *testing.T) {
+	clientSet := k8sfake.NewClientset(
+		&corev1.ConfigMap{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      LauncherConfigMapName,
+				Namespace: "ns1",
+			},
+			Data: map[string]string{
+				LauncherConfigKey: `{"settings":{"defaultExperimentName":"LauncherDefault"}} true`,
+			},
+		},
+	)
+
+	cfg, err := GetLauncherNamespaceMLflowConfig(context.Background(), clientSet, "ns1")
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), "failed to parse MLflow config")
+}
+
+func TestGetServerSideNamespaceMLflowConfig_RejectsUnknownFields(t *testing.T) {
+	originalPlugins := viper.Get("plugins")
+	viper.Set("plugins", map[string]interface{}{
+		"mlflow": map[string]interface{}{
+			"endpoint": "https://global-mlflow.example.com",
+			"namespaces": map[string]interface{}{
+				"ns1": map[string]interface{}{
+					"bogusField": true,
+				},
+			},
+		},
+	})
+	t.Cleanup(func() {
+		viper.Set("plugins", originalPlugins)
+	})
+
+	cfg, err := GetServerSideNamespaceMLflowConfig("ns1")
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), `unknown field "bogusfield"`)
+}
+
+>>>>>>> upstream/master
 func TestResolveMLflowCredentials_EmptySAToken(t *testing.T) {
 	setupFakeKubernetesConfig(t, "")
 

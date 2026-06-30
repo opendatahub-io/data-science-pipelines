@@ -63,6 +63,7 @@ func (h *Handler) OnBeforeRunCreation(ctx context.Context, run *apiserverPlugins
 	if h == nil || run == nil || runCfg == nil {
 		return nil, nil, nil
 	}
+<<<<<<< HEAD
 	mlflowPluginInput, err := ResolveMLflowPluginInput(run.PluginsInput)
 	if err != nil {
 		return nil, nil, fmt.Errorf("MLflow run canceled due to error retrieving run-level plugin input: %s", err)
@@ -92,6 +93,21 @@ func (h *Handler) OnBeforeRunCreation(ctx context.Context, run *apiserverPlugins
 	mlflowRequestCtx, err := BuildMLflowRunRequestContext(run.Namespace, resolvedCfg)
 	if err != nil {
 		return FailedPluginOutput(experimentID, experimentName, "", "", endpoint, fmt.Sprintf("failed to build MLflow request context: %v", err)), nil, err
+=======
+	pluginConfig, ok := config.(*commonmlflow.PluginConfig)
+	if !ok || pluginConfig == nil {
+		return nil, nil
+	}
+
+	settings := ApplySettingsDefaults(pluginConfig.Settings)
+
+	experimentID, experimentName := SelectMLflowExperiment(h.input, settings)
+
+	resolvedCfg := &ResolvedConfig{Config: pluginConfig, Settings: settings}
+	mlflowRequestCtx, err := BuildMLflowRunRequestContext(ctx, h.namespace, resolvedCfg)
+	if err != nil {
+		return FailedPluginOutput(experimentID, experimentName, "", "", fmt.Sprintf("failed to build MLflow request context: %v", err)), err
+>>>>>>> upstream/master
 	}
 
 	mlflowExperiment, err := EnsureExperimentExists(
@@ -102,13 +118,21 @@ func (h *Handler) OnBeforeRunCreation(ctx context.Context, run *apiserverPlugins
 		settings.ExperimentDescription,
 	)
 	if err != nil {
+<<<<<<< HEAD
 		return FailedPluginOutput(experimentID, experimentName, "", "", endpoint, err.Error()), nil, err
+=======
+		return FailedPluginOutput(experimentID, experimentName, "", "", err.Error()), err
+>>>>>>> upstream/master
 	}
 
 	tags := BuildKFPTags(run, settings.KFPBaseURL, settings.KFPRunURLPathTemplate)
 	parentRunID, err := mlflowRequestCtx.Client.CreateRun(ctx, mlflowExperiment.ID, run.DisplayName, tags)
 	if err != nil {
+<<<<<<< HEAD
 		return FailedPluginOutput(mlflowExperiment.ID, mlflowExperiment.Name, "", "", endpoint, err.Error()), nil, err
+=======
+		return FailedPluginOutput(mlflowExperiment.ID, mlflowExperiment.Name, "", "", err.Error()), err
+>>>>>>> upstream/master
 	}
 
 	workspace := ""
@@ -141,7 +165,11 @@ func (h *Handler) OnBeforeRunCreation(ctx context.Context, run *apiserverPlugins
 	}
 	mlflowConfigJSON, err := json.Marshal(mlflowRuntimeConfig)
 	if err != nil {
+<<<<<<< HEAD
 		return FailedPluginOutput(mlflowExperiment.ID, mlflowExperiment.Name, parentRunID, "", endpoint, fmt.Sprintf("failed to marshal MLflow runtime config: %v", err)), nil, err
+=======
+		return FailedPluginOutput(mlflowExperiment.ID, mlflowExperiment.Name, parentRunID, "", fmt.Sprintf("failed to marshal MLflow runtime config: %v", err)), err
+>>>>>>> upstream/master
 	}
 
 	runStartEnv := map[string]string{
@@ -149,7 +177,11 @@ func (h *Handler) OnBeforeRunCreation(ctx context.Context, run *apiserverPlugins
 	}
 
 	runURL := BuildRunURL(mlflowRequestCtx, mlflowExperiment.ID, parentRunID, settings)
+<<<<<<< HEAD
 	return SuccessfulPluginOutput(mlflowExperiment.ID, mlflowExperiment.Name, parentRunID, runURL, endpoint), runStartEnv, nil
+=======
+	return SuccessfulPluginOutput(mlflowExperiment.ID, mlflowExperiment.Name, parentRunID, runURL), nil
+>>>>>>> upstream/master
 }
 
 // OnRunEnd marks the MLflow parent run and any active nested runs as
@@ -219,6 +251,7 @@ func (h *Handler) syncMLflowRuns(ctx context.Context, run *apiserverPlugins.Pers
 		return
 	}
 
+<<<<<<< HEAD
 	// Use the endpoint stored at run-start time so that in-flight runs
 	// always talk to the MLflow server where their parent run was created,
 	// even if the admin changes the endpoint while the run is in progress.
@@ -228,6 +261,12 @@ func (h *Handler) syncMLflowRuns(ctx context.Context, run *apiserverPlugins.Pers
 	}
 
 	mlflowRequestCtx, err := BuildMLflowRunRequestContext(namespace, config)
+=======
+	settings := ApplySettingsDefaults(config.Settings)
+
+	resolvedCfg := &ResolvedConfig{Config: config, Settings: settings}
+	mlflowRequestCtx, err := BuildMLflowRunRequestContext(ctx, h.namespace, resolvedCfg)
+>>>>>>> upstream/master
 	if err != nil {
 		msg := fmt.Sprintf("MLflow %s sync failed: %v", label, err)
 		glog.Warning(msg)
