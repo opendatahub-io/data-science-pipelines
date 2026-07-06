@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

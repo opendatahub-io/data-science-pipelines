@@ -28,9 +28,18 @@ ARG TARGETARCH
 
 USER root
 
+# Zig is used as a C cross-compiler for CGO (required by mattn/go-sqlite3).
+# Unlike gcc, Zig can target any architecture via --target without needing
+# separate cross-toolchains or a cross-linker.
 ENV ZIG_VERSION=0.16.0
+ENV ZIG_SHA256_x86_64=70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
+ENV ZIG_SHA256_aarch64=ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
 RUN ARCH=$(uname -m) && \
-    curl -sL "https://ziglang.org/download/${ZIG_VERSION}/zig-${ARCH}-linux-${ZIG_VERSION}.tar.xz" | tar -xJ -C /usr/local && \
+    eval "EXPECTED=\$ZIG_SHA256_${ARCH}" && \
+    curl --fail -sL "https://ziglang.org/download/${ZIG_VERSION}/zig-${ARCH}-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz && \
+    echo "${EXPECTED}  /tmp/zig.tar.xz" | sha256sum -c - && \
+    tar -xJ -C /usr/local -f /tmp/zig.tar.xz && \
+    rm /tmp/zig.tar.xz && \
     ln -s /usr/local/zig-${ARCH}-linux-${ZIG_VERSION}/zig /usr/local/bin/zig
 
 COPY ${SOURCE_CODE}/go.mod ./
@@ -43,7 +52,12 @@ RUN GOTOOLCHAIN=local GO111MODULE=on go mod download
 # Copy the source
 COPY ${SOURCE_CODE}/ ./
 
-RUN CC="zig cc --target=$([ "${TARGETARCH}" = "arm64" ] && echo aarch64 || echo x86_64)-linux-gnu" && \
+RUN case "${TARGETARCH}" in \
+      amd64) ZIG_TARGET="x86_64-linux-gnu" ;; \
+      arm64) ZIG_TARGET="aarch64-linux-gnu" ;; \
+      *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    CC="zig cc --target=${ZIG_TARGET}" && \
     GOTOOLCHAIN=local GO111MODULE=on CGO_ENABLED=1 CC="${CC}" GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
       GOFIPS140=v1.0.0 \
       go build -tags no_openssl -o /bin/apiserver ./backend/src/apiserver/
