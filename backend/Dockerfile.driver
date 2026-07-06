@@ -49,7 +49,6 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
 WORKDIR /bin
 
 COPY --from=builder /bin/driver /bin/driver
-RUN chmod +x /bin/driver
 
 USER 65534
 

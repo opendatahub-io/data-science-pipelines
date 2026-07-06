@@ -50,7 +50,6 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
 WORKDIR /bin
 
 COPY --from=builder /bin/launcher-v2 /bin/launcher-v2
-RUN chmod +x /bin/launcher-v2
 
 USER 65534
 
