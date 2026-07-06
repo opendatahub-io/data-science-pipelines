@@ -51,8 +51,7 @@ RUN GOTOOLCHAIN=local GO111MODULE=on CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TAR
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:865c6a875328a1174ff7f17599574412edd327aa47812951b9bead902806dc53 AS ubi-minimal-multiarch
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:da229086eb7881bb653e99ace537fc03512bbbfcf14024e7e447b48015d7cc8c AS ubi-minimal-arm64
 FROM ubi-minimal-${BUILDER_ARCH} AS runtime-deps
-RUN microdnf makecache && \
-     microdnf install -y tzdata.noarch && microdnf clean all
+RUN microdnf install -y tzdata.noarch && microdnf clean all
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
 
