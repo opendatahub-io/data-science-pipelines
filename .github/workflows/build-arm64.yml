@@ -1,0 +1,55 @@
+name: Build images (arm64)
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    paths:
+      - backend/Dockerfile
+      - backend/Dockerfile.driver
+      - backend/Dockerfile.launcher
+      - backend/Dockerfile.persistenceagent
+      - backend/Dockerfile.scheduledworkflow
+      - backend/Makefile
+      - go.mod
+      - go.sum
+      - .github/workflows/build-arm64.yml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: apiserver
+            make_target: image_apiserver
+            img_tag_var: IMG_TAG_APISERVER
+          - image: driver
+            make_target: image_driver
+            img_tag_var: IMG_TAG_DRIVER
+          - image: launcher
+            make_target: image_launcher
+            img_tag_var: IMG_TAG_LAUNCHER
+          - image: persistenceagent
+            make_target: image_persistence_agent
+            img_tag_var: IMG_TAG_PERSISTENCEAGENT
+          - image: scheduledworkflow
+            make_target: image_swf
+            img_tag_var: IMG_TAG_SCHEDULEDWORKFLOW
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Build ${{ matrix.image }} (cross-compile to amd64)
+        run: make -C backend ${{ matrix.make_target }} BUILDER_ARCH=arm64 TARGETARCH=amd64 ${{ matrix.img_tag_var }}=localhost/${{ matrix.image }}:amd64
+      - name: Verify amd64 image architecture
+        run: |
+          arch=$(docker inspect localhost/${{ matrix.image }}:amd64 --format '{{.Architecture}}')
+          echo "Image architecture: $arch"
+          [ "$arch" = "amd64" ] || { echo "Expected amd64, got $arch"; exit 1; }
