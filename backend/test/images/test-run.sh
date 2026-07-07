@@ -56,7 +56,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     *)
       echo "WARNING: Unknown argument '$1', skipping" >&2
-      shift
+      exit 1
       ;;
   esac
 done
