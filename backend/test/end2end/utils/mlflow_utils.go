@@ -39,16 +39,27 @@ import (
 )
 
 const (
+<<<<<<< HEAD
 	mlflowEndpointEnv      = "MLFLOW_TRACKING_URI"
 	mlflowCABundlePathEnv  = "MLFLOW_CA_BUNDLE_PATH"
 	mlflowBearerTokenEnv   = "MLFLOW_BEARER_TOKEN"
 	mlflowWorkspaceEnv     = "MLFLOW_WORKSPACE"
 	mlflowPluginKey        = "MLflow"
+=======
+	mlflowEndpointEnv    = "MLFLOW_TRACKING_URI"
+	mlflowInsecureTLSEnv = "MLFLOW_TRACKING_INSECURE_TLS"
+	mlflowBearerTokenEnv = "MLFLOW_BEARER_TOKEN"
+	mlflowUsernameEnv    = "MLFLOW_TRACKING_USERNAME"
+	mlflowPasswordEnv    = "MLFLOW_TRACKING_PASSWORD"
+	mlflowWorkspaceEnv   = "MLFLOW_WORKSPACE"
+	mlflowPluginKey      = "mlflow"
+>>>>>>> upstream/master
 )
 
 func getMLflowClient(endpoint string) (*mlflowclient.Client, error) {
 	workspace := os.Getenv(mlflowWorkspaceEnv)
 	bearerToken := os.Getenv(mlflowBearerTokenEnv)
+<<<<<<< HEAD
 
 	tlsConfig := &tls.Config{}
 	if caBundlePath := os.Getenv(mlflowCABundlePathEnv); caBundlePath != "" {
@@ -67,6 +78,10 @@ func getMLflowClient(endpoint string) (*mlflowclient.Client, error) {
 		logger.Log("MLflow client initialized with CA bundle from %s", caBundlePath)
 	}
 
+=======
+	username := os.Getenv(mlflowUsernameEnv)
+	password := os.Getenv(mlflowPasswordEnv)
+>>>>>>> upstream/master
 	httpClient := &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: &http.Transport{TLSClientConfig: tlsConfig},
@@ -75,6 +90,8 @@ func getMLflowClient(endpoint string) (*mlflowclient.Client, error) {
 		Endpoint:          endpoint,
 		HTTPClient:        httpClient,
 		BearerToken:       bearerToken,
+		Username:          username,
+		Password:          password,
 		WorkspacesEnabled: workspace != "",
 		Workspace:         workspace,
 	})
@@ -83,6 +100,9 @@ func getMLflowClient(endpoint string) (*mlflowclient.Client, error) {
 	}
 	if bearerToken != "" {
 		logger.Log("MLflow client initialized with bearer token auth")
+	}
+	if username != "" || password != "" {
+		logger.Log("MLflow client initialized with basic auth")
 	}
 	if workspace != "" {
 		logger.Log("MLflow client initialized with workspace header: %s", workspace)
@@ -338,7 +358,11 @@ func VerifyMLflowRunStatus(endpoint, runID, experimentID, expectedStatus string)
 func WaitForMLflowRunStatus(endpoint, runID, experimentID, expectedStatus string, timeout *time.Duration) error {
 	ginkgo.GinkgoHelper()
 	logger.Log("Waiting for MLflow run %s to reach status %s", runID, expectedStatus)
+<<<<<<< HEAD
 	maxTimeToWait := time.Duration(120)
+=======
+	maxTimeToWait := time.Duration(60)
+>>>>>>> upstream/master
 	pollTime := time.Duration(5)
 	if timeout != nil {
 		maxTimeToWait = *timeout
@@ -360,6 +384,62 @@ func WaitForMLflowRunStatus(endpoint, runID, experimentID, expectedStatus string
 			logger.Log("MLflow run %s is in %s status, waiting for %s...", runID, mlflowRun.Info.Status, expectedStatus)
 		} else {
 			logger.Log("MLflow run %s status check failed, retrying: %v", runID, queryErr)
+		}
+		<-ticker.C
+	}
+}
+
+// WaitForAllMLflowRunsInStatus polls until every MLflow run in the experiment
+// reaches expectedStatus or timeout expires. Runs whose IDs appear in
+// excludeRunIDs are skipped.
+func WaitForAllMLflowRunsInStatus(endpoint, experimentID, expectedStatus string, excludeRunIDs []string, timeout *time.Duration) error {
+	ginkgo.GinkgoHelper()
+	logger.Log("Waiting for all MLflow runs in experiment %s to reach status %s", experimentID, expectedStatus)
+	maxTimeToWait := time.Duration(60)
+	pollTime := time.Duration(5)
+	if timeout != nil {
+		maxTimeToWait = *timeout
+	}
+	exclude := make(map[string]bool, len(excludeRunIDs))
+	for _, id := range excludeRunIDs {
+		exclude[id] = true
+	}
+	deadline := time.Now().Add(maxTimeToWait * time.Second)
+	ticker := time.NewTicker(pollTime * time.Second)
+	defer ticker.Stop()
+	for {
+		runs, err := QueryMLflowRuns(endpoint, experimentID)
+		if err != nil {
+			if time.Now().After(deadline) {
+				return fmt.Errorf("failed to query MLflow runs in experiment %s: %w", experimentID, err)
+			}
+			logger.Log("Failed to query MLflow runs, retrying: %v", err)
+			<-ticker.C
+			continue
+		}
+		allReady := true
+		for _, run := range runs {
+			if exclude[run.Info.RunID] {
+				continue
+			}
+			if run.Info.Status != expectedStatus {
+				allReady = false
+				logger.Log("MLflow run %s is in %s status, waiting for %s...", run.Info.RunID, run.Info.Status, expectedStatus)
+				break
+			}
+		}
+		if allReady {
+			logger.Log("All MLflow runs in experiment %s reached status %s", experimentID, expectedStatus)
+			return nil
+		}
+		if time.Now().After(deadline) {
+			var notReady []string
+			for _, run := range runs {
+				if !exclude[run.Info.RunID] && run.Info.Status != expectedStatus {
+					notReady = append(notReady, fmt.Sprintf("%s=%s", run.Info.RunID, run.Info.Status))
+				}
+			}
+			return fmt.Errorf("timeout waiting for all MLflow runs in experiment %s to reach %s; not ready: %v", experimentID, expectedStatus, notReady)
 		}
 		<-ticker.C
 	}

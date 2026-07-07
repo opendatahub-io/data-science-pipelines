@@ -41,7 +41,7 @@ runs:
       with:
         cluster_name: ${{ inputs.cluster_name }}
         kubectl_version: ${{ inputs.k8s_version }}
-        version: v0.31.0
+        version: v0.32.0
         node_image: kindest/node:${{ inputs.k8s_version }}
         registry: true
 
@@ -51,6 +51,6 @@ runs:
       with:
         cluster_name: ${{ inputs.cluster_name }}
         kubectl_version: ${{ inputs.k8s_version }}
-        version: v0.31.0
+        version: v0.32.0
         node_image: kindest/node:${{ inputs.k8s_version }}
         registry: true

@@ -22,7 +22,7 @@ google-auth==2.40.3
     # via kubernetes
 grpcio==1.74.0
     # via ml-metadata
-idna==3.10
+idna==3.15
     # via requests
 kubernetes==31.0.0
     # via -r metadata_writer/requirements.in
@@ -36,7 +36,7 @@ oauthlib==3.3.1
     #   requests-oauthlib
 protobuf==4.25.8
     # via ml-metadata
-pyasn1==0.6.2
+pyasn1==0.6.3
     # via
     #   pyasn1-modules
     #   rsa
@@ -48,8 +48,9 @@ pyyaml==6.0.2
     # via
     #   -r metadata_writer/requirements.in
     #   kubernetes
-requests==2.32.5
+requests==2.33.0
     # via
+    #   -r metadata_writer/requirements.in
     #   kubernetes
     #   requests-oauthlib
 requests-oauthlib==2.0.0
@@ -61,7 +62,7 @@ six==1.17.0
     #   kubernetes
     #   ml-metadata
     #   python-dateutil
-urllib3==2.6.3
+urllib3==2.7.0
     # via
     #   kubernetes
     #   requests

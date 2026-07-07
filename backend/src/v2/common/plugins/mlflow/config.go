@@ -55,7 +55,7 @@ func ParseKfpMLflowRuntimeConfig() (*commonmlflow.MLflowRuntimeConfig, error) {
 	if len(missingFields) > 0 {
 		return nil, fmt.Errorf("missing one or more of the following required fields in KFP_MLFLOW_CONFIG: %s", strings.Join(missingFields, ", "))
 	}
-	if cfg.AuthType != "kubernetes" {
+	if !commonmlflow.IsSupportedAuthType(cfg.AuthType) {
 		return nil, fmt.Errorf("unsupported auth type: %s", cfg.AuthType)
 	}
 	if cfg.InsecureSkipVerify || (cfg.TLS != nil && cfg.TLS.InsecureSkipVerify) {
@@ -76,19 +76,26 @@ func IsEnabled() bool {
 // BuildMLflowTaskRequestContext constructs a fully initialized RequestContext
 // by delegating to the common BuildMLflowRequestContext with task-specific parameters.
 func BuildMLflowTaskRequestContext(runtimeCfg commonmlflow.MLflowRuntimeConfig) (*commonmlflow.RequestContext, error) {
-	mlflowPluginSettings := &commonmlflow.MLflowPluginSettings{
-		WorkspacesEnabled: &runtimeCfg.WorkspacesEnabled,
-		KFPBaseURL:        runtimeCfg.Endpoint,
-		InjectUserEnvVars: &runtimeCfg.InjectUserEnvVars,
+	credentials, err := commonmlflow.ResolveRuntimeMLflowCredentials(runtimeCfg.AuthType)
+	if err != nil {
+		return nil, err
 	}
+<<<<<<< HEAD
 
 	pluginCfg := commonmlflow.MLflowPluginConfig{
+=======
+	pluginCfg := commonmlflow.PluginConfig{
+>>>>>>> upstream/master
 		Endpoint: runtimeCfg.Endpoint,
 		Timeout:  runtimeCfg.Timeout,
 		TLS:      runtimeCfg.TLS,
-		Settings: mlflowPluginSettings,
 	}
-	return commonmlflow.BuildMLflowRequestContext(pluginCfg, runtimeCfg.Workspace, runtimeCfg.WorkspacesEnabled)
+	return commonmlflow.BuildMLflowRequestContext(
+		pluginCfg,
+		credentials,
+		runtimeCfg.Workspace,
+		runtimeCfg.WorkspacesEnabled,
+	)
 }
 
 // ExecutionStateToMLflowTerminalStatus converts a string representing an MLMD Execution_State to an MLflow
