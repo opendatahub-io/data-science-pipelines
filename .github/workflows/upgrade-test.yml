@@ -134,14 +134,15 @@ jobs:
           echo "Current pod UID: $OLD_POD_UID"
 
           echo "Waiting for operator to roll the deployment..."
-          for i in $(seq 1 60); do
+          for i in $(seq 1 36); do
             NEW_POD_UID=$(kubectl get pod -l app=$DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.items[0].metadata.uid}' 2>/dev/null || echo "")
             if [ -n "$NEW_POD_UID" ] && [ "$NEW_POD_UID" != "$OLD_POD_UID" ]; then
               echo "New pod detected (UID: $NEW_POD_UID) after $((i * 5))s"
               break
             fi
-            if [ $i -eq 60 ]; then
-              echo "Warning: Pod UID did not change after 300s, proceeding anyway"
+            if [ $i -eq 36 ]; then
+              echo "ERROR: Pod UID did not change after 180s — operator did not roll the deployment"
+              exit 1
             fi
             sleep 5
           done
