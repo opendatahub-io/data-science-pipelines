@@ -12,7 +12,6 @@ env:
   AWS_SECRET_ACCESS_KEY: 'minio123'
   AWS_S3_BUCKET: 'mlpipeline'
   MLFLOW_TRACKING_URI: "https://localhost:8080/mlflow"
-  MLFLOW_TRACKING_INSECURE_TLS: "true"
 on:
   push:
     branches:
@@ -357,12 +356,12 @@ jobs:
 
       - name: Deploy MLflow
         id: deploy-mlflow        
-        uses: opendatahub-io/mlflow-operator/.github/actions/deploy@b55bcb6aa528ccecf8904745bb0218350b1ff453
+        uses: opendatahub-io/mlflow-operator/.github/actions/deploy@ec59b7c996ef4d14c448254132e21bd85fd1c28f
         if: ${{ steps.create-cluster.outcome == 'success' }}
         with:
           namespace: 'opendatahub'
-          mlflow_image: quay.io/${{ github.repository_owner == 'red-hat-data-services' && 'rhoai' || 'opendatahub' }}/mlflow:odh-stable
-          mlflow_operator_image: quay.io/${{ github.repository_owner == 'red-hat-data-services' && 'rhoai' || 'opendatahub' }}/mlflow-operator:odh-stable
+          mlflow_image: quay.io/${{ github.repository_owner == 'red-hat-data-services' && 'rhoai' || 'opendatahub' }}/mlflow:odh-stable-490cd77b5b697a8ad0c5a84272983f668b961524
+          mlflow_operator_image: quay.io/${{ github.repository_owner == 'red-hat-data-services' && 'rhoai' || 'opendatahub' }}/mlflow-operator:ec59b7c996ef4d14c448254132e21bd85fd1c28f
           backend_store: ${{ matrix.backend_store }}
           artifact_storage: ${{ matrix.artifact_storage }}
           registry_store: ${{ matrix.registry_store }}

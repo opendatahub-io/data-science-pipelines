@@ -29,6 +29,10 @@ KFP_NAMESPACE="${1:?KFP namespace required}"
 MLFLOW_NAMESPACE="${2:?MLflow namespace required}"
 CONFIG_JSON_PATH="${3:?Path to source config.json required}"
 
+MLFLOW_CA_CONFIGMAP="mlflow-ca-cert"
+KFP_CA_BUNDLE_DIR="/kfp/certs"
+KFP_CA_BUNDLE_PATH="${KFP_CA_BUNDLE_DIR}/ca.crt"
+
 echo "Services in ${MLFLOW_NAMESPACE} namespace:"
 kubectl get svc -n "$MLFLOW_NAMESPACE" --no-headers
 MLFLOW_SVC=$(kubectl get svc -n "$MLFLOW_NAMESPACE" --no-headers -o custom-columns=":metadata.name" | grep -i mlflow | head -1)
@@ -42,9 +46,41 @@ MLFLOW_STATIC_PREFIX="/mlflow"
 MLFLOW_ENDPOINT="https://${MLFLOW_HOST}:${MLFLOW_PORT}${MLFLOW_STATIC_PREFIX}"
 echo "MLflow service: $MLFLOW_SVC port=$MLFLOW_PORT endpoint=$MLFLOW_ENDPOINT"
 
-MLFLOW_PATCH=$(jq -n --arg endpoint "$MLFLOW_ENDPOINT" '{
+# --- Extract CA certificate from the MLflow TLS secret ---
+CA_CERT_FILE="/tmp/mlflow-ca.crt"
+
+echo "Extracting MLflow CA certificate..."
+TLS_SECRET=$(kubectl get secret -n "$MLFLOW_NAMESPACE" -o custom-columns=":metadata.name" --no-headers | grep -i "mlflow.*tls\|tls.*mlflow" | head -1)
+if [ -z "$TLS_SECRET" ]; then
+  TLS_SECRET=$(kubectl get secret -n "$MLFLOW_NAMESPACE" --field-selector type=kubernetes.io/tls -o custom-columns=":metadata.name" --no-headers | head -1)
+fi
+if [ -z "$TLS_SECRET" ]; then
+  echo "ERROR: No TLS secret found in namespace $MLFLOW_NAMESPACE"
+  exit 1
+fi
+echo "Found TLS secret: $TLS_SECRET"
+
+# cert-manager stores the CA in the ca.crt key; fall back to tls.crt if ca.crt is absent
+CA_DATA=$(kubectl get secret -n "$MLFLOW_NAMESPACE" "$TLS_SECRET" -o jsonpath='{.data.ca\.crt}' 2>/dev/null)
+if [ -z "$CA_DATA" ]; then
+  echo "ca.crt not found in secret, falling back to tls.crt"
+  CA_DATA=$(kubectl get secret -n "$MLFLOW_NAMESPACE" "$TLS_SECRET" -o jsonpath='{.data.tls\.crt}')
+fi
+if [ -z "$CA_DATA" ]; then
+  echo "ERROR: Could not extract CA certificate from secret $TLS_SECRET"
+  exit 1
+fi
+echo "$CA_DATA" | base64 -d > "$CA_CERT_FILE"
+echo "CA certificate extracted to $CA_CERT_FILE ($(wc -l < "$CA_CERT_FILE") lines)"
+
+# ConfigMap consumed by the API server (plugin config) and compiler (driver/launcher pods).
+kubectl create configmap "$MLFLOW_CA_CONFIGMAP" -n "$KFP_NAMESPACE" \
+  --from-file=ca.crt="$CA_CERT_FILE" --dry-run=client -o yaml | kubectl apply -f -
+
+# --- Build the MLflow plugin config with caBundlePath ---
+MLFLOW_PATCH=$(jq -n --arg endpoint "$MLFLOW_ENDPOINT" --arg caBundlePath "$KFP_CA_BUNDLE_PATH" '{
   endpoint: $endpoint,
-  tls: { insecureSkipVerify: true },
+  tls: { caBundlePath: $caBundlePath },
   settings: { workspacesEnabled: true }
 }')
 
@@ -54,10 +90,11 @@ jq --argjson mlflow "$MLFLOW_PATCH" '. + { plugins: { mlflow: $mlflow } }' \
 echo "Patched config.json plugins.mlflow:"
 jq '.plugins.mlflow' /tmp/kfp-config.json
 
+# --- Deploy plugin config and wire CA trust on the API server + compiler ---
 kubectl create configmap kfp-mlflow-config -n "$KFP_NAMESPACE" \
   --from-file=config.json=/tmp/kfp-config.json --dry-run=client -o yaml | kubectl apply -f -
 kubectl patch deployment ml-pipeline -n "$KFP_NAMESPACE" --type=strategic -p \
-  '{"spec":{"template":{"spec":{"volumes":[{"name":"mlflow-cfg","configMap":{"name":"kfp-mlflow-config"}}],"containers":[{"name":"ml-pipeline-api-server","volumeMounts":[{"name":"mlflow-cfg","mountPath":"/config/config.json","subPath":"config.json"}]}]}}}}'
+  '{"spec":{"template":{"spec":{"volumes":[{"name":"mlflow-cfg","configMap":{"name":"kfp-mlflow-config"}},{"name":"mlflow-ca","configMap":{"name":"'"$MLFLOW_CA_CONFIGMAP"'"}}],"containers":[{"name":"ml-pipeline-api-server","env":[{"name":"CABUNDLE_CONFIGMAP_NAME","value":"'"$MLFLOW_CA_CONFIGMAP"'"}],"volumeMounts":[{"name":"mlflow-cfg","mountPath":"/config/config.json","subPath":"config.json"},{"name":"mlflow-ca","mountPath":"'"$KFP_CA_BUNDLE_DIR"'","readOnly":true}]}]}}}}'
 kubectl rollout status deployment/ml-pipeline -n "$KFP_NAMESPACE" --timeout=180s
 
 pkill -f "kubectl port-forward.*ml-pipeline.*8888" || true
@@ -87,12 +124,13 @@ if [ -n "${GITHUB_ENV:-}" ]; then
   echo "MLFLOW_PORT_FORWARD_NS=$MLFLOW_NAMESPACE" >> "$GITHUB_ENV"
   echo "MLFLOW_PORT_FORWARD_SVC=$MLFLOW_SVC" >> "$GITHUB_ENV"
   echo "MLFLOW_PORT_FORWARD_REMOTE_PORT=$MLFLOW_PORT" >> "$GITHUB_ENV"
+  echo "MLFLOW_CA_BUNDLE_PATH=$CA_CERT_FILE" >> "$GITHUB_ENV"
   if [ -n "$SA_TOKEN" ]; then
     echo "MLFLOW_BEARER_TOKEN=$SA_TOKEN" >> "$GITHUB_ENV"
-    echo "Exported MLFLOW_BEARER_TOKEN and MLFLOW_WORKSPACE for test helpers"
+    echo "Exported MLFLOW_BEARER_TOKEN, MLFLOW_WORKSPACE, and MLFLOW_CA_BUNDLE_PATH for test helpers"
   else
     echo "WARNING: Could not create SA token; MLflow requests may be unauthenticated"
-    echo "Exported MLFLOW_WORKSPACE only"
+    echo "Exported MLFLOW_WORKSPACE and MLFLOW_CA_BUNDLE_PATH only"
   fi
 fi
 
@@ -105,7 +143,7 @@ CURL_HEADERS=(-H "X-MLflow-Workspace: $KFP_NAMESPACE")
 
 STATUS=000
 for i in $(seq 1 30); do
-  STATUS=$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 \
+  STATUS=$(curl -s --cacert "$CA_CERT_FILE" -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 \
     "${CURL_HEADERS[@]}" "$HEALTH_URL" 2>/dev/null || echo "000")
   if [ "$STATUS" != "000" ] && [ "$STATUS" -lt 500 ] 2>/dev/null; then
     echo "MLflow backend is healthy on localhost:8080 (HTTPS, status=$STATUS)"

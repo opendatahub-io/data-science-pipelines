@@ -58,10 +58,11 @@ func ParseKfpMLflowRuntimeConfig() (*commonmlflow.MLflowRuntimeConfig, error) {
 	if cfg.AuthType != "kubernetes" {
 		return nil, fmt.Errorf("unsupported auth type: %s", cfg.AuthType)
 	}
-	// Only InsecureSkipVerify is propagated from the API server. Driver/launcher CA trust is configured
-	// separately (e.g., cluster-wide trusted CA injection).
-	cfg.TLS = &commonmlflow.TLSConfig{
-		InsecureSkipVerify: cfg.InsecureSkipVerify,
+	if cfg.InsecureSkipVerify || (cfg.TLS != nil && cfg.TLS.InsecureSkipVerify) {
+		return nil, fmt.Errorf("insecureSkipVerify is not supported")
+	}
+	if cfg.TLS == nil || cfg.TLS.CABundlePath == "" {
+		return nil, fmt.Errorf("tls.caBundlePath is required")
 	}
 	return &cfg, nil
 }
@@ -73,7 +74,7 @@ func IsEnabled() bool {
 }
 
 // BuildMLflowTaskRequestContext constructs a fully initialized RequestContext
-// by delegating to the common BuildRequestContext with task-specific parameters.
+// by delegating to the common BuildMLflowRequestContext with task-specific parameters.
 func BuildMLflowTaskRequestContext(runtimeCfg commonmlflow.MLflowRuntimeConfig) (*commonmlflow.RequestContext, error) {
 	mlflowPluginSettings := &commonmlflow.MLflowPluginSettings{
 		WorkspacesEnabled: &runtimeCfg.WorkspacesEnabled,
@@ -81,7 +82,7 @@ func BuildMLflowTaskRequestContext(runtimeCfg commonmlflow.MLflowRuntimeConfig) 
 		InjectUserEnvVars: &runtimeCfg.InjectUserEnvVars,
 	}
 
-	pluginCfg := commonmlflow.PluginConfig{
+	pluginCfg := commonmlflow.MLflowPluginConfig{
 		Endpoint: runtimeCfg.Endpoint,
 		Timeout:  runtimeCfg.Timeout,
 		TLS:      runtimeCfg.TLS,
