@@ -122,9 +122,47 @@ jobs:
           skip_operator_deployment: ${{ env.SKIP_OPERATOR_DEPLOYMENT }}
           pod_to_pod_tls_enabled: ${{ matrix.tls_enabled }}
 
+      - name: Wait for upgrade rollout and re-establish port-forwarding
+        if: ${{ steps.deploy.outcome == 'success' }}
+        id: post-upgrade-port-forward
+        shell: bash
+        run: |
+          DEPLOYMENT_NAME="${{ steps.deploy.outputs.deployment_name }}"
+          NAMESPACE="${{ env.NAMESPACE }}"
+
+          OLD_POD_UID=$(kubectl get pod -l app=$DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.items[0].metadata.uid}')
+          echo "Current pod UID: $OLD_POD_UID"
+
+          echo "Waiting for operator to roll the deployment..."
+          for i in $(seq 1 36); do
+            NEW_POD_UID=$(kubectl get pod -l app=$DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.items[0].metadata.uid}' 2>/dev/null || echo "")
+            if [ -n "$NEW_POD_UID" ] && [ "$NEW_POD_UID" != "$OLD_POD_UID" ]; then
+              echo "New pod detected (UID: $NEW_POD_UID) after $((i * 5))s"
+              break
+            fi
+            if [ $i -eq 36 ]; then
+              echo "ERROR: Pod UID did not change after 180s — operator did not roll the deployment"
+              exit 1
+            fi
+            sleep 5
+          done
+
+          echo "Waiting for rollout to complete..."
+          kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE --timeout=300s
+
+          echo "Waiting for pod to be ready..."
+          kubectl wait --for=condition=ready pod -l app=$DEPLOYMENT_NAME -n $NAMESPACE --timeout=120s --field-selector=status.phase=Running
+
+          echo "Killing stale port-forward processes..."
+          pkill -f "kubectl port-forward.*8888" || true
+          sleep 3
+
+          echo "Re-establishing port-forward..."
+          ./.github/resources/scripts/forward-port.sh "$NAMESPACE" "$DEPLOYMENT_NAME" 8888 8888
+
       - name: Verify Upgrade
         uses: ./.github/actions/test-and-report
-        if: ${{ steps.deploy.outcome == 'success' }}
+        if: ${{ steps.post-upgrade-port-forward.outcome == 'success' }}
         with:
           test_directory: ${{ env.TESTS_DIR }}
           test_label: "UpgradeVerification"
