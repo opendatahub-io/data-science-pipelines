@@ -15,6 +15,7 @@
 package mlflow
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -182,4 +183,22 @@ func TestBuildHTTPClient_DefaultDir_NonexistentDir_Succeeds(t *testing.T) {
 	client, err := buildHTTPClientWithDefaultCADir(5*time.Second, nil, "/nonexistent/ca/dir")
 	require.NoError(t, err)
 	assert.NotNil(t, client)
+}
+
+func TestLoadCertsFromDir_FilesWithoutTrailingNewline(t *testing.T) {
+	dir := t.TempDir()
+	cert1 := generateSelfSignedCertPEM(t)
+	cert2 := generateSelfSignedCertPEM(t)
+
+	trimmed1 := bytes.TrimRight(cert1, "\n")
+	trimmed2 := bytes.TrimRight(cert2, "\n")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ca1.crt"), trimmed1, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ca2.pem"), trimmed2, 0644))
+
+	result := loadCertsFromDir(dir)
+	require.NotNil(t, result)
+
+	pool := x509.NewCertPool()
+	assert.True(t, pool.AppendCertsFromPEM(result))
 }

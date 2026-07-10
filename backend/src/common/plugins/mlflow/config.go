@@ -178,6 +178,9 @@ func loadCertsFromDir(dir string) []byte {
 			glog.Warningf("skipping unreadable CA file %s/%s: %v", dir, entry.Name(), err)
 			continue
 		}
+		if len(combined) > 0 && combined[len(combined)-1] != '\n' {
+			combined = append(combined, '\n')
+		}
 		combined = append(combined, data...)
 	}
 	if len(combined) > 0 {
