@@ -4,7 +4,7 @@ go 1.26
 
 godebug fips140=on
 
-toolchain go1.26.3
+toolchain go1.26.5
 
 require (
 	github.com/Masterminds/squirrel v0.0.0-20190107164353-fa735ea14f09
