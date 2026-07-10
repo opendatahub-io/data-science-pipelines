@@ -751,9 +751,7 @@ func TestSyncParentAndNestedRuns_Pagination(t *testing.T) {
 	requestCfg := &commonmlflow.MLflowPluginConfig{
 		Endpoint: server.URL,
 		Timeout:  "10s",
-		TLS: &commonplugins.TLSConfig{
-			InsecureSkipVerify: true,
-		},
+		TLS: &commonplugins.TLSConfig{},
 		Settings: &commonmlflow.MLflowPluginSettings{WorkspacesEnabled: &enabled},
 	}
 	mlflowCtx, err := BuildMLflowRunRequestContext("ns1", requestCfg)

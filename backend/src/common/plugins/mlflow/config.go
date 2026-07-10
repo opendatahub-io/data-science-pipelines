@@ -21,9 +21,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/golang/glog"
 	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
 )
@@ -34,6 +36,13 @@ const EnvMLflowConfig = "KFP_MLFLOW_CONFIG"
 
 // TagNestedRunParentRunID is the MLflow tag used for nested run parent linkage.
 const TagNestedRunParentRunID = "mlflow.parentRunId"
+
+// DefaultCABundleDir is the directory where the API server deployment
+// mounts the optional mlflow-tracking-ca ConfigMap. When
+// TLSConfig.CABundlePath is not set, BuildHTTPClient probes this
+// directory for PEM certificate files so that internal CAs (e.g.
+// the OpenShift service-serving-cert-signer) are trusted automatically.
+const DefaultCABundleDir = "/etc/mlflow-tracking-ca"
 
 // MLflowRuntimeConfig is the JSON payload marshaled into KFP_MLFLOW_CONFIG.
 type MLflowRuntimeConfig struct {
@@ -86,32 +95,95 @@ type MLflowPluginSettings struct {
 }
 
 // BuildHTTPClient configures an http.Client with the given timeout and TLS settings.
+// When tlsCfg is nil or CABundlePath is empty, the function probes
+// DefaultCABundleDir for PEM certificate files and appends any found
+// certificates to the system cert pool. This allows the API server to
+// trust internal CAs (e.g. the OpenShift service-serving-cert-signer)
+// without requiring an explicit caBundlePath configuration.
+//
+// InsecureSkipVerify is rejected: callers must configure proper CA
+// certificates instead of disabling TLS verification.
 func BuildHTTPClient(timeout time.Duration, tlsCfg *commonplugins.TLSConfig) (*http.Client, error) {
+	return buildHTTPClientWithDefaultCADir(timeout, tlsCfg, DefaultCABundleDir)
+}
+
+// buildHTTPClientWithDefaultCADir is the internal implementation of
+// BuildHTTPClient, accepting the default CA directory as a parameter
+// to support deterministic testing.
+func buildHTTPClientWithDefaultCADir(timeout time.Duration, tlsCfg *commonplugins.TLSConfig, defaultCADir string) (*http.Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+
+	explicitCAPath := ""
 	if tlsCfg != nil {
-		tlsConfig := &tls.Config{
-			InsecureSkipVerify: tlsCfg.InsecureSkipVerify,
+		if tlsCfg.InsecureSkipVerify {
+			return nil, fmt.Errorf("plugins.mlflow.tls.insecureSkipVerify is not supported: configure a CA certificate bundle instead")
 		}
-		if tlsCfg.CABundlePath != "" {
-			caBundle, err := os.ReadFile(tlsCfg.CABundlePath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read plugins.mlflow.tls.caBundlePath %q: %w", tlsCfg.CABundlePath, err)
-			}
-			certPool, err := x509.SystemCertPool()
-			if err != nil {
-				certPool = x509.NewCertPool()
-			}
-			if !certPool.AppendCertsFromPEM(caBundle) {
-				return nil, fmt.Errorf("plugins.mlflow.tls.caBundlePath %q did not contain valid PEM certificates", tlsCfg.CABundlePath)
-			}
-			tlsConfig.RootCAs = certPool
-		}
-		transport.TLSClientConfig = tlsConfig
+		explicitCAPath = tlsCfg.CABundlePath
 	}
+
+	tlsConfig := &tls.Config{}
+
+	if explicitCAPath != "" {
+		caBundle, err := os.ReadFile(explicitCAPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read plugins.mlflow.tls.caBundlePath %q: %w", explicitCAPath, err)
+		}
+		certPool, err := x509.SystemCertPool()
+		if err != nil {
+			certPool = x509.NewCertPool()
+		}
+		if !certPool.AppendCertsFromPEM(caBundle) {
+			return nil, fmt.Errorf("plugins.mlflow.tls.caBundlePath %q did not contain valid PEM certificates", explicitCAPath)
+		}
+		tlsConfig.RootCAs = certPool
+	} else if extraCerts := loadCertsFromDir(defaultCADir); len(extraCerts) > 0 {
+		certPool, err := x509.SystemCertPool()
+		if err != nil {
+			certPool = x509.NewCertPool()
+		}
+		if !certPool.AppendCertsFromPEM(extraCerts) {
+			return nil, fmt.Errorf("default CA directory %q did not contain valid PEM certificates", defaultCADir)
+		}
+		tlsConfig.RootCAs = certPool
+	}
+
+	transport.TLSClientConfig = tlsConfig
 	return &http.Client{
 		Timeout:   timeout,
 		Transport: transport,
 	}, nil
+}
+
+// loadCertsFromDir reads all regular files in dir that have a .crt or
+// .pem extension and returns their concatenated contents. Errors are
+// logged and skipped so that a single unreadable file does not prevent
+// the remaining certificates from being loaded. Returns nil if the
+// directory does not exist or contains no matching files.
+func loadCertsFromDir(dir string) []byte {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var combined []byte
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".crt" && ext != ".pem" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			glog.Warningf("skipping unreadable CA file %s/%s: %v", dir, entry.Name(), err)
+			continue
+		}
+		combined = append(combined, data...)
+	}
+	if len(combined) > 0 {
+		glog.Infof("loaded additional CA certificates from %s", dir)
+	}
+	return combined
 }
 
 // ResolveMLflowCredentials resolves the Kubernetes service account token used
