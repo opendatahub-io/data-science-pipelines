@@ -65,6 +65,13 @@ const css = stylesheet({
   },
   textfield: {
     maxWidth: 600,
+    $nest: {
+      '& .MuiInputLabel-root': {
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      },
+    },
   },
 });
 
