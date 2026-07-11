@@ -29,7 +29,9 @@ export const css = stylesheet({
     color: color.strong,
     flex: '0 0 50%',
     fontWeight: 'bold',
-    maxWidth: 300,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   row: {
     borderBottom: `1px solid ${color.divider}`,
