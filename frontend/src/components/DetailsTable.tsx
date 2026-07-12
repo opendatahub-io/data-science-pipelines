@@ -77,6 +77,7 @@ const DetailsTable = <T extends {}>(props: DetailsTableProps<T>) => {
       <div>
         {fields.map((f, i) => {
           const [key, value] = f;
+          const keyTitle = typeof key === 'string' ? key : undefined;
 
           // only try to parse json if value is a string
           if (isString(value)) {
@@ -91,7 +92,9 @@ const DetailsTable = <T extends {}>(props: DetailsTableProps<T>) => {
               }
               return (
                 <div key={i} className={css.row}>
-                  <span className={css.key} title={key}>{key}</span>
+                  <span className={css.key} title={keyTitle}>
+                    {key}
+                  </span>
                   <Editor
                     width='100%'
                     minLines={3}
@@ -114,7 +117,9 @@ const DetailsTable = <T extends {}>(props: DetailsTableProps<T>) => {
           // the ValueComponent. Otherwise render the value as a string (empty string if null or undefined).
           return (
             <div key={i} className={css.row}>
-              <span className={css.key} title={key}>{key}</span>
+              <span className={css.key} title={keyTitle}>
+                {key}
+              </span>
               <span className={css.valueText}>
                 {ValueComponent && value ? (
                   <ValueComponent value={value} {...valueComponentProps} />
