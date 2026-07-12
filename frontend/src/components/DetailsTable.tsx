@@ -91,7 +91,7 @@ const DetailsTable = <T extends {}>(props: DetailsTableProps<T>) => {
               }
               return (
                 <div key={i} className={css.row}>
-                  <span className={css.key}>{key}</span>
+                  <span className={css.key} title={key}>{key}</span>
                   <Editor
                     width='100%'
                     minLines={3}
@@ -114,7 +114,7 @@ const DetailsTable = <T extends {}>(props: DetailsTableProps<T>) => {
           // the ValueComponent. Otherwise render the value as a string (empty string if null or undefined).
           return (
             <div key={i} className={css.row}>
-              <span className={css.key}>{key}</span>
+              <span className={css.key} title={key}>{key}</span>
               <span className={css.valueText}>
                 {ValueComponent && value ? (
                   <ValueComponent value={value} {...valueComponentProps} />

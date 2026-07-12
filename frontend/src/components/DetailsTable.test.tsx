@@ -57,6 +57,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
@@ -86,6 +87,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
@@ -127,6 +129,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
@@ -159,6 +162,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
@@ -185,6 +189,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
@@ -213,6 +218,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
@@ -237,6 +243,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
@@ -261,6 +268,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
@@ -285,6 +293,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
@@ -309,6 +318,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
@@ -340,6 +350,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key1"
             >
               key1
             </span>
@@ -354,6 +365,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key2"
             >
               key2
             </span>
@@ -391,6 +403,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key1"
             >
               key1
             </span>
@@ -405,6 +418,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key2"
             >
               key2
             </span>
@@ -423,6 +437,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key3"
             >
               key3
             </span>
@@ -437,6 +452,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key4"
             >
               key4
             </span>
@@ -451,6 +467,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key5"
             >
               key5
             </span>
@@ -469,6 +486,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key6"
             >
               key6
             </span>
@@ -483,6 +501,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key6"
             >
               key6
             </span>
@@ -497,6 +516,7 @@ describe('DetailsTable', () => {
           >
             <span
               class="key"
+              title="key"
             >
               key
             </span>
