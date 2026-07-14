@@ -238,7 +238,7 @@ func TestOnBeforeRunCreation_CABundlePath_Propagated(t *testing.T) {
 	var rtCfg commonmlflow.MLflowRuntimeConfig
 	require.NoError(t, json.Unmarshal([]byte(env[commonmlflow.EnvMLflowConfig]), &rtCfg))
 	require.NotNil(t, rtCfg.TLS)
-	assert.Equal(t, caBundlePath, rtCfg.TLS.CABundlePath)
+	assert.Equal(t, common.CustomCaCertPath, rtCfg.TLS.CABundlePath)
 	assert.False(t, rtCfg.TLS.InsecureSkipVerify)
 }
 
