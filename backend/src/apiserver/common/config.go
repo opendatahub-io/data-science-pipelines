@@ -49,6 +49,7 @@ const (
 	DefaultSecurityContextRunAsUser         string = "DEFAULT_SECURITY_CONTEXT_RUN_AS_USER"
 	DefaultSecurityContextRunAsGroup        string = "DEFAULT_SECURITY_CONTEXT_RUN_AS_GROUP"
 	DefaultSecurityContextRunAsNonRoot      string = "DEFAULT_SECURITY_CONTEXT_RUN_AS_NON_ROOT"
+	DefaultSecurityContextHostUsers         string = "DEFAULT_SECURITY_CONTEXT_HOST_USERS"
 	BlockV1Pipelines                        string = "BLOCK_V1_PIPELINES"
 	V1NamespaceWhitelist                    string = "V1_ALLOWED_NAMESPACES"
 	PipelineURLAllowedDomains               string = "PIPELINE_URL_ALLOWED_DOMAINS"
@@ -59,6 +60,7 @@ const (
 	PluginMaxPayloadBytes                   string = "PLUGIN_MAX_PAYLOAD_BYTES"
 	PluginMaxTotalPayloadBytes              string = "PLUGIN_MAX_TOTAL_PAYLOAD_BYTES"
 	PluginMaxNestingDepth                   string = "PLUGIN_MAX_NESTING_DEPTH"
+	WorkflowGCGracePeriodSeconds            string = "WORKFLOW_GC_GRACE_PERIOD_SECONDS"
 )
 
 type PluginLimitsConfig struct {
@@ -66,6 +68,14 @@ type PluginLimitsConfig struct {
 	MaxPayloadBytes      int
 	MaxTotalPayloadBytes int
 	MaxNestingDepth      int
+}
+
+// GetWorkflowGCGracePeriodSeconds returns the grace period in seconds before
+// a workflow without a corresponding DB entry is eligible for garbage collection.
+// This prevents race conditions where the persistence agent reports a workflow
+// before the API server has finished writing the run record to the database.
+func GetWorkflowGCGracePeriodSeconds() int {
+	return GetIntConfigWithDefault(WorkflowGCGracePeriodSeconds, 120)
 }
 
 func IsPipelineVersionUpdatedByDefault() bool {
@@ -241,6 +251,10 @@ func GetDefaultSecurityContextRunAsGroup() string {
 
 func GetDefaultSecurityContextRunAsNonRoot() string {
 	return GetStringConfigWithDefault(DefaultSecurityContextRunAsNonRoot, "")
+}
+
+func GetDefaultSecurityContextHostUsers() string {
+	return GetStringConfigWithDefault(DefaultSecurityContextHostUsers, "")
 }
 
 func GetPluginLimitsConfig() (PluginLimitsConfig, error) {
