@@ -137,7 +137,7 @@ func (t *TaskPluginDispatcherImpl) RetrieveUserContainerEnvVars(taskInfo *TaskIn
 			if _, ok := injectVars[k]; !ok {
 				injectVars[k] = v
 			} else {
-				glog.Errorf("Key %s already present in container env vars. Key-value pair %s:%s will not be added.", k, k, v)
+				glog.Errorf("Key %s already present in container env vars. Duplicate entry from handler %s will not be added.", k, handler.Name())
 			}
 		}
 	}
