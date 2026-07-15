@@ -16,13 +16,14 @@ type fakeStartResult struct {
 }
 
 type fakeHandler struct {
-	name        string
-	startResult TaskHandlerStartResult
-	startErr    error
-	endErr      error
-	envVars     map[string]string
-	envErr      error
-	customProps map[string]string
+	name         string
+	startResult  TaskHandlerStartResult
+	startErr     error
+	endErr       error
+	envVars      map[string]string
+	envErr       error
+	customProps  map[string]string
+	appliedProps map[string]string
 }
 
 func (f *fakeHandler) Name() string { return f.name }
@@ -39,7 +40,10 @@ func (f *fakeHandler) GenerateCustomProperties(_ TaskHandlerStartResult) map[str
 	return f.customProps
 }
 
-func (f *fakeHandler) ApplyCustomProperties(customProperties map[string]string) error { return nil }
+func (f *fakeHandler) ApplyCustomProperties(customProperties map[string]string) error {
+	f.appliedProps = customProperties
+	return nil
+}
 
 var taskInfoStart = &TaskInfo{
 	Name: "test-task",
@@ -291,4 +295,87 @@ func TestRetrieveUserContainerEnvVars_HandlerError_Propagated(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "env var retrieval failed")
 	require.Nil(t, vars)
+}
+
+func TestRetrieveUserContainerEnvVars_SkipsUnstartedHandler(t *testing.T) {
+	handler := &fakeHandler{
+		name:     "FailingPlugin",
+		startErr: fmt.Errorf("plugin startup failed"),
+		envVars:  map[string]string{"SHOULD_NOT_APPEAR": "value"},
+		envErr:   fmt.Errorf("run ID is empty"),
+	}
+	dispatcher, _ := NewTaskPluginDispatcherImpl([]TaskPluginHandler{handler})
+
+	// OnTaskStart will log the error but not mark the handler as started
+	_, err := dispatcher.OnTaskStart(context.Background(), taskInfoStart)
+	require.NoError(t, err)
+
+	// RetrieveUserContainerEnvVars should skip the unstarted handler
+	vars, err := dispatcher.RetrieveUserContainerEnvVars(taskInfoEnd)
+	require.NoError(t, err)
+	assert.Empty(t, vars)
+}
+
+func TestRetrieveUserContainerEnvVars_MixedHandlers_SkipsOnlyUnstarted(t *testing.T) {
+	failingHandler := &fakeHandler{
+		name:     "FailingPlugin",
+		startErr: fmt.Errorf("plugin startup failed"),
+		envVars:  map[string]string{"FAILING_VAR": "should-not-appear"},
+		envErr:   fmt.Errorf("run ID is empty"),
+	}
+	successHandler := &fakeHandler{
+		name:        "SuccessPlugin",
+		startResult: &fakeStartResult{RunID: "run-1"},
+		envVars:     map[string]string{"SUCCESS_VAR": "expected-value"},
+	}
+	dispatcher, _ := NewTaskPluginDispatcherImpl([]TaskPluginHandler{failingHandler, successHandler})
+
+	// OnTaskStart: failingHandler fails, successHandler succeeds
+	_, err := dispatcher.OnTaskStart(context.Background(), taskInfoStart)
+	require.NoError(t, err)
+
+	// RetrieveUserContainerEnvVars should skip the failing handler, include the successful one
+	vars, err := dispatcher.RetrieveUserContainerEnvVars(taskInfoEnd)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"SUCCESS_VAR": "expected-value"}, vars)
+	assert.NotContains(t, vars, "FAILING_VAR")
+}
+
+func TestApplyCustomProperties_SkipsUnstartedHandler(t *testing.T) {
+	handler := &fakeHandler{
+		name:     "FailingPlugin",
+		startErr: fmt.Errorf("plugin startup failed"),
+	}
+	dispatcher, _ := NewTaskPluginDispatcherImpl([]TaskPluginHandler{handler})
+
+	// OnTaskStart will log the error but not mark the handler as started
+	_, err := dispatcher.OnTaskStart(context.Background(), taskInfoStart)
+	require.NoError(t, err)
+
+	// ApplyCustomProperties should skip the unstarted handler
+	props := map[string]string{"key": "value"}
+	dispatcher.ApplyCustomProperties(props)
+	assert.Nil(t, handler.appliedProps)
+}
+
+func TestApplyCustomProperties_MixedHandlers_SkipsOnlyUnstarted(t *testing.T) {
+	failingHandler := &fakeHandler{
+		name:     "FailingPlugin",
+		startErr: fmt.Errorf("plugin startup failed"),
+	}
+	successHandler := &fakeHandler{
+		name:        "SuccessPlugin",
+		startResult: &fakeStartResult{RunID: "run-1"},
+	}
+	dispatcher, _ := NewTaskPluginDispatcherImpl([]TaskPluginHandler{failingHandler, successHandler})
+
+	// OnTaskStart: failingHandler fails, successHandler succeeds
+	_, err := dispatcher.OnTaskStart(context.Background(), taskInfoStart)
+	require.NoError(t, err)
+
+	// ApplyCustomProperties should skip the failing handler, apply to the successful one
+	props := map[string]string{"key": "value"}
+	dispatcher.ApplyCustomProperties(props)
+	assert.Nil(t, failingHandler.appliedProps)
+	assert.Equal(t, props, successHandler.appliedProps)
 }
