@@ -1,17 +1,17 @@
 approvers:
   - accorvin
+  - alyssacgoins
   - dsp-developers
-  - gmfrasca
   - HumairAK
   - hbelmiro
   - mprahl
   - nsingla
 reviewers:
-  - gmfrasca
+  - alyssacgoins
   - hbelmiro
-  - HumairAK
   - VaniHaripriya
-  - mprahl
   - nsingla
+  - sduvvuri1603
 emeritus_approvers:
+  - gmfrasca
   - harshad16
