@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kubeflow/pipelines/backend/src/apiserver/list"
@@ -1405,6 +1406,30 @@ func TestLoadSamples_ExplicitVersionNameNotOverriddenByTag(t *testing.T) {
 	version, err := rm.GetPipelineVersionByName(managedPipeline.UUID, "3.5.0")
 	require.NoError(t, err, "managed pipeline version should use rhoai-version tag value")
 	assert.Equal(t, "3.5.0", version.DisplayName)
+}
+
+func TestLoadSamples_ManagedVersionNameTooLongReturnsError(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	longVersion := strings.Repeat("x", 128)
+	t.Setenv(managedPipelinesUploadTagsEnv, "managed=true,rhoai-version="+longVersion)
+	rm := fakeResourceManager()
+
+	pc := config{LoadSamplesOnRestart: true, Pipelines: []configPipelines{}}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "managed-long", Description: "Long version"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-long.yaml"), sampleYAML, 0644))
+
+	err = LoadSamples(rm, samplePath, managedDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds")
 }
 
 func TestLoadSamples_ManagedVersionNameRestartIdempotency(t *testing.T) {

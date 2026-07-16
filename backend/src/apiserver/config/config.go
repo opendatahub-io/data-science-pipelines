@@ -246,6 +246,9 @@ func LoadSamples(resourceManager *resource.ResourceManager, sampleConfigPath str
 	}
 
 	if versionFromTag, ok := tags[managedPipelinesVersionTagKey]; ok && versionFromTag != "" {
+		if len(versionFromTag) > 127 {
+			return fmt.Errorf("%s value %q exceeds PipelineVersion name limit of 127 characters", managedPipelinesVersionTagKey, versionFromTag)
+		}
 		for i := explicitCount; i < len(pipelineConfig.Pipelines); i++ {
 			pipelineConfig.Pipelines[i].VersionName = versionFromTag
 		}
