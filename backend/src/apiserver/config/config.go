@@ -352,7 +352,7 @@ func LoadSamples(resourceManager *resource.ResourceManager, sampleConfigPath str
 					glog.Info(fmt.Sprintf("Successfully uploaded PipelineVersion %s.", pvName))
 				}
 
-				if processedPipelines[pvName] {
+				if processedPipelines[p.UUID] {
 					// Since the default sorting is by create time,
 					// Sleep one second makes sure the samples are
 					// showing up in the same order as they are added.
@@ -367,7 +367,7 @@ func LoadSamples(resourceManager *resource.ResourceManager, sampleConfigPath str
 			continue
 		}
 
-		processedPipelines[pvName] = true
+		processedPipelines[p.UUID] = true
 	}
 
 	if !haveSamplesLoaded {
