@@ -34,6 +34,7 @@ import (
 )
 
 const managedPipelinesUploadTagsEnv = "MANAGED_PIPELINES_UPLOAD_TAGS"
+const managedPipelinesVersionTagKey = "rhoai-version"
 
 var validPipelineName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
@@ -221,6 +222,8 @@ func LoadSamples(resourceManager *resource.ResourceManager, sampleConfigPath str
 		return nil
 	}
 
+	explicitCount := len(pipelineConfig.Pipelines)
+
 	if managedPipelinesDir != "" {
 		existing := make(map[string]bool, len(pipelineConfig.Pipelines))
 		for _, p := range pipelineConfig.Pipelines {
@@ -240,6 +243,15 @@ func LoadSamples(resourceManager *resource.ResourceManager, sampleConfigPath str
 	}
 	if len(tags) > 0 {
 		glog.Infof("Parsed %d managed pipeline upload tag(s) from %s", len(tags), managedPipelinesUploadTagsEnv)
+	}
+
+	if versionFromTag, ok := tags[managedPipelinesVersionTagKey]; ok && versionFromTag != "" {
+		if len(versionFromTag) > 127 {
+			return fmt.Errorf("%s value %q exceeds PipelineVersion name limit of 127 characters", managedPipelinesVersionTagKey, versionFromTag)
+		}
+		for i := explicitCount; i < len(pipelineConfig.Pipelines); i++ {
+			pipelineConfig.Pipelines[i].VersionName = versionFromTag
+		}
 	}
 
 	processedPipelines := map[string]bool{}
@@ -343,7 +355,7 @@ func LoadSamples(resourceManager *resource.ResourceManager, sampleConfigPath str
 					glog.Info(fmt.Sprintf("Successfully uploaded PipelineVersion %s.", pvName))
 				}
 
-				if processedPipelines[pvName] {
+				if processedPipelines[p.UUID] {
 					// Since the default sorting is by create time,
 					// Sleep one second makes sure the samples are
 					// showing up in the same order as they are added.
@@ -358,7 +370,7 @@ func LoadSamples(resourceManager *resource.ResourceManager, sampleConfigPath str
 			continue
 		}
 
-		processedPipelines[pvName] = true
+		processedPipelines[p.UUID] = true
 	}
 
 	if !haveSamplesLoaded {
