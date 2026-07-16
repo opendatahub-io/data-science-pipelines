@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kubeflow/pipelines/backend/src/apiserver/list"
@@ -1235,6 +1236,277 @@ func TestLoadManagedPipelinesManifest_InvalidNamesRejected(t *testing.T) {
 			assert.Contains(t, err.Error(), "invalid")
 		})
 	}
+}
+
+func TestLoadSamples_ManagedVersionNameFromTag(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "managed=true,rhoai-version=3.5.0")
+	rm := fakeResourceManager()
+
+	pc := config{
+		LoadSamplesOnRestart: true,
+		Pipelines: []configPipelines{
+			{
+				Name:        "Explicit Pipeline",
+				Description: "from sample_config.json",
+				File:        "testdata/sample_pipeline.yaml",
+				VersionName: "Explicit - Ver 1",
+			},
+		},
+	}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "managed-a", Description: "Managed A"},
+		{Name: "managed-b", Description: "Managed B"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-a.yaml"), sampleYAML, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-b.yaml"), sampleYAML, 0644))
+
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	explicitPipeline, err := rm.GetPipelineByNameAndNamespace("Explicit Pipeline", "")
+	require.NoError(t, err)
+	_, err = rm.GetPipelineVersionByName(explicitPipeline.UUID, "Explicit - Ver 1")
+	require.NoError(t, err, "explicit pipeline version name must not be overridden")
+
+	managedA, err := rm.GetPipelineByNameAndNamespace("managed-a", "")
+	require.NoError(t, err)
+	versionA, err := rm.GetPipelineVersionByName(managedA.UUID, "3.5.0")
+	require.NoError(t, err, "managed pipeline version should use rhoai-version tag value")
+	assert.Equal(t, "3.5.0", versionA.DisplayName)
+
+	managedB, err := rm.GetPipelineByNameAndNamespace("managed-b", "")
+	require.NoError(t, err)
+	versionB, err := rm.GetPipelineVersionByName(managedB.UUID, "3.5.0")
+	require.NoError(t, err, "managed pipeline version should use rhoai-version tag value")
+	assert.Equal(t, "3.5.0", versionB.DisplayName)
+}
+
+func TestLoadSamples_ManagedVersionNameFallbackWithoutTag(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "managed=true")
+	rm := fakeResourceManager()
+
+	pc := config{LoadSamplesOnRestart: true, Pipelines: []configPipelines{}}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "managed-only", Description: "Managed"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-only.yaml"), sampleYAML, 0644))
+
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	pipeline, err := rm.GetPipelineByNameAndNamespace("managed-only", "")
+	require.NoError(t, err)
+	_, err = rm.GetPipelineVersionByName(pipeline.UUID, "managed-only")
+	require.NoError(t, err, "without rhoai-version tag, version name should fall back to pipeline name")
+}
+
+func TestLoadSamples_ManagedVersionNameNoTagsEnv(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "")
+	rm := fakeResourceManager()
+
+	pc := config{LoadSamplesOnRestart: true, Pipelines: []configPipelines{}}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "managed-notags", Description: "No tags"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-notags.yaml"), sampleYAML, 0644))
+
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	pipeline, err := rm.GetPipelineByNameAndNamespace("managed-notags", "")
+	require.NoError(t, err)
+	_, err = rm.GetPipelineVersionByName(pipeline.UUID, "managed-notags")
+	require.NoError(t, err, "with empty tags env, version name should fall back to pipeline name")
+}
+
+func TestLoadSamples_ManagedVersionNameEmptyTagValue(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "managed=true,rhoai-version=")
+	rm := fakeResourceManager()
+
+	pc := config{LoadSamplesOnRestart: true, Pipelines: []configPipelines{}}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "managed-empty-ver", Description: "Empty version tag"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-empty-ver.yaml"), sampleYAML, 0644))
+
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	pipeline, err := rm.GetPipelineByNameAndNamespace("managed-empty-ver", "")
+	require.NoError(t, err)
+	_, err = rm.GetPipelineVersionByName(pipeline.UUID, "managed-empty-ver")
+	require.NoError(t, err, "empty rhoai-version value should fall back to pipeline name")
+}
+
+func TestLoadSamples_ExplicitVersionNameNotOverriddenByTag(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "managed=true,rhoai-version=3.5.0")
+	rm := fakeResourceManager()
+
+	pc := config{
+		LoadSamplesOnRestart: true,
+		Pipelines: []configPipelines{
+			{
+				Name:        "Explicit With Version",
+				Description: "has its own version",
+				File:        "testdata/sample_pipeline.yaml",
+				VersionName: "my-explicit-version",
+			},
+		},
+	}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "managed-tagged", Description: "Tagged"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-tagged.yaml"), sampleYAML, 0644))
+
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	explicitPipeline, err := rm.GetPipelineByNameAndNamespace("Explicit With Version", "")
+	require.NoError(t, err)
+	_, err = rm.GetPipelineVersionByName(explicitPipeline.UUID, "my-explicit-version")
+	require.NoError(t, err, "explicit version name must not be overridden by rhoai-version tag")
+
+	managedPipeline, err := rm.GetPipelineByNameAndNamespace("managed-tagged", "")
+	require.NoError(t, err)
+	version, err := rm.GetPipelineVersionByName(managedPipeline.UUID, "3.5.0")
+	require.NoError(t, err, "managed pipeline version should use rhoai-version tag value")
+	assert.Equal(t, "3.5.0", version.DisplayName)
+}
+
+func TestLoadSamples_ManagedVersionNameTooLongReturnsError(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	longVersion := strings.Repeat("x", 128)
+	t.Setenv(managedPipelinesUploadTagsEnv, "managed=true,rhoai-version="+longVersion)
+	rm := fakeResourceManager()
+
+	pc := config{LoadSamplesOnRestart: true, Pipelines: []configPipelines{}}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "managed-long", Description: "Long version"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-long.yaml"), sampleYAML, 0644))
+
+	err = LoadSamples(rm, samplePath, managedDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds")
+}
+
+func TestLoadSamples_ManagedVersionNameRestartIdempotency(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	t.Setenv(managedPipelinesUploadTagsEnv, "managed=true,rhoai-version=3.5.0")
+	rm := fakeResourceManager()
+
+	pc := config{LoadSamplesOnRestart: true, Pipelines: []configPipelines{}}
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "managed-idem", Description: "Idempotency test"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-idem.yaml"), sampleYAML, 0644))
+
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	pipeline, err := rm.GetPipelineByNameAndNamespace("managed-idem", "")
+	require.NoError(t, err)
+
+	// Second load with same version — simulates pod restart with same platform version.
+	samplePath, err = writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	opts, err := list.NewOptions(&model.PipelineVersion{}, 10, "id", nil)
+	require.NoError(t, err)
+	_, totalSize, _, err := rm.ListPipelineVersions(pipeline.UUID, opts, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, totalSize, "restart with same rhoai-version must not duplicate the version")
+}
+
+func TestLoadSamples_ManagedVersionNameUpgradeCreatesNewVersion(t *testing.T) {
+	viper.Set("POD_NAMESPACE", "")
+	rm := fakeResourceManager()
+
+	pc := config{LoadSamplesOnRestart: true, Pipelines: []configPipelines{}}
+
+	managedDir := t.TempDir()
+	entries := []managedPipelineManifestEntry{
+		{Name: "managed-upgrade", Description: "Upgrade test"},
+	}
+	writeManagedPipelinesManifest(t, managedDir, entries)
+	sampleYAML, err := os.ReadFile("testdata/sample_pipeline.yaml")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(managedDir, "managed-upgrade.yaml"), sampleYAML, 0644))
+
+	// First load: version 3.5.0
+	t.Setenv(managedPipelinesUploadTagsEnv, "managed=true,rhoai-version=3.5.0")
+	samplePath, err := writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	pipeline, err := rm.GetPipelineByNameAndNamespace("managed-upgrade", "")
+	require.NoError(t, err)
+	_, err = rm.GetPipelineVersionByName(pipeline.UUID, "3.5.0")
+	require.NoError(t, err)
+
+	// Second load: upgraded to 3.6.0
+	t.Setenv(managedPipelinesUploadTagsEnv, "managed=true,rhoai-version=3.6.0")
+	samplePath, err = writeSampleConfig(t, pc, "sample.json")
+	require.NoError(t, err)
+	require.NoError(t, LoadSamples(rm, samplePath, managedDir))
+
+	_, err = rm.GetPipelineVersionByName(pipeline.UUID, "3.6.0")
+	require.NoError(t, err, "upgrade should create a new version with the new rhoai-version")
+
+	opts, err := list.NewOptions(&model.PipelineVersion{}, 10, "id", nil)
+	require.NoError(t, err)
+	_, totalSize, _, err := rm.ListPipelineVersions(pipeline.UUID, opts, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 2, totalSize, "both 3.5.0 and 3.6.0 versions should exist")
 }
 
 func TestLoadManagedPipelinesManifest_ValidNamesAccepted(t *testing.T) {
