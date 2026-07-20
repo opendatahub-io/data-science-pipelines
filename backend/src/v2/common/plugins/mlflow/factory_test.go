@@ -3,7 +3,6 @@ package mlflow
 import (
 	"testing"
 
-	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
 	commonmlflow "github.com/kubeflow/pipelines/backend/src/common/plugins/mlflow"
 	"github.com/kubeflow/pipelines/backend/src/v2/common/plugins"
 	"github.com/spf13/viper"
@@ -14,7 +13,7 @@ import (
 func TestMlflowHandlerFactory_Name(t *testing.T) {
 	factory := &mlflowHandlerFactory{}
 
-	assert.Equal(t, "MLflow", factory.Name())
+	assert.Equal(t, "mlflow", factory.Name())
 }
 
 func TestMlflowHandlerFactory_IsEnabled_ConfigSet(t *testing.T) {
@@ -44,9 +43,6 @@ func TestMlflowHandlerFactory_Create_Success(t *testing.T) {
 		ExperimentID: "exp-1",
 		AuthType:     "kubernetes",
 		Timeout:      "10s",
-		TLS: &commonplugins.TLSConfig{
-			CABundlePath: testCABundlePath,
-		},
 	})
 	t.Cleanup(func() { viper.Set(commonmlflow.EnvMLflowConfig, "") })
 
@@ -55,7 +51,7 @@ func TestMlflowHandlerFactory_Create_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, handler)
-	assert.Equal(t, "MLflow", handler.Name())
+	assert.Equal(t, "mlflow", handler.Name())
 }
 
 func TestMlflowHandlerFactory_Create_MissingConfig(t *testing.T) {
@@ -67,24 +63,6 @@ func TestMlflowHandlerFactory_Create_MissingConfig(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, handler)
 	assert.Contains(t, err.Error(), "KFP_MLFLOW_CONFIG env var not set")
-}
-
-func TestMlflowHandlerFactory_Create_MissingCABundlePath(t *testing.T) {
-	setRuntimeCfg(commonmlflow.MLflowRuntimeConfig{
-		Endpoint:     "http://localhost",
-		ParentRunID:  "parent-run-1",
-		ExperimentID: "exp-1",
-		AuthType:     "kubernetes",
-		Timeout:      "10s",
-	})
-	t.Cleanup(func() { viper.Set(commonmlflow.EnvMLflowConfig, "") })
-
-	factory := &mlflowHandlerFactory{}
-	handler, err := factory.Create()
-
-	require.Error(t, err)
-	assert.Nil(t, handler)
-	assert.Contains(t, err.Error(), "tls.caBundlePath is required")
 }
 
 func TestMLflowHandlerFactory_Create_MissingConfigField(t *testing.T) {
@@ -127,7 +105,7 @@ func TestInitRegistersFactory(t *testing.T) {
 
 	var found bool
 	for _, factory := range registered {
-		if factory.Name() == "MLflow" {
+		if factory.Name() == "mlflow" {
 			found = true
 			break
 		}

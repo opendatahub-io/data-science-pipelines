@@ -20,21 +20,14 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
-	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
-	scheduledworkflow "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
-
-	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
-	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
-	"github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
-
 	"github.com/cenkalti/backoff"
 	"github.com/golang/glog"
+	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/archive"
 	kfpauth "github.com/kubeflow/pipelines/backend/src/apiserver/auth"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/client"
@@ -46,6 +39,7 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/template"
 	exec "github.com/kubeflow/pipelines/backend/src/common"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
+	scheduledworkflow "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 	scheduledworkflowclient "github.com/kubeflow/pipelines/backend/src/crd/pkg/client/clientset/versioned/typed/scheduledworkflow/v1beta1"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -57,6 +51,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/client-go/util/retry"
 )
 
 // Metric variables. Please prefix the metric names with resource_manager_.
@@ -117,7 +112,6 @@ type ClientManagerInterface interface {
 	KubernetesCoreClient() client.KubernetesCoreInterface
 	SubjectAccessReviewClient() client.SubjectAccessReviewInterface
 	TokenReviewClient() client.TokenReviewInterface
-	MetadataClient() metadata.ClientInterface
 	LogArchive() archive.LogArchiveInterface
 	Time() util.TimeInterface
 	UUID() util.UUIDGeneratorInterface
@@ -132,6 +126,7 @@ type ResourceManagerOptions struct {
 	DefaultRunAsUser     *int64                            `json:"default_run_as_user,omitempty"`
 	DefaultRunAsGroup    *int64                            `json:"default_run_as_group,omitempty"`
 	DefaultRunAsNonRoot  *bool                             `json:"default_run_as_non_root,omitempty"`
+	DefaultHostUsers     *bool                             `json:"default_host_users,omitempty"`
 }
 
 type ResourceManager struct {
@@ -149,7 +144,6 @@ type ResourceManager struct {
 	k8sCoreClient             client.KubernetesCoreInterface
 	subjectAccessReviewClient client.SubjectAccessReviewInterface
 	tokenReviewClient         client.TokenReviewInterface
-	metadataClient            metadata.ClientInterface
 	logArchive                archive.LogArchiveInterface
 	time                      util.TimeInterface
 	uuid                      util.UUIDGeneratorInterface
@@ -174,7 +168,6 @@ func NewResourceManager(clientManager ClientManagerInterface, options *ResourceM
 		k8sCoreClient:             clientManager.KubernetesCoreClient(),
 		subjectAccessReviewClient: clientManager.SubjectAccessReviewClient(),
 		tokenReviewClient:         clientManager.TokenReviewClient(),
-		metadataClient:            clientManager.MetadataClient(),
 		logArchive:                clientManager.LogArchive(),
 		time:                      clientManager.Time(),
 		uuid:                      clientManager.UUID(),
@@ -401,14 +394,14 @@ func (r *ResourceManager) UpdatePipelineDefaultVersion(pipelineId string, versio
 
 // MaxTagKeyLength is the maximum allowed length (in characters) for a tag key.
 // Consistent with Kubernetes label value length limit (63 characters).
-const MaxTagKeyLength = common.MaxTagKeyLength
+const MaxTagKeyLength = model.MaxTagKeyLength
 
 // MaxTagValueLength is the maximum allowed length (in characters) for a tag value.
 // Consistent with Kubernetes label value length limit (63 characters).
-const MaxTagValueLength = common.MaxTagValueLength
+const MaxTagValueLength = model.MaxTagValueLength
 
 // MaxTagsPerEntity is the maximum number of tags allowed on a single pipeline or pipeline version.
-const MaxTagsPerEntity = common.MaxTagsPerEntity
+const MaxTagsPerEntity = model.MaxTagsPerEntity
 
 // UpdatePipeline updates mutable fields of a pipeline (display_name, tags).
 // Both fields are updated in a single transaction via UpdatePipelineFields.
@@ -416,7 +409,7 @@ func (r *ResourceManager) UpdatePipeline(pipelineID string, displayName string, 
 	if pipelineID == "" {
 		return nil, util.NewInvalidInputError("pipeline id cannot be empty when updating pipeline")
 	}
-	if err := common.ValidateTags(tags); err != nil {
+	if err := model.ValidateTags(tags); err != nil {
 		return nil, err
 	}
 	// Update fields and tags in a single transaction to prevent deadlocks.
@@ -433,7 +426,7 @@ func (r *ResourceManager) UpdatePipelineVersion(pipelineVersionID string, displa
 	if pipelineVersionID == "" {
 		return nil, util.NewInvalidInputError("pipeline version id cannot be empty when updating pipeline version")
 	}
-	if err := common.ValidateTags(tags); err != nil {
+	if err := model.ValidateTags(tags); err != nil {
 		return nil, err
 	}
 	// Update fields and tags in a single transaction to prevent deadlocks.
@@ -455,7 +448,7 @@ func (r *ResourceManager) CreatePipeline(p *model.Pipeline) (*model.Pipeline, er
 		p.DisplayName = p.Name
 	}
 
-	if err := common.ValidateTags(p.Tags); err != nil {
+	if err := model.ValidateTags(p.Tags); err != nil {
 		return nil, err
 	}
 
@@ -479,10 +472,10 @@ func (r *ResourceManager) CreatePipeline(p *model.Pipeline) (*model.Pipeline, er
 // Creates a pipeline and a pipeline version.
 // This is used when two resources need to be created in a single DB transaction.
 func (r *ResourceManager) CreatePipelineAndPipelineVersion(p *model.Pipeline, pv *model.PipelineVersion) (*model.Pipeline, *model.PipelineVersion, error) {
-	if err := common.ValidateTags(p.Tags); err != nil {
+	if err := model.ValidateTags(p.Tags); err != nil {
 		return nil, nil, err
 	}
-	if err := common.ValidateTags(pv.Tags); err != nil {
+	if err := model.ValidateTags(pv.Tags); err != nil {
 		return nil, nil, err
 	}
 
@@ -502,6 +495,7 @@ func (r *ResourceManager) CreatePipelineAndPipelineVersion(p *model.Pipeline, pv
 		DefaultRunAsUser:     r.options.DefaultRunAsUser,
 		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
 		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
+		DefaultHostUsers:     r.options.DefaultHostUsers,
 	}
 	tmpl, err := template.New(pipelineSpecBytes, templateOptions)
 	if err != nil {
@@ -740,10 +734,7 @@ func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model
 	defer func() {
 		if !runPersisted {
 			if pr, prErr := apiserverPlugins.ModelToPersistedRun(run, k8sNamespace); prErr == nil {
-				err = r.pluginDispatcher.OnRunEnd(ctx, pr)
-				if err != nil {
-					glog.Warningf("failed to notify plugins of run end for run %s: %v", run.UUID, err)
-				}
+				r.pluginDispatcher.OnRunEnd(ctx, pr)
 			}
 		}
 	}()
@@ -823,7 +814,7 @@ func (r *ResourceManager) ReconcileSwfCrs(ctx context.Context) error {
 			return failedToReconcileSwfCrsError(err)
 		}
 
-		newScheduledWorkflow, err := tmpl.ScheduledWorkflow(jobs[i], r.getOwnerReferences())
+		newScheduledWorkflow, err := tmpl.ScheduledWorkflow(jobs[i])
 		if err != nil {
 			return failedToReconcileSwfCrsError(err)
 		}
@@ -925,6 +916,14 @@ func (r *ResourceManager) UnarchiveRun(runId string) error {
 		return util.Wrapf(err, "Failed to unarchive run %v", runId)
 	}
 	return nil
+}
+
+// newStandardBackoffPolicy returns a configured backoff policy for retrying operations.
+func newStandardBackoffPolicy() backoff.BackOff {
+	exponentialBackoff := backoff.NewExponentialBackOff()
+	exponentialBackoff.InitialInterval = 100 * time.Millisecond
+	exponentialBackoff.MaxInterval = 5 * time.Second
+	return backoff.WithMaxRetries(exponentialBackoff, 10)
 }
 
 // Deletes a run entry with a given id.
@@ -1032,8 +1031,7 @@ func TerminateWorkflow(ctx context.Context, wfClient util.ExecutionInterface, na
 		_, err = wfClient.Patch(ctx, name, types.MergePatchType, patch, v1.PatchOptions{})
 		return util.Wrapf(err, "Failed to terminate workflow %s due to patching error", name)
 	}
-	backoffPolicy := backoff.WithMaxRetries(backoff.NewConstantBackOff(100), 10)
-	err = backoff.Retry(operation, backoffPolicy)
+	err = backoff.Retry(operation, newStandardBackoffPolicy())
 	if err != nil {
 		return util.Wrapf(err, "Failed to terminate workflow %s due to patching error after multiple retries", name)
 	}
@@ -1107,33 +1105,14 @@ func (r *ResourceManager) RetryRun(ctx context.Context, runId string) error {
 		return util.NewInternalServerError(err, "Failed to retry run %s due to error cleaning up the failed pods from the previous attempt", runId)
 	}
 
-	// First try to update workflow
-	// If fail to get the workflow, return error.
-	latestWorkflow, updateError := r.getWorkflowClient(namespace).Get(ctx, newExecSpec.ExecutionName(), v1.GetOptions{})
-	if updateError == nil {
-		// Update the workflow's resource version to latest.
-		newExecSpec.SetVersion(latestWorkflow.Version())
-		_, updateError = r.getWorkflowClient(namespace).Update(ctx, newExecSpec, v1.UpdateOptions{})
-	}
-	if updateError != nil {
-		// Remove resource version
-		newExecSpec.SetVersion("")
-		newCreatedWorkflow, createError := r.getWorkflowClient(namespace).Create(ctx, newExecSpec, v1.CreateOptions{})
-		if createError != nil {
-			if createError, ok := createError.(net.Error); ok && createError.Timeout() {
-				return util.NewUnavailableServerError(createError, "Failed to retry run %s due to error creating and updating a workflow - try again later. Update error: %s", runId, updateError.Error())
-			}
-			return util.NewInternalServerError(createError, "Failed to retry run %s due to error updating and creating a workflow. Update error: %s", runId, updateError.Error())
-		}
-		newExecSpec = newCreatedWorkflow
+	newExecSpec, err = r.updateOrCreateRetryWorkflow(ctx, namespace, runId, newExecSpec)
+	if err != nil {
+		return err
 	}
 	// Notify plugins of retry
 	if run.PluginsOutputString != nil && *run.PluginsOutputString != "" {
 		if pr, prErr := apiserverPlugins.ModelToPersistedRun(run, namespace); prErr == nil {
-			err = r.pluginDispatcher.OnRunRetry(ctx, pr)
-			if err != nil {
-				glog.Warningf("failed to notify plugins of retry for run %s: %v", runId, err)
-			}
+			r.pluginDispatcher.OnRunRetry(ctx, pr)
 		}
 	}
 
@@ -1149,6 +1128,82 @@ func (r *ResourceManager) RetryRun(ctx context.Context, runId string) error {
 		return util.NewInternalServerError(err, "Failed to retry run %s due to error updating entry", runId)
 	}
 	return nil
+}
+
+func (r *ResourceManager) updateOrCreateRetryWorkflow(ctx context.Context, namespace string, runID string, newExecSpec util.ExecutionSpec) (util.ExecutionSpec, error) {
+	workflowClient := r.getWorkflowClient(namespace)
+	var retriedWorkflow util.ExecutionSpec
+	var lastWorkflowError error
+	lastWorkflowAction := "reconciling workflow"
+
+	err := retry.OnError(retry.DefaultRetry, isRetryableWorkflowReconcileError, func() error {
+		lastWorkflowAction = "getting workflow"
+		latestWorkflow, err := workflowClient.Get(ctx, newExecSpec.ExecutionName(), v1.GetOptions{})
+		if err == nil {
+			newExecSpec.SetVersion(latestWorkflow.Version())
+			lastWorkflowAction = "updating workflow"
+			updatedWorkflow, err := workflowClient.Update(ctx, newExecSpec, v1.UpdateOptions{})
+			if err == nil {
+				retriedWorkflow = updatedWorkflow
+				return nil
+			}
+			lastWorkflowError = err
+			if !apierrors.IsNotFound(err) {
+				return err
+			}
+		} else {
+			lastWorkflowError = err
+			if !apierrors.IsNotFound(err) && !isTransientWorkflowReconcileError(err) {
+				return err
+			}
+		}
+
+		newExecSpec.SetVersion("")
+		lastWorkflowAction = "creating workflow"
+		newCreatedWorkflow, createError := workflowClient.Create(ctx, newExecSpec, v1.CreateOptions{})
+		if createError == nil {
+			retriedWorkflow = newCreatedWorkflow
+			return nil
+		}
+		lastWorkflowError = createError
+		return createError
+	})
+	if err == nil {
+		return retriedWorkflow, nil
+	}
+
+	lastWorkflowErrorMessage := "none"
+	if lastWorkflowError != nil {
+		lastWorkflowErrorMessage = lastWorkflowError.Error()
+	}
+	if apierrors.IsConflict(err) || apierrors.IsAlreadyExists(err) {
+		return nil, util.NewUnavailableServerError(err, "Failed to retry run %s due to error reconciling workflow after retries - try again later. Last workflow error: %s", runID, lastWorkflowErrorMessage)
+	}
+	if isTransientWorkflowReconcileError(err) {
+		return nil, util.NewUnavailableServerError(err, "Failed to retry run %s due to error %s - try again later. Last workflow error: %s", runID, lastWorkflowAction, lastWorkflowErrorMessage)
+	}
+	return nil, util.NewInternalServerError(err, "Failed to retry run %s due to error %s. Last workflow error: %s", runID, lastWorkflowAction, lastWorkflowErrorMessage)
+}
+
+func isRetryableWorkflowReconcileError(err error) bool {
+	return apierrors.IsConflict(err) ||
+		apierrors.IsAlreadyExists(err) ||
+		isTransientWorkflowReconcileError(err)
+}
+
+func isTransientWorkflowReconcileError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if netError, ok := err.(net.Error); ok && netError.Timeout() {
+		return true
+	}
+	return apierrors.IsServerTimeout(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsTooManyRequests(err) ||
+		apierrors.IsServiceUnavailable(err) ||
+		apierrors.IsInternalError(err) ||
+		apierrors.IsUnexpectedServerError(err)
 }
 
 // Fetches execution logs and writes to the destination.
@@ -1218,12 +1273,13 @@ func (r *ResourceManager) readRunLogFromArchive(workflowManifest string, nodeId 
 		return util.NewInternalServerError(err, "Failed to read logs from archive %v", nodeId)
 	}
 
-	logContent, err := r.objectStore.GetFile(context.TODO(), logPath)
+	logReader, err := r.objectStore.GetFileReader(context.TODO(), logPath)
 	if err != nil {
 		return util.NewInternalServerError(err, "Failed to read logs from archive %v due to error fetching the log file", nodeId)
 	}
+	defer logReader.Close()
 
-	err = r.logArchive.CopyLogFromArchive(logContent, dst, archive.ExtractLogOptions{LogFormat: archive.LogFormatText, Timestamps: false})
+	err = r.logArchive.CopyLogFromArchiveReader(logReader, dst, archive.ExtractLogOptions{LogFormat: archive.LogFormatText, Timestamps: false})
 	if err != nil {
 		return util.NewInternalServerError(err, "Failed to read logs from archive %v due to error copying the log file", nodeId)
 	}
@@ -1316,11 +1372,11 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 		if r.pluginDispatcher.PluginsRegistered() {
 			// Plugin-enabled: create a lightweight SWF without inline workflow spec
 			// so the SWF controller calls the CreateRun API for per-run plugin logic.
-			scheduledWorkflow, err = template.NewGenericScheduledWorkflow(job, r.getOwnerReferences())
+			scheduledWorkflow, err = template.NewGenericScheduledWorkflow(job)
 		} else {
 			// TODO(gkcalat): consider changing the flow. Other resource UUIDs are assigned by their respective stores (DB).
 			// Convert modelJob into scheduledWorkflow.
-			scheduledWorkflow, err = tmpl.ScheduledWorkflow(job, r.getOwnerReferences())
+			scheduledWorkflow, err = tmpl.ScheduledWorkflow(job)
 		}
 		if err != nil {
 			return nil, util.Wrap(err, "Failed to create a recurring run during scheduled workflow creation")
@@ -1343,23 +1399,23 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 			DefaultRunAsUser:     r.options.DefaultRunAsUser,
 			DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
 			DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
+			DefaultHostUsers:     r.options.DefaultHostUsers,
 		}
 		tmpl, err := template.New(manifest, templateOptions)
 		if err != nil {
 			return nil, util.Wrap(err, "Failed to fetch a template with an invalid pipeline spec manifest")
 		}
 
-		_, err = tmpl.ScheduledWorkflow(job, r.getOwnerReferences())
 		if v2Tmpl, ok := tmpl.(*template.V2Spec); ok {
 			err = v2Tmpl.ValidateJobInputs(job)
 		} else {
-			_, err = tmpl.ScheduledWorkflow(job, r.getOwnerReferences())
+			_, err = tmpl.ScheduledWorkflow(job)
 		}
 		if err != nil {
 			return nil, util.Wrap(err, "Failed to validate the input parameters on the latest pipeline version")
 		}
 
-		scheduledWorkflow, err = template.NewGenericScheduledWorkflow(job, r.getOwnerReferences())
+		scheduledWorkflow, err = template.NewGenericScheduledWorkflow(job)
 		if err != nil {
 			return nil, util.Wrap(err, "Failed to create a recurring run during scheduled workflow creation")
 		}
@@ -1417,27 +1473,6 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 		job.PipelineSpecManifest = model.LargeText(manifest)
 	}
 	return r.jobStore.CreateJob(job)
-}
-
-func (r *ResourceManager) getOwnerReferences() []v1.OwnerReference {
-	ownerName := common.GetStringConfigWithDefault("OWNER_NAME", "")
-	ownerAPIVersion := common.GetStringConfigWithDefault("OWNER_API_VERSION", "")
-	ownerKind := common.GetStringConfigWithDefault("OWNER_KIND", "")
-	ownerUID := types.UID(common.GetStringConfigWithDefault("OWNER_UID", ""))
-
-	if ownerName == "" || ownerAPIVersion == "" || ownerKind == "" || ownerUID == "" {
-		glog.Info("Missing ScheduledWorkflow owner fields. Proceeding without OwnerReferences")
-		return []v1.OwnerReference{}
-	} else {
-		return []v1.OwnerReference{
-			{
-				APIVersion: ownerAPIVersion,
-				Kind:       ownerKind,
-				Name:       ownerName,
-				UID:        ownerUID,
-			},
-		}
-	}
 }
 
 // Enables or disables a recurring run with given id.
@@ -1561,6 +1596,19 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 	if execSpec.IsTerminating() {
 		state = model.RuntimeState(string(exec.ExecutionPhase(model.RunTerminatingConditionsV1))).ToV2()
 	}
+	if execStatus.IsInFinalState() {
+		workflowStillMatchesReport, err := r.workflowStillMatchesReportedVersion(ctx, execSpec)
+		if err != nil {
+			return nil, err
+		}
+		if !workflowStillMatchesReport {
+			return nil, terminalWorkflowReportDeferredError(
+				runId,
+				execSpec,
+				"workflow resource version changed before terminal report was persisted",
+			)
+		}
+	}
 	// If run already exists, simply update it
 	run, updateError := r.GetRun(runId)
 	if updateError == nil {
@@ -1580,17 +1628,40 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 				return nil, util.Wrap(updateError, "Failed to update the run")
 			}
 			// Handle run not found in run store error.
-			// To avoid letting the workflow leak for ever, we need to GC it when its record does not exist in KFP DB.
+			// Before GC, apply a grace period to avoid deleting workflows whose
+			// DB writes are still in-flight.
+			gracePeriodSeconds := common.GetWorkflowGCGracePeriodSeconds()
+			gracePeriod := time.Duration(gracePeriodSeconds) * time.Second
+			workflowAge := r.time.Now().Sub(objMeta.CreationTimestamp.Time)
+			if workflowAge < gracePeriod {
+				glog.Warningf(
+					"Workflow name=%q namespace=%q runId=%q not found in run store, "+
+						"but workflow is only %v old (grace period: %v). "+
+						"Skipping GC to allow in-flight DB write to complete. ",
+					execSpec.ExecutionName(), execSpec.ExecutionNamespace(), runId,
+					workflowAge.Round(time.Second), gracePeriod)
+				return nil, util.NewUnavailableServerError(
+					fmt.Errorf("workflow %s is within GC grace period (%v old, threshold %v)",
+						execSpec.ExecutionName(), workflowAge.Round(time.Second), gracePeriod),
+					"Skipping GC for workflow %s - will retry",
+					execSpec.ExecutionName())
+			}
+			// Workflow is beyond the grace period. To avoid letting the workflow
+			// leak forever, GC it since its record does not exist in KFP DB.
 			glog.Errorf("Cannot find reported workflow name=%q namespace=%q runId=%q in run store. "+
 				"Deleting the workflow to avoid resource leaking. "+
 				"This can be caused by installing two KFP instances that try to manage the same workflows "+
 				"or an unknown bug. If you encounter this, recommend reporting more details in https://github.com/kubeflow/pipelines/issues/6189",
 				execSpec.ExecutionName(), execSpec.ExecutionNamespace(), runId)
-			if err := r.getWorkflowClient(execSpec.ExecutionNamespace()).Delete(ctx, execSpec.ExecutionName(), v1.DeleteOptions{}); err != nil {
-				if util.IsNotFound(err) {
-					return nil, util.NewNotFoundError(err, "Failed to delete the obsolete workflow for run %s", runId)
+			deleteOperation := func() error {
+				err := r.getWorkflowClient(execSpec.ExecutionNamespace()).Delete(ctx, execSpec.ExecutionName(), v1.DeleteOptions{})
+				if err != nil && !util.IsNotFound(err) {
+					return err
 				}
-				return nil, util.NewInternalServerError(err, "Failed to delete the obsolete workflow for run %s", runId)
+				return nil
+			}
+			if err := backoff.Retry(deleteOperation, newStandardBackoffPolicy()); err != nil {
+				return nil, util.NewInternalServerError(err, "Failed to delete the obsolete workflow for run %s after multiple retries", runId)
 			}
 
 			if r.options.CollectMetrics {
@@ -1679,20 +1750,43 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 		}
 	}
 	if execStatus.IsInFinalState() {
-		// Notify plugins of terminal state. If a plugin sync fails and
-		// needs retry, defer the persistedFinalState label so the
-		// persistence agent re-reports the workflow on its next cycle.
+		// Notify plugins of terminal state. If terminal handling cannot be
+		// completed, return a retryable signal before callers report tasks or
+		// workflow metrics from a stale terminal report.
 		if run != nil && run.PluginsOutputString != nil && *run.PluginsOutputString != "" {
 			pr, prErr := apiserverPlugins.ModelToPersistedRun(run, execSpec.ExecutionNamespace())
 			if prErr != nil {
 				glog.Warningf("Failed to build PersistedRun for plugin sync on run %q: %v", run.UUID, prErr)
-			} else if err := r.pluginDispatcher.OnRunEnd(ctx, pr); err != nil {
-				glog.Warningf("Plugin sync failed for run %q; deferring persistedFinalState label so persistence agent retries: %v", run.UUID, err)
-				return nil, nil
+			} else if !r.pluginDispatcher.OnRunEnd(ctx, pr) {
+				glog.Warningf("Plugin sync failed for run %q; deferring persistedFinalState label so persistence agent retries", run.UUID)
+				return nil, terminalWorkflowReportDeferredError(
+					runId,
+					execSpec,
+					"plugin terminal sync requested retry",
+				)
 			}
 		}
 
-		err := addWorkflowLabel(ctx, r.getWorkflowClient(execSpec.ExecutionNamespace()), execSpec.ExecutionName(), util.LabelKeyWorkflowPersistedFinalState, "true")
+		stillMatchesReportedFinalState, err := r.runStillMatchesReportedFinalState(runId, state, execStatus.FinishedAt())
+		if err != nil {
+			return nil, err
+		}
+		if !stillMatchesReportedFinalState {
+			return nil, terminalWorkflowReportDeferredError(
+				runId,
+				execSpec,
+				"run state changed while reporting terminal workflow state",
+			)
+		}
+
+		labelAdded, err := addWorkflowLabelIfWorkflowUnchanged(
+			ctx,
+			r.getWorkflowClient(execSpec.ExecutionNamespace()),
+			execSpec.ExecutionName(),
+			execSpec.Version(),
+			util.LabelKeyWorkflowPersistedFinalState,
+			"true",
+		)
 		if err != nil {
 			message := fmt.Sprintf("Failed to add PersistedFinalState label to workflow %s", execSpec.ExecutionName())
 			// A fix for kubeflow/pipelines#4484, persistence agent might have an outdated item in its workqueue, so it will
@@ -1704,7 +1798,13 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 				return nil, util.Wrapf(err, "%s", message)
 			}
 		}
-
+		if !labelAdded {
+			return nil, terminalWorkflowReportDeferredError(
+				runId,
+				execSpec,
+				"workflow resource version changed before persistedFinalState label could be added",
+			)
+		}
 		if r.options.CollectMetrics {
 			execNamespace := execSpec.ExecutionNamespace()
 			execName := execSpec.ExecutionName()
@@ -1719,32 +1819,134 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 			}
 		}
 	}
-	execSpec.SetLabels("pipeline/runid", runId)
+	execSpec.SetLabels(util.LabelKeyWorkflowRunId, runId)
 	return execSpec, nil
 }
 
-// Adds a label for a workflow.
-func addWorkflowLabel(ctx context.Context, wfClient util.ExecutionInterface, name string, labelKey string, labelValue string) error {
-	patchObj := map[string]interface{}{
-		"metadata": map[string]interface{}{
-			"labels": map[string]interface{}{
-				labelKey: labelValue,
-			},
-		},
+func terminalWorkflowReportDeferredError(runID string, execSpec util.ExecutionSpec, reason string) error {
+	return util.NewUnavailableServerError(
+		errors.New(reason),
+		"Skipping terminal workflow report for run %s workflow %s: %s",
+		runID,
+		execSpec.ExecutionName(),
+		reason,
+	)
+}
+
+func (r *ResourceManager) workflowStillMatchesReportedVersion(ctx context.Context, execSpec util.ExecutionSpec) (bool, error) {
+	reportedVersion := execSpec.Version()
+	if reportedVersion == "" {
+		return true, nil
 	}
+
+	currentWorkflow, err := r.getWorkflowClient(execSpec.ExecutionNamespace()).Get(ctx, execSpec.ExecutionName(), v1.GetOptions{})
+	if err != nil {
+		if util.IsNotFound(err) {
+			// The workflow CR is already gone, e.g. deleted between the
+			// persistence agent's read and this report. Proceed with the
+			// reported terminal state so the run row is still finalized;
+			// the persistedFinalState label step then surfaces the NotFound
+			// signal to the caller after the database write.
+			glog.Warningf(
+				"Workflow %q was not found while verifying the reported version; proceeding with the reported terminal state",
+				execSpec.ExecutionName(),
+			)
+			return true, nil
+		}
+		return false, util.Wrapf(err, "Failed to verify current workflow version while reporting completed workflow %s", execSpec.ExecutionName())
+	}
+	if currentWorkflow.Version() == reportedVersion {
+		return true, nil
+	}
+
+	glog.Warningf(
+		"Skip reporting terminal workflow state for workflow %q because the workflow changed before terminal reporting: reported resourceVersion=%q, current resourceVersion=%q",
+		execSpec.ExecutionName(),
+		reportedVersion,
+		currentWorkflow.Version(),
+	)
+	return false, nil
+}
+
+func (r *ResourceManager) runStillMatchesReportedFinalState(runID string, state model.RuntimeState, finishedAtInSec int64) (bool, error) {
+	currentRun, err := r.GetRun(runID)
+	if err != nil {
+		return false, util.Wrapf(err, "Failed to verify current state for completed workflow report on run %s", runID)
+	}
+	if currentRun.State == state && currentRun.FinishedAtInSec == finishedAtInSec {
+		return true, nil
+	}
+
+	glog.Warningf(
+		"Skip adding persistedFinalState label for run %q because the run changed while reporting the terminal workflow state: reported state=%q finishedAt=%d, current state=%q finishedAt=%d",
+		runID,
+		state,
+		finishedAtInSec,
+		currentRun.State,
+		currentRun.FinishedAtInSec,
+	)
+	return false, nil
+}
+
+type jsonPatchOperation struct {
+	Op    string `json:"op"`
+	Path  string `json:"path"`
+	Value any    `json:"value,omitempty"`
+}
+
+// Adds a label only if the workflow still matches the object that reported the
+// terminal state. This prevents a stale terminal report from labeling a retried
+// workflow after RetryRun has updated the same workflow name back to Running.
+func addWorkflowLabelIfWorkflowUnchanged(
+	ctx context.Context,
+	wfClient util.ExecutionInterface,
+	name string,
+	expectedResourceVersion string,
+	labelKey string,
+	labelValue string,
+) (bool, error) {
+	patchObj := []jsonPatchOperation{}
+	if expectedResourceVersion != "" {
+		patchObj = append(patchObj, jsonPatchOperation{
+			Op:    "test",
+			Path:  "/metadata/resourceVersion",
+			Value: expectedResourceVersion,
+		})
+	}
+	patchObj = append(patchObj, jsonPatchOperation{
+		Op:    "add",
+		Path:  "/metadata/labels/" + escapeJSONPointerPathPart(labelKey),
+		Value: labelValue,
+	})
 
 	patch, err := json.Marshal(patchObj)
 	if err != nil {
-		return util.NewInternalServerError(err, "Unexpected error while marshalling a patch object")
+		return false, util.NewInternalServerError(err, "Unexpected error while marshaling a patch object")
 	}
 
 	operation := func() error {
-		_, err = wfClient.Patch(ctx, name, types.MergePatchType, patch, v1.PatchOptions{})
+		_, err = wfClient.Patch(ctx, name, types.JSONPatchType, patch, v1.PatchOptions{})
+		if apierrors.IsConflict(err) {
+			return backoff.Permanent(err)
+		}
 		return err
 	}
-	backoffPolicy := backoff.WithMaxRetries(backoff.NewConstantBackOff(100), 10)
-	err = backoff.Retry(operation, backoffPolicy)
-	return err
+	err = backoff.Retry(operation, newStandardBackoffPolicy())
+	if permanentErr, ok := err.(*backoff.PermanentError); ok {
+		err = permanentErr.Err
+	}
+	if apierrors.IsConflict(err) {
+		glog.Warningf("Skip adding workflow label %q to workflow %q because the workflow changed while reporting the terminal state", labelKey, name)
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func escapeJSONPointerPathPart(pathPart string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(pathPart, "~", "~0"), "/", "~1")
 }
 
 // Updates a recurring run with a scheduled workflow CR.
@@ -1793,6 +1995,7 @@ func (r *ResourceManager) fetchTemplateFromPipelineSpec(pipelineSpec *model.Pipe
 		DefaultRunAsUser:     r.options.DefaultRunAsUser,
 		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
 		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
+		DefaultHostUsers:     r.options.DefaultHostUsers,
 	}
 	tmpl, err := template.New([]byte(manifest), templateOptions)
 	if err != nil {
@@ -1815,13 +2018,13 @@ func (r *ResourceManager) fetchTemplateFromPipelineVersion(pipelineVersion *mode
 		return bytes, string(pipelineVersion.PipelineSpecURI), nil
 	} else {
 		// Try reading object store from pipeline_spec_uri
-		template, errURI := r.objectStore.GetFile(context.TODO(), string(pipelineVersion.PipelineSpecURI))
+		template, errURI := r.readPipelineSpecFromObjectStore(context.TODO(), string(pipelineVersion.PipelineSpecURI))
 		if errURI != nil {
 			// Try reading object store from pipeline_version_id
-			template, errUUID := r.objectStore.GetFile(context.TODO(), r.objectStore.GetPipelineKey(fmt.Sprint(pipelineVersion.UUID)))
+			template, errUUID := r.readPipelineSpecFromObjectStore(context.TODO(), r.objectStore.GetPipelineKey(fmt.Sprint(pipelineVersion.UUID)))
 			if errUUID != nil {
 				// Try reading object store from pipeline_id
-				template, errPipelineID := r.objectStore.GetFile(context.TODO(), r.objectStore.GetPipelineKey(fmt.Sprint(pipelineVersion.PipelineId)))
+				template, errPipelineID := r.readPipelineSpecFromObjectStore(context.TODO(), r.objectStore.GetPipelineKey(fmt.Sprint(pipelineVersion.PipelineId)))
 				if errPipelineID != nil {
 					return nil, "", util.Wrap(
 						util.Wrap(
@@ -1837,6 +2040,27 @@ func (r *ResourceManager) fetchTemplateFromPipelineVersion(pipelineVersion *mode
 		}
 		return template, "", nil
 	}
+}
+
+func (r *ResourceManager) readPipelineSpecFromObjectStore(ctx context.Context, filePath string) ([]byte, error) {
+	reader, err := r.objectStore.GetFileReader(ctx, filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
+	limitedReader := io.LimitReader(reader, int64(common.MaxFileLength)+1)
+	pipelineSpec, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return nil, util.NewInternalServerError(err, "Failed to read pipeline spec from %v", filePath)
+	}
+	if len(pipelineSpec) > common.MaxFileLength {
+		return nil, util.NewInvalidInputError(
+			"Pipeline spec file size too large (%v bytes). Maximum supported size: %v.",
+			len(pipelineSpec), common.MaxFileLength,
+		)
+	}
+	return pipelineSpec, nil
 }
 
 // Creates the default experiment entry.
@@ -1984,6 +2208,7 @@ func (r *ResourceManager) CreatePipelineVersion(pv *model.PipelineVersion) (*mod
 		DefaultRunAsUser:     r.options.DefaultRunAsUser,
 		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
 		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
+		DefaultHostUsers:     r.options.DefaultHostUsers,
 	}
 	tmpl, err := template.New(pipelineSpecBytes, templateOptions)
 	if err != nil {
@@ -2019,7 +2244,7 @@ func (r *ResourceManager) CreatePipelineVersion(pv *model.PipelineVersion) (*mod
 	pv.Status = model.PipelineVersionCreating
 	pv.PipelineSpec = model.LargeText(string(tmpl.Bytes()))
 
-	if err := common.ValidateTags(pv.Tags); err != nil {
+	if err := model.ValidateTags(pv.Tags); err != nil {
 		return nil, err
 	}
 
@@ -2357,130 +2582,4 @@ func (r *ResourceManager) GetTask(taskId string) (*model.Task, error) {
 		return nil, util.Wrapf(err, "Failed to fetch task %v", taskId)
 	}
 	return task, nil
-}
-
-// GetContexts Fetches Contexts with the given sort/filter options.
-func (r *ResourceManager) GetContexts(ctx context.Context, maxResultSize int32, orderByAscending bool, orderByField, filterQuery, nextPageToken string) ([]*ml_metadata.Context, *string, error) {
-	return r.metadataClient.GetContexts(ctx, maxResultSize, orderByAscending, orderByField, filterQuery, nextPageToken)
-}
-
-// GetArtifacts Fetches Artifacts with the given sort/filter options.
-func (r *ResourceManager) GetArtifacts(ctx context.Context, maxResultSize int32, orderByAscending bool, orderByField, filterQuery, nextPageToken string) ([]*ml_metadata.Artifact, *string, error) {
-	return r.metadataClient.GetArtifacts(ctx, maxResultSize, orderByAscending, orderByField, filterQuery, nextPageToken)
-}
-
-// GetArtifactById Fetches Artifacts with the given artifact ids.
-func (r *ResourceManager) GetArtifactById(ctx context.Context, id []int64) ([]*ml_metadata.Artifact, error) {
-	return r.metadataClient.GetArtifactsByID(ctx, id)
-}
-
-// GetArtifactSessionInfo provides the bucket config that contains a session info for a given Artifact.
-// The bucket config contains information on where the artifact is store within object store.
-// The session info is pulled from the artifact's parent context.
-// TODO: In kfp 2.3 the session info can be retrieved directly from the Artifact custom properties.
-func (r *ResourceManager) GetArtifactSessionInfo(ctx context.Context, artifact *ml_metadata.Artifact) (*objectstore.Config, string, error) {
-	artifactCtx, err := r.metadataClient.GetContextByArtifactID(ctx, artifact.GetId())
-	if err != nil {
-		return nil, "", err
-	}
-
-	// Retrieve Pipeline Root info
-	pipelineRoot := artifactCtx.CustomProperties["pipeline_root"].GetStringValue()
-	if pipelineRoot == "" {
-		return nil, "", fmt.Errorf("Unable to retrieve artifact pipeline_root info via context property.")
-	}
-
-	// Retrieve Session info
-	storeSessionInfo, ok_session := artifactCtx.CustomProperties["store_session_info"]
-
-	var sessionInfoString = ""
-
-	if ok_session {
-		sessionInfoString = storeSessionInfo.GetStringValue()
-	} else {
-		// bucket_session_info is an old struct that needs to be converted to store_session_info
-		bucketSession := &objectstore.S3Params{}
-		err1 := json.Unmarshal([]byte(artifactCtx.CustomProperties["bucket_session_info"].GetStringValue()), bucketSession)
-		if err1 != nil {
-			return nil, "", err1
-		}
-		sessionInfoParams := &map[string]string{
-			"fromEnv":      "false",
-			"endpoint":     bucketSession.Endpoint,
-			"region":       bucketSession.Region,
-			"disableSSL":   strconv.FormatBool(bucketSession.DisableSSL),
-			"secretName":   bucketSession.SecretName,
-			"accessKeyKey": bucketSession.AccessKeyKey,
-			"secretKeyKey": bucketSession.SecretKeyKey,
-		}
-
-		sessionInfo := &objectstore.SessionInfo{
-			Provider: "s3",
-			Params:   *sessionInfoParams,
-		}
-		sessionInfoBytes, err2 := json.Marshal(*sessionInfo)
-		if err2 != nil {
-			return nil, "", err2
-		}
-		sessionInfoString = string(sessionInfoBytes)
-	}
-
-	if sessionInfoString == "" {
-		return nil, "", fmt.Errorf("Unable to retrieve artifact session info via context property.")
-	}
-	sessionInfo, err := objectstore.GetSessionInfoFromString(sessionInfoString)
-	if err != nil {
-		return nil, "", err
-	}
-	config, err := objectstore.ParseBucketConfig(pipelineRoot, sessionInfo)
-	if err != nil {
-		return nil, "", err
-	}
-	if artifact.Uri == nil {
-		return nil, "", fmt.Errorf("Artifact did not have a URI property.")
-	}
-
-	// Retrieve namespace
-	namespace := artifactCtx.CustomProperties["namespace"].GetStringValue()
-	if namespace == "" {
-		return nil, "", fmt.Errorf("Unable to retrieve artifact namespace info via context property.")
-	}
-
-	return config, namespace, nil
-}
-
-// GetSecretKeyValue retrieves the value identified by the Secret name and key within the provided namespace.
-func (r *ResourceManager) GetSecretKeyValue(ctx context.Context, ns, name, key string) (string, error) {
-	secret, err := r.k8sCoreClient.SecretClient(ns).Get(ctx, name, v1.GetOptions{})
-	if err != nil {
-		return "", err
-	}
-	return string(secret.Data[key]), nil
-}
-
-// GetSecret retrieves the secret identified by name from the provided namespace.
-func (r *ResourceManager) GetSecret(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
-	secret, err := r.k8sCoreClient.SecretClient(namespace).Get(ctx, name, v1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	return secret, nil
-}
-
-// GetSignedUrl retrieves a signed url for the associated artifact.
-func (r *ResourceManager) GetSignedUrl(ctx context.Context, bucketConfig *objectstore.Config, secret *corev1.Secret, expirySeconds time.Duration, artifactURI string, queryParams url.Values) (string, error) {
-	signedUrl, err := r.objectStore.GetSignedUrl(ctx, bucketConfig, secret, expirySeconds, artifactURI, queryParams)
-	if err != nil {
-		return "", err
-	}
-	return signedUrl, nil
-}
-
-// GetObjectSize retrieves the size of the Artifact's object in bytes.
-func (r *ResourceManager) GetObjectSize(ctx context.Context, bucketConfig *objectstore.Config, secret *corev1.Secret, artifactURI string) (int64, error) {
-	size, err := r.objectStore.GetObjectSize(ctx, bucketConfig, secret, artifactURI)
-	if err != nil {
-		return 0, err
-	}
-	return size, nil
 }
