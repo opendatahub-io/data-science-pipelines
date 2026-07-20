@@ -16,8 +16,11 @@
 ARG SOURCE_CODE=.
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
+ARG BUILDER_ARCH=multiarch
 
-FROM --platform=$BUILDPLATFORM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:d36470d5258da00f618b7aca9bdaab8e05134aa938bd6c42d9bd17d50ed45e76 AS builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:45bd06d392349dfdb09073514cfebcc5082db33301347b51dcae8e5516a89126 AS go-toolset-multiarch
+FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:3880436381044c6d89c2311f2a7dc8d64224668bf84b43810982b5a9ddd851d0 AS go-toolset-arm64
+FROM go-toolset-${BUILDER_ARCH} AS builder
 
 ## Build args to be used at this step
 ARG SOURCE_CODE
@@ -45,15 +48,17 @@ RUN GOTOOLCHAIN=local GO111MODULE=on CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TAR
       GOFIPS140=v1.0.0 \
       go build -tags no_openssl -o /bin/controller backend/src/crd/controller/scheduledworkflow/*.go
 
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:865c6a875328a1174ff7f17599574412edd327aa47812951b9bead902806dc53 AS ubi-minimal-multiarch
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:da229086eb7881bb653e99ace537fc03512bbbfcf14024e7e447b48015d7cc8c AS ubi-minimal-arm64
+FROM ubi-minimal-${BUILDER_ARCH} AS runtime-deps
+RUN microdnf install -y tzdata.noarch && microdnf clean all
+
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
 
 WORKDIR /bin
 
 COPY --from=builder /bin/controller /bin/controller
-RUN chmod +x /bin/controller
-
-RUN microdnf makecache && \
-     microdnf install -y tzdata.noarch
+COPY --from=runtime-deps /usr/share/zoneinfo /usr/share/zoneinfo
 
 ENV NAMESPACE=""
 ENV LOG_LEVEL=info

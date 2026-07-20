@@ -1,0 +1,56 @@
+name: Build images (arm64)
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    paths:
+      - backend/Dockerfile
+      - backend/Dockerfile.driver
+      - backend/Dockerfile.launcher
+      - backend/Dockerfile.persistenceagent
+      - backend/Dockerfile.scheduledworkflow
+      - backend/Makefile
+      - go.mod
+      - go.sum
+      - .github/workflows/build-arm64.yml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: apiserver
+            make_target: image_apiserver
+            img_tag_var: IMG_TAG_APISERVER
+          - name: driver
+            make_target: image_driver
+            img_tag_var: IMG_TAG_DRIVER
+          - name: launcher
+            make_target: image_launcher
+            img_tag_var: IMG_TAG_LAUNCHER
+          - name: persistenceagent
+            make_target: image_persistence_agent
+            img_tag_var: IMG_TAG_PERSISTENCEAGENT
+          - name: scheduledworkflow
+            make_target: image_swf
+            img_tag_var: IMG_TAG_SCHEDULEDWORKFLOW
+        target_arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Build ${{ matrix.image.name }} (${{ matrix.target_arch }})
+        run: make -C backend ${{ matrix.image.make_target }} BUILDER_ARCH=arm64 TARGETARCH=${{ matrix.target_arch }} ${{ matrix.image.img_tag_var }}=localhost/${{ matrix.image.name }}:${{ matrix.target_arch }}
+      - name: Verify ${{ matrix.target_arch }} image architecture
+        run: |
+          arch=$(docker inspect localhost/${{ matrix.image.name }}:${{ matrix.target_arch }} --format '{{.Architecture}}')
+          echo "Image architecture: $arch"
+          [ "$arch" = "${{ matrix.target_arch }}" ] || { echo "Expected ${{ matrix.target_arch }}, got $arch"; exit 1; }
