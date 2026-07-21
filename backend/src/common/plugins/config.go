@@ -15,8 +15,50 @@
 // Package plugins configs common across all plugins, across the API server and driver/launcher.
 package plugins
 
+<<<<<<< HEAD
+=======
+import (
+	"encoding/json"
+	"fmt"
+)
+
+// Auth type constants.
+const (
+	AuthTypeKubernetes = "kubernetes"
+	AuthTypeBearer     = "bearer"
+	AuthTypeBasicAuth  = "basic-auth"
+	AuthTypeNone       = "none"
+)
+
+>>>>>>> upstream/master
 // TLSConfig holds TLS settings for a plugin endpoint.
 type TLSConfig struct {
 	InsecureSkipVerify bool   `json:"insecureSkipVerify,omitempty" mapstructure:"insecureSkipVerify"`
 	CABundlePath       string `json:"caBundlePath,omitempty" mapstructure:"caBundlePath"`
 }
+<<<<<<< HEAD
+=======
+
+// CredentialSecretRef identifies the Secret keys used for MLflow auth.
+type CredentialSecretRef struct {
+	TokenKey    string `json:"tokenKey,omitempty"`
+	UsernameKey string `json:"usernameKey,omitempty"`
+	PasswordKey string `json:"passwordKey,omitempty"`
+}
+
+func (r *CredentialSecretRef) UnmarshalJSON(data []byte) error {
+	type credentialSecretRef CredentialSecretRef
+	var raw struct {
+		credentialSecretRef
+		Name string `json:"name,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Name != "" {
+		return fmt.Errorf("credentialSecretRef.name is not supported; Secret name is fixed to %q", "kfp-mlflow-credentials")
+	}
+	*r = CredentialSecretRef(raw.credentialSecretRef)
+	return nil
+}
+>>>>>>> upstream/master

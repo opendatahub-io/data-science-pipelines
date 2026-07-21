@@ -229,13 +229,23 @@ var _ = Describe("Verify Pipeline Upload Version with Tags >", Label(constants.P
 
 			uploadPipelineVersionAndVerify(helloWorldPipelineSpecFilePath, parameters, expectedPipelineVersion)
 
+<<<<<<< HEAD
 			// Verify tags via ListPipelineVersions
 			versions, err := testutil.GetSortedPipelineVersionsByCreatedAt(pipelineClient, createdPipeline.PipelineID, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(versions)).To(BeNumerically(">=", 2))
+=======
+			// Verify tags via ListPipelineVersions. The Kubernetes-native
+			// pipeline store lists versions from an informer cache that can
+			// lag the upload, so poll until both versions are listed.
+			result, pollVersions := eventuallyListPipelineVersions(&pipeline_params.PipelineServiceListPipelineVersionsParams{
+				PipelineID: createdPipeline.PipelineID,
+			})
+			Eventually(pollVersions, informerSyncTimeout, informerSyncInterval).Should(BeNumerically(">=", 2), "Expected at least 2 pipeline versions after uploading a tagged version")
+>>>>>>> upstream/master
 
 			var foundTaggedVersion bool
-			for _, v := range versions {
+			for _, v := range result.Versions {
 				if v.DisplayName == versionName {
 					Expect(v.Tags).To(Equal(tags), "Tagged version should include tags in list response")
 					foundTaggedVersion = true
@@ -491,6 +501,7 @@ func uploadPipelineAndVerify(pipelineFilePath string, pipelineName *string, pipe
 	// Validate the created pipeline spec (by API server) matches the input file
 	expectedPipelineSpec := testutil.ParseFileToSpecs(pipelineFilePath, true, nil)
 	logger.Log("Verifying that the generated pipeline spec matches the input yaml file")
+<<<<<<< HEAD
 	versions, err := testutil.GetSortedPipelineVersionsByCreatedAt(pipelineClient, createdPipeline.PipelineID, nil)
 	if len(versions) == 0 || err != nil {
 		Eventually(func() int {
@@ -499,6 +510,15 @@ func uploadPipelineAndVerify(pipelineFilePath string, pipelineName *string, pipe
 		}, 30*time.Second, 10*time.Second).Should(BeNumerically(">", 0))
 	}
 	Expect(err).NotTo(HaveOccurred())
+=======
+	result, pollVersions := eventuallyListPipelineVersions(&pipeline_params.PipelineServiceListPipelineVersionsParams{
+		PipelineID: createdPipeline.PipelineID,
+	})
+	Eventually(pollVersions, informerSyncTimeout, informerSyncInterval).Should(Equal(1),
+		"Expected to find only one pipeline version after pipeline upload")
+	versions := testutil.GetSortedPipelineVersionsByCreatedAt(pipelineClient, createdPipeline.PipelineID, nil)
+	Expect(result.Versions).To(HaveLen(1), "Expected to find only one pipeline version after pipeline upload")
+>>>>>>> upstream/master
 	Expect(versions).Should(HaveLen(1), "Expected to find only one pipeline version after pipeline upload")
 	actualPipelineSpec := versions[0].PipelineSpec.(map[string]interface{})
 	matcher.MatchPipelineSpecs(actualPipelineSpec, expectedPipelineSpec)

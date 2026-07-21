@@ -34,10 +34,12 @@ jobs:
 
   initialization-integration-tests-v1:
     runs-on: ubuntu-latest
-    needs: build
+    permissions:
+      actions: read
+      contents: read
     strategy:
       matrix:
-        k8s_version: [ "v1.31.14", "v1.35.0" ]
+        k8s_version: [ "v1.33.12", "v1.36.1" ]
     name: Initialization & Integration tests v1 - K8s ${{ matrix.k8s_version }}
     steps:
       - name: Checkout code
@@ -63,6 +65,7 @@ jobs:
         uses: ./.github/actions/deploy
         if: ${{ steps.create-kfp-cluster.outcome == 'success' }}
         with:
+<<<<<<< HEAD
           image_path: ${{ needs.build.outputs.IMAGE_PATH }}
           image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
           image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
@@ -75,6 +78,37 @@ jobs:
           DATABASE_NAME="${{ steps.deploy.outputs.database_name }}"
           echo "🔗 Forwarding database port for: $DATABASE_NAME"
           ./.github/resources/scripts/forward-port.sh "kubeflow" "$DATABASE_NAME" 3306 3306
+=======
+          image_path: images_${{ github.run_id }}
+          image_tag: latest
+          image_registry: kind-registry:5000
+          forward_port: 'false'
+
+      - name: Deploy pipeline URL test fixtures
+        id: deploy-pipeline-test-fixtures
+        if: ${{ steps.deploy.outcome == 'success' }}
+        run: |
+          kubectl kustomize --load-restrictor LoadRestrictionsNone \
+            .github/resources/manifests/pipeline-test-fixtures | kubectl apply -f -
+          kubectl set env deployment/ml-pipeline --namespace kubeflow \
+            PIPELINE_URL_VALIDATION_ENABLED=false
+          kubectl rollout status deployment/pipeline-test-fixtures \
+            --namespace kubeflow --timeout 90s
+          kubectl rollout status deployment/ml-pipeline \
+            --namespace kubeflow --timeout 90s
+        continue-on-error: true
+
+      - name: Forward API port
+        id: forward-api-port
+        if: ${{ steps.deploy-pipeline-test-fixtures.outcome == 'success' }}
+        run: ./.github/resources/scripts/forward-port.sh "kubeflow" "ml-pipeline" 8888 8888
+        continue-on-error: true
+
+      - name: Forward MySQL port
+        id: forward-mysql-port
+        if: ${{ steps.forward-api-port.outcome == 'success' }}
+        run: ./.github/resources/scripts/forward-port.sh "kubeflow" "mysql" 3306 3306
+>>>>>>> upstream/master
         continue-on-error: true
 
       - name: Initialization tests v1
@@ -92,11 +126,15 @@ jobs:
         working-directory: ./backend/test/integration
         run: go test -v ./... -args -runIntegrationTests=true -namespace=kubeflow -repoName=${{ github.repository }} -branchName=${{ github.ref_name }}
         env:
-          PULL_NUMBER: ${{ github.event.pull_request.number }}
+          KFP_TEST_FIXTURE_BASE_URL: http://pipeline-test-fixtures.kubeflow.svc.cluster.local:8080
         continue-on-error: true
 
       - name: Collect failed logs
+<<<<<<< HEAD
         if: ${{ steps.forward-db-port.outcome != 'success' || steps.integration-tests.outcome != 'success' || steps.initialization-tests.outcome != 'success' }}
+=======
+        if: ${{ steps.deploy-pipeline-test-fixtures.outcome != 'success' || steps.forward-api-port.outcome != 'success' || steps.forward-mysql-port.outcome != 'success' || steps.integration-tests.outcome != 'success' || steps.initialization-tests.outcome != 'success' }}
+>>>>>>> upstream/master
         run: |
           ./.github/resources/scripts/collect-logs.sh --ns kubeflow --output /tmp/tmp_pod_log.txt
           exit 1
