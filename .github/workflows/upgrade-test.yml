@@ -20,6 +20,7 @@ on:
       - '.github/workflows/image-builds.yml'
       - '.github/actions/create-cluster/**'
       - '.github/actions/deploy/**'
+      - '.github/actions/test-and-report/**'
       - '.github/resources/**'
       - 'backend/api/v2beta1/**'
       - 'backend/src/**'
@@ -40,13 +41,23 @@ jobs:
     uses: ./.github/workflows/image-builds.yml
 
   upgrade-test:
+<<<<<<< HEAD
     if: github.repository_owner == 'opendatahub-io'
     needs: build
+=======
+>>>>>>> upstream/master
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     strategy:
       matrix:
+<<<<<<< HEAD
         k8s_version: [ "v1.35.0" ]
         tls_enabled : [ "true" ]
+=======
+        k8s_version: [ "v1.36.1" ]
+>>>>>>> upstream/master
     name: KFP upgrade tests - K8s ${{ matrix.k8s_version }}
 
     steps:
@@ -115,6 +126,7 @@ jobs:
         if: ${{ steps.create-cluster.outcome == 'success' }}
         id: deploy
         with:
+<<<<<<< HEAD
           image_path: ${{ needs.build.outputs.IMAGE_PATH }}
           image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
           image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
@@ -159,6 +171,12 @@ jobs:
 
           echo "Re-establishing port-forward..."
           ./.github/resources/scripts/forward-port.sh "$NAMESPACE" "$DEPLOYMENT_NAME" 8888 8888
+=======
+          image_path: images_${{ github.run_id }}
+          image_tag: latest
+          image_registry: kind-registry:5000
+          forward_port: 'true'
+>>>>>>> upstream/master
 
       - name: Verify Upgrade
         uses: ./.github/actions/test-and-report
