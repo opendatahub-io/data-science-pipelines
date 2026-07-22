@@ -124,6 +124,10 @@ func (t *TaskPluginDispatcherImpl) RetrieveUserContainerEnvVars(taskInfo *TaskIn
 
 	injectVars = make(map[string]string)
 	for _, handler := range t.handlers {
+		if t.startedHandlers != nil && !t.startedHandlers[handler.Name()] {
+			glog.Infof("Skipping RetrieveUserContainerEnvVars for handler %s (OnTaskStart did not succeed)", handler.Name())
+			continue
+		}
 		vars, err := handler.RetrieveUserContainerEnvVars()
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve user container env vars for handler %s: %v", handler.Name(), err)
@@ -133,7 +137,7 @@ func (t *TaskPluginDispatcherImpl) RetrieveUserContainerEnvVars(taskInfo *TaskIn
 			if _, ok := injectVars[k]; !ok {
 				injectVars[k] = v
 			} else {
-				glog.Errorf("Key %s already present in container env vars. Key-value pair %s:%s will not be added.", k, k, v)
+				glog.Errorf("Key %s already present in container env vars. Duplicate entry from handler %s will not be added.", k, handler.Name())
 			}
 		}
 	}
@@ -143,6 +147,10 @@ func (t *TaskPluginDispatcherImpl) RetrieveUserContainerEnvVars(taskInfo *TaskIn
 // ApplyCustomProperties updates the custom properties for all registered task-level plugins.
 func (t *TaskPluginDispatcherImpl) ApplyCustomProperties(properties map[string]string) {
 	for _, handler := range t.handlers {
+		if t.startedHandlers != nil && !t.startedHandlers[handler.Name()] {
+			glog.Infof("Skipping ApplyCustomProperties for handler %s (OnTaskStart did not succeed)", handler.Name())
+			continue
+		}
 		err := handler.ApplyCustomProperties(properties)
 		if err != nil {
 			glog.Errorf("failed to apply custom properties for handler %s: %v", handler.Name(), err)
