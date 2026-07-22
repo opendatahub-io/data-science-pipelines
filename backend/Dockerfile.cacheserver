@@ -29,7 +29,7 @@ RUN GO111MODULE=on go mod download
 
 COPY . .
 
-RUN GO111MODULE=on go build -o /bin/cache_server backend/src/cache/*.go
+RUN GO111MODULE=on GOFIPS140=v1.0.0 go build -tags no_openssl -o /bin/cache_server backend/src/cache/*.go
 
 FROM alpine:3.21
 
