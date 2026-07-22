@@ -25,6 +25,7 @@ import {
 import { convertFlowElements, getTaskKeyFromNodeKey, NodeTypeNames } from './StaticFlow';
 import v2YamlTemplateString from 'src/data/test/lightweight_python_functions_v2_pipeline_rev.yaml?raw';
 import jsyaml from 'js-yaml';
+import { V2beta1RuntimeState } from 'src/apisv2beta1/run';
 
 describe('DynamicFlow', () => {
   describe('updateFlowElementsState', () => {
@@ -142,6 +143,124 @@ describe('DynamicFlow', () => {
       expect(updatedPreprocessNode.hidden).toBeUndefined();
       expect(updatedPreprocessNode.measured).toEqual({ width: 123, height: 45 });
       expect(updatedPreprocessNode.data?.state).toEqual(preprocessExecution.getLastKnownState());
+    });
+
+    it('overrides RUNNING tasks to CANCELED when run is canceled', () => {
+      const EXECUTION_ROOT = new Execution().setId(2).setLastKnownState(Execution.State.COMPLETE);
+      EXECUTION_ROOT.getCustomPropertiesMap().set(TASK_NAME_KEY, new Value().setStringValue(''));
+      const EXECUTION_PREPROCESS = new Execution()
+        .setId(3)
+        .setLastKnownState(Execution.State.COMPLETE);
+      EXECUTION_PREPROCESS.getCustomPropertiesMap()
+        .set(TASK_NAME_KEY, new Value().setStringValue('preprocess'))
+        .set(PARENT_DAG_ID_KEY, new Value().setIntValue(2));
+      const EXECUTION_TRAIN = new Execution().setId(4).setLastKnownState(Execution.State.RUNNING);
+      EXECUTION_TRAIN.getCustomPropertiesMap()
+        .set(TASK_NAME_KEY, new Value().setStringValue('train'))
+        .set(PARENT_DAG_ID_KEY, new Value().setIntValue(2));
+
+      const yamlObject = jsyaml.safeLoad(v2YamlTemplateString);
+      const pipelineSpec = PipelineSpec.fromJSON(yamlObject);
+      const graph = convertFlowElements(pipelineSpec);
+
+      const runtimeGraph = updateFlowElementsState(
+        ['root'],
+        graph,
+        [EXECUTION_ROOT, EXECUTION_PREPROCESS, EXECUTION_TRAIN],
+        [],
+        [],
+        V2beta1RuntimeState.CANCELED,
+      );
+
+      const trainNode = runtimeGraph.find((e) => e.id === 'task.train');
+      expect(trainNode?.data?.state).toEqual(Execution.State.CANCELED);
+
+      const preprocessNode = runtimeGraph.find((e) => e.id === 'task.preprocess');
+      expect(preprocessNode?.data?.state).toEqual(Execution.State.COMPLETE);
+    });
+
+    it('overrides RUNNING tasks to FAILED when run has failed', () => {
+      const EXECUTION_ROOT = new Execution().setId(2).setLastKnownState(Execution.State.COMPLETE);
+      EXECUTION_ROOT.getCustomPropertiesMap().set(TASK_NAME_KEY, new Value().setStringValue(''));
+      const EXECUTION_PREPROCESS = new Execution()
+        .setId(3)
+        .setLastKnownState(Execution.State.COMPLETE);
+      EXECUTION_PREPROCESS.getCustomPropertiesMap()
+        .set(TASK_NAME_KEY, new Value().setStringValue('preprocess'))
+        .set(PARENT_DAG_ID_KEY, new Value().setIntValue(2));
+      const EXECUTION_TRAIN = new Execution().setId(4).setLastKnownState(Execution.State.RUNNING);
+      EXECUTION_TRAIN.getCustomPropertiesMap()
+        .set(TASK_NAME_KEY, new Value().setStringValue('train'))
+        .set(PARENT_DAG_ID_KEY, new Value().setIntValue(2));
+
+      const yamlObject = jsyaml.safeLoad(v2YamlTemplateString);
+      const pipelineSpec = PipelineSpec.fromJSON(yamlObject);
+      const graph = convertFlowElements(pipelineSpec);
+
+      const runtimeGraph = updateFlowElementsState(
+        ['root'],
+        graph,
+        [EXECUTION_ROOT, EXECUTION_PREPROCESS, EXECUTION_TRAIN],
+        [],
+        [],
+        V2beta1RuntimeState.FAILED,
+      );
+
+      const trainNode = runtimeGraph.find((e) => e.id === 'task.train');
+      expect(trainNode?.data?.state).toEqual(Execution.State.FAILED);
+
+      const preprocessNode = runtimeGraph.find((e) => e.id === 'task.preprocess');
+      expect(preprocessNode?.data?.state).toEqual(Execution.State.COMPLETE);
+    });
+
+    it('overrides NEW tasks to CANCELED when run is canceled', () => {
+      const EXECUTION_ROOT = new Execution().setId(2).setLastKnownState(Execution.State.COMPLETE);
+      EXECUTION_ROOT.getCustomPropertiesMap().set(TASK_NAME_KEY, new Value().setStringValue(''));
+      const EXECUTION_TRAIN = new Execution().setId(4).setLastKnownState(Execution.State.NEW);
+      EXECUTION_TRAIN.getCustomPropertiesMap()
+        .set(TASK_NAME_KEY, new Value().setStringValue('train'))
+        .set(PARENT_DAG_ID_KEY, new Value().setIntValue(2));
+
+      const yamlObject = jsyaml.safeLoad(v2YamlTemplateString);
+      const pipelineSpec = PipelineSpec.fromJSON(yamlObject);
+      const graph = convertFlowElements(pipelineSpec);
+
+      const runtimeGraph = updateFlowElementsState(
+        ['root'],
+        graph,
+        [EXECUTION_ROOT, EXECUTION_TRAIN],
+        [],
+        [],
+        V2beta1RuntimeState.CANCELED,
+      );
+
+      const trainNode = runtimeGraph.find((e) => e.id === 'task.train');
+      expect(trainNode?.data?.state).toEqual(Execution.State.CANCELED);
+    });
+
+    it('does not override task states when run is still running', () => {
+      const EXECUTION_ROOT = new Execution().setId(2).setLastKnownState(Execution.State.RUNNING);
+      EXECUTION_ROOT.getCustomPropertiesMap().set(TASK_NAME_KEY, new Value().setStringValue(''));
+      const EXECUTION_TRAIN = new Execution().setId(4).setLastKnownState(Execution.State.RUNNING);
+      EXECUTION_TRAIN.getCustomPropertiesMap()
+        .set(TASK_NAME_KEY, new Value().setStringValue('train'))
+        .set(PARENT_DAG_ID_KEY, new Value().setIntValue(2));
+
+      const yamlObject = jsyaml.safeLoad(v2YamlTemplateString);
+      const pipelineSpec = PipelineSpec.fromJSON(yamlObject);
+      const graph = convertFlowElements(pipelineSpec);
+
+      const runtimeGraph = updateFlowElementsState(
+        ['root'],
+        graph,
+        [EXECUTION_ROOT, EXECUTION_TRAIN],
+        [],
+        [],
+        V2beta1RuntimeState.RUNNING,
+      );
+
+      const trainNode = runtimeGraph.find((e) => e.id === 'task.train');
+      expect(trainNode?.data?.state).toEqual(Execution.State.RUNNING);
     });
   });
 
