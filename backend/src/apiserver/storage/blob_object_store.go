@@ -16,7 +16,6 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"net/url"
@@ -25,6 +24,7 @@ import (
 
 	minio "github.com/minio/minio-go/v7"
 
+	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
 	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	"gocloud.dev/blob"
@@ -70,22 +70,6 @@ func (b *BlobObjectStore) DeleteFile(ctx context.Context, filePath string) error
 	return nil
 }
 
-func (b *BlobObjectStore) GetFile(ctx context.Context, filePath string) ([]byte, error) {
-	reader, err := b.bucket.NewReader(ctx, filePath, nil)
-	if err != nil {
-		return nil, util.NewInternalServerError(err, "Failed to get file %v", filePath)
-	}
-	defer reader.Close()
-
-	buf := new(bytes.Buffer)
-	_, err = buf.ReadFrom(reader)
-	if err != nil {
-		return nil, util.NewInternalServerError(err, "Failed to read file %v", filePath)
-	}
-
-	return buf.Bytes(), nil
-}
-
 // GetFileReader returns a streaming reader for safe access to large files.
 // This method streams directly from blob storage without buffering.
 func (b *BlobObjectStore) GetFileReader(ctx context.Context, filePath string) (io.ReadCloser, error) {
@@ -101,6 +85,32 @@ func (b *BlobObjectStore) GetFileReader(ctx context.Context, filePath string) (i
 	return reader, nil
 }
 
+// ReadFileLimited reads an object into memory only after applying an explicit
+// caller-provided size contract.
+func (b *BlobObjectStore) ReadFileLimited(ctx context.Context, filePath string, maxBytes int64) ([]byte, error) {
+	if maxBytes < 0 {
+		return nil, util.NewInvalidInputError("maximum file size must be non-negative")
+	}
+
+	reader, err := b.GetFileReader(ctx, filePath)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to get file reader")
+	}
+	defer reader.Close()
+
+	fileBytes, err := io.ReadAll(io.LimitReader(reader, maxBytes+1))
+	if err != nil {
+		return nil, util.NewInternalServerError(err, "Failed to read file %v", filePath)
+	}
+	if int64(len(fileBytes)) > maxBytes {
+		return nil, util.NewInvalidInputError(
+			"File %v size too large (%v bytes). Maximum supported size: %v.",
+			filePath, len(fileBytes), maxBytes,
+		)
+	}
+	return fileBytes, nil
+}
+
 func (b *BlobObjectStore) AddAsYamlFile(ctx context.Context, o interface{}, filePath string) error {
 	yamlBytes, err := yaml.Marshal(o)
 	if err != nil {
@@ -114,7 +124,7 @@ func (b *BlobObjectStore) AddAsYamlFile(ctx context.Context, o interface{}, file
 }
 
 func (b *BlobObjectStore) GetFromYamlFile(ctx context.Context, o interface{}, filePath string) error {
-	yamlBytes, err := b.GetFile(ctx, filePath)
+	yamlBytes, err := b.ReadFileLimited(ctx, filePath, int64(common.MaxFileLength))
 	if err != nil {
 		return util.Wrap(err, "Failed to read from a yaml file")
 	}
