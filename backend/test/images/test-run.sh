@@ -54,6 +54,10 @@ while [ "$#" -gt 0 ]; do
       GPU_VENDOR="${1#*=}"
       shift
       ;;
+    *)
+      echo "WARNING: Unknown argument '$1', skipping" >&2
+      exit 1
+      ;;
   esac
 done
 
