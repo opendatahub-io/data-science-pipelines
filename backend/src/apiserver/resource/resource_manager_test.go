@@ -3746,7 +3746,7 @@ func TestReportWorkflowResource_WorkflowCompleted(t *testing.T) {
 		ObjectMeta: v1.ObjectMeta{
 			Name:      run.K8SName,
 			Namespace: namespace,
-			UID:       types.UID(run.UUID),
+			UID:       testWorkflow.UID,
 			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
 		},
 		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
@@ -3789,7 +3789,7 @@ func TestReportWorkflowResource_SkipsTerminalPluginSyncWhenReportedWorkflowIsSta
 		ObjectMeta: v1.ObjectMeta{
 			Name:            run.K8SName,
 			Namespace:       namespace,
-			UID:             types.UID(run.UUID),
+			UID:             testWorkflow.UID,
 			ResourceVersion: "terminal-version",
 			Labels:          map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
 		},
@@ -3870,7 +3870,7 @@ func TestReportWorkflowResource_SkipsPersistedFinalStateLabelWhenRunRetriedDurin
 		ObjectMeta: v1.ObjectMeta{
 			Name:      run.K8SName,
 			Namespace: namespace,
-			UID:       types.UID(run.UUID),
+			UID:       testWorkflow.UID,
 			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
 		},
 		Status: v1alpha1.WorkflowStatus{
@@ -3944,7 +3944,7 @@ func TestReportWorkflow_WithMLflowOnRunEnd(t *testing.T) {
 		ObjectMeta: v1.ObjectMeta{
 			Name:      run.K8SName,
 			Namespace: "ns1",
-			UID:       types.UID(run.UUID),
+			UID:       testWorkflow.UID,
 			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
 		},
 		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
@@ -3987,7 +3987,7 @@ func TestReportWorkflowResource_WorkflowCompleted_FinalStatePersisted(t *testing
 		ObjectMeta: v1.ObjectMeta{
 			Name:      run.K8SName,
 			Namespace: "ns1",
-			UID:       types.UID(run.UUID),
+			UID:       testWorkflow.UID,
 			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID, util.LabelKeyWorkflowPersistedFinalState: "true"},
 		},
 		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
@@ -4018,19 +4018,37 @@ func TestReportWorkflowResource_WorkflowCompleted_FinalStatePersisted_DeleteFail
 	store, manager, run := initWithOneTimeRun(t)
 	manager.execClient = client.NewFakeExecClientWithBadWorkflow()
 	defer store.Close()
-	// report workflow
+	// UID validation rejects before Delete is reached because the bad client
+	// returns a non-NotFound error on Get.
 	workflow := util.NewWorkflow(&v1alpha1.Workflow{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      run.K8SName,
 			Namespace: "ns1",
-			UID:       types.UID(run.UUID),
+			UID:       testWorkflow.UID,
 			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID, util.LabelKeyWorkflowPersistedFinalState: "true"},
 		},
 		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
 	})
 	_, err := manager.ReportWorkflowResource(context.Background(), workflow)
 	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "failed to delete workflow")
+	assert.Contains(t, err.Error(), "Failed to report workflow")
+}
+
+func TestReportWorkflowResource_UIDMismatch_Rejected(t *testing.T) {
+	store, manager, run := initWithOneTimeRun(t)
+	defer store.Close()
+	workflow := util.NewWorkflow(&v1alpha1.Workflow{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      run.K8SName,
+			Namespace: "ns1",
+			UID:       "forged-uid",
+			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
+		},
+		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
+	})
+	_, err := manager.ReportWorkflowResource(context.Background(), workflow)
+	require.NotNil(t, err)
+	assert.Contains(t, err.Error(), "Failed to report workflow")
 }
 
 func TestReportScheduledWorkflowResource_Success(t *testing.T) {

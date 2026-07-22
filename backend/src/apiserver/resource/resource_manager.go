@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
@@ -1076,12 +1077,6 @@ func (r *ResourceManager) RetryRun(ctx context.Context, runId string) error {
 		return util.Wrapf(err, "Failed to retry run %s due to error fetching its namespace", runId)
 	}
 
-	if namespace == "" {
-		namespace = common.GetPodNamespace()
-	}
-	if util.IsV1PipelinesBlocked(namespace) && run.PipelineSpecManifest == "" && run.WorkflowSpecManifest != "" {
-		return util.NewInvalidInputError("Cannot retry run %s: namespace %s is not allowed to run v1 pipelines. Please migrate to using KFP V2 pipelines.", runId, namespace)
-	}
 	if run.RunDetails.WorkflowRuntimeManifest == "" {
 		return util.NewBadRequestError(util.NewInvalidInputError("Workflow manifest cannot be empty"), "Failed to retry run %s due to error fetching workflow manifest", runId)
 	}
@@ -1519,6 +1514,20 @@ func (r *ResourceManager) CreateOrUpdateTasks(t []*model.Task, runID string) ([]
 	return tasks, nil
 }
 
+func (r *ResourceManager) validateReportedWorkflowUID(ctx context.Context, execSpec util.ExecutionSpec) error {
+	clusterWorkflow, err := r.getWorkflowClient(execSpec.ExecutionNamespace()).Get(ctx, execSpec.ExecutionName(), v1.GetOptions{})
+	if err != nil {
+		if util.IsNotFound(err) {
+			return nil
+		}
+		return util.NewInternalServerError(err, "Failed to report workflow")
+	}
+	if clusterWorkflow.ExecutionUID() != execSpec.ExecutionUID() {
+		return util.NewInvalidInputError("Failed to report workflow")
+	}
+	return nil
+}
+
 // Reports a workflow CR.
 // This is called to update runs.
 func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec util.ExecutionSpec) (util.ExecutionSpec, error) {
@@ -1533,6 +1542,10 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 	// TODO(gkcalat): consider adding namespace validation to catch mismatch in the namespaces and release resources.
 	if len(execSpec.ExecutionNamespace()) == 0 {
 		return nil, util.NewInvalidInputError("Failed to report a workflow. Namespace is empty")
+	}
+
+	if err := r.validateReportedWorkflowUID(ctx, execSpec); err != nil {
+		return nil, err
 	}
 
 	if execSpec.PersistedFinalState() {
