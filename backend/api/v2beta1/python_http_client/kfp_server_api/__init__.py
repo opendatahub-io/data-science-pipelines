@@ -40,11 +40,17 @@ from kfp_server_api.exceptions import ApiException
 # import models into sdk package
 from kfp_server_api.models.authorize_request_resources import AuthorizeRequestResources
 from kfp_server_api.models.authorize_request_verb import AuthorizeRequestVerb
+<<<<<<< HEAD
 from kfp_server_api.models.get_artifact_request_artifact_view import GetArtifactRequestArtifactView
 from kfp_server_api.models.google_rpc_status import GoogleRpcStatus
 from kfp_server_api.models.inline_object import InlineObject
 from kfp_server_api.models.inline_object1 import InlineObject1
 from kfp_server_api.models.list_artifact_request_field import ListArtifactRequestField
+=======
+from kfp_server_api.models.google_rpc_status import GoogleRpcStatus
+from kfp_server_api.models.inline_object import InlineObject
+from kfp_server_api.models.inline_object1 import InlineObject1
+>>>>>>> upstream/master
 from kfp_server_api.models.metadata_value_render_type import MetadataValueRenderType
 from kfp_server_api.models.pipeline_task_detail_child_task import PipelineTaskDetailChildTask
 from kfp_server_api.models.predicate_int_values import PredicateIntValues
@@ -53,7 +59,10 @@ from kfp_server_api.models.predicate_string_values import PredicateStringValues
 from kfp_server_api.models.protobuf_any import ProtobufAny
 from kfp_server_api.models.protobuf_null_value import ProtobufNullValue
 from kfp_server_api.models.recurring_run_mode import RecurringRunMode
+<<<<<<< HEAD
 from kfp_server_api.models.v2beta1_artifact import V2beta1Artifact
+=======
+>>>>>>> upstream/master
 from kfp_server_api.models.v2beta1_artifact_list import V2beta1ArtifactList
 from kfp_server_api.models.v2beta1_create_pipeline_and_version_request import V2beta1CreatePipelineAndVersionRequest
 from kfp_server_api.models.v2beta1_cron_schedule import V2beta1CronSchedule
