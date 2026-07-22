@@ -32,6 +32,7 @@ import (
 	mlflowclient "github.com/kubeflow/pipelines/backend/src/common/plugins/mlflow"
 	"github.com/kubeflow/pipelines/backend/test/config"
 	"github.com/kubeflow/pipelines/backend/test/logger"
+	"github.com/kubeflow/pipelines/backend/test/testutil"
 	apitests "github.com/kubeflow/pipelines/backend/test/v2/api"
 
 	"github.com/onsi/ginkgo/v2"
@@ -39,16 +40,27 @@ import (
 )
 
 const (
+<<<<<<< HEAD
 	mlflowEndpointEnv      = "MLFLOW_TRACKING_URI"
 	mlflowCABundlePathEnv  = "MLFLOW_CA_BUNDLE_PATH"
 	mlflowBearerTokenEnv   = "MLFLOW_BEARER_TOKEN"
 	mlflowWorkspaceEnv     = "MLFLOW_WORKSPACE"
 	mlflowPluginKey        = "MLflow"
+=======
+	mlflowEndpointEnv    = "MLFLOW_TRACKING_URI"
+	mlflowInsecureTLSEnv = "MLFLOW_TRACKING_INSECURE_TLS"
+	mlflowBearerTokenEnv = "MLFLOW_BEARER_TOKEN"
+	mlflowUsernameEnv    = "MLFLOW_TRACKING_USERNAME"
+	mlflowPasswordEnv    = "MLFLOW_TRACKING_PASSWORD"
+	mlflowWorkspaceEnv   = "MLFLOW_WORKSPACE"
+	mlflowPluginKey      = "mlflow"
+>>>>>>> upstream/master
 )
 
 func getMLflowClient(endpoint string) (*mlflowclient.Client, error) {
 	workspace := os.Getenv(mlflowWorkspaceEnv)
 	bearerToken := os.Getenv(mlflowBearerTokenEnv)
+<<<<<<< HEAD
 
 	tlsConfig := &tls.Config{}
 	if caBundlePath := os.Getenv(mlflowCABundlePathEnv); caBundlePath != "" {
@@ -67,6 +79,10 @@ func getMLflowClient(endpoint string) (*mlflowclient.Client, error) {
 		logger.Log("MLflow client initialized with CA bundle from %s", caBundlePath)
 	}
 
+=======
+	username := os.Getenv(mlflowUsernameEnv)
+	password := os.Getenv(mlflowPasswordEnv)
+>>>>>>> upstream/master
 	httpClient := &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: &http.Transport{TLSClientConfig: tlsConfig},
@@ -75,6 +91,8 @@ func getMLflowClient(endpoint string) (*mlflowclient.Client, error) {
 		Endpoint:          endpoint,
 		HTTPClient:        httpClient,
 		BearerToken:       bearerToken,
+		Username:          username,
+		Password:          password,
 		WorkspacesEnabled: workspace != "",
 		Workspace:         workspace,
 	})
@@ -83,6 +101,9 @@ func getMLflowClient(endpoint string) (*mlflowclient.Client, error) {
 	}
 	if bearerToken != "" {
 		logger.Log("MLflow client initialized with bearer token auth")
+	}
+	if username != "" || password != "" {
+		logger.Log("MLflow client initialized with basic auth")
 	}
 	if workspace != "" {
 		logger.Log("MLflow client initialized with workspace header: %s", workspace)
@@ -95,10 +116,59 @@ func RetryPipelineRun(runClient *apiserver.RunClient, runID string) {
 	ginkgo.GinkgoHelper()
 	retryParams := runparams.NewRunServiceRetryRunParams()
 	retryParams.RunID = runID
-	err := runClient.Retry(retryParams)
+	var err error
+	for attempt := 1; attempt <= 3; attempt++ {
+		err = runClient.Retry(retryParams)
+		if err == nil {
+			break
+		}
+		if retryRunAlreadyStarted(runClient, runID) {
+			err = nil
+			break
+		}
+		if !isRetriableRetryRunError(err) || attempt == 3 {
+			break
+		}
+		// ponytail: RetryRun can fail transiently either from Argo update/create
+		// races or short localhost API disconnects. Keep this local to the test
+		// helper; if it grows beyond a short bounded retry, move it server-side.
+		logger.Log("Transient RetryRun error for run %s (attempt %d/3): %v", runID, attempt, err)
+		time.Sleep(2 * time.Second)
+	}
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(),
 		fmt.Sprintf("Failed to retry run %s", runID))
 	logger.Log("Retried Pipeline Run, runId=%s", runID)
+}
+
+func retryRunAlreadyStarted(runClient *apiserver.RunClient, runID string) bool {
+	for attempt := 1; attempt <= 3; attempt++ {
+		run, err := runClient.Get(&runparams.RunServiceGetRunParams{RunID: runID})
+		if err == nil {
+			if run.State != nil && *run.State == run_model.V2beta1RuntimeStateRUNNING {
+				logger.Log("RetryRun already moved run %s to RUNNING; treating transport error as success", runID)
+				return true
+			}
+			return false
+		}
+		if !testutil.IsRetriableLocalAPIError(err) || attempt == 3 {
+			return false
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return false
+}
+
+func isRetriableRetryRunError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if testutil.IsRetriableLocalAPIError(err) {
+		return true
+	}
+	message := err.Error()
+	return strings.Contains(message, "Operation cannot be fulfilled on workflows.argoproj.io") ||
+		strings.Contains(message, "the object has been modified") ||
+		strings.Contains(message, "already exists, the server was not able to generate a unique name")
 }
 
 // SkipIfMLflowDisabled skips the current test if the mlflowEnabled flag is false.
@@ -338,7 +408,11 @@ func VerifyMLflowRunStatus(endpoint, runID, experimentID, expectedStatus string)
 func WaitForMLflowRunStatus(endpoint, runID, experimentID, expectedStatus string, timeout *time.Duration) error {
 	ginkgo.GinkgoHelper()
 	logger.Log("Waiting for MLflow run %s to reach status %s", runID, expectedStatus)
+<<<<<<< HEAD
 	maxTimeToWait := time.Duration(120)
+=======
+	maxTimeToWait := time.Duration(60)
+>>>>>>> upstream/master
 	pollTime := time.Duration(5)
 	if timeout != nil {
 		maxTimeToWait = *timeout
@@ -360,6 +434,62 @@ func WaitForMLflowRunStatus(endpoint, runID, experimentID, expectedStatus string
 			logger.Log("MLflow run %s is in %s status, waiting for %s...", runID, mlflowRun.Info.Status, expectedStatus)
 		} else {
 			logger.Log("MLflow run %s status check failed, retrying: %v", runID, queryErr)
+		}
+		<-ticker.C
+	}
+}
+
+// WaitForAllMLflowRunsInStatus polls until every MLflow run in the experiment
+// reaches expectedStatus or timeout expires. Runs whose IDs appear in
+// excludeRunIDs are skipped.
+func WaitForAllMLflowRunsInStatus(endpoint, experimentID, expectedStatus string, excludeRunIDs []string, timeout *time.Duration) error {
+	ginkgo.GinkgoHelper()
+	logger.Log("Waiting for all MLflow runs in experiment %s to reach status %s", experimentID, expectedStatus)
+	maxTimeToWait := time.Duration(60)
+	pollTime := time.Duration(5)
+	if timeout != nil {
+		maxTimeToWait = *timeout
+	}
+	exclude := make(map[string]bool, len(excludeRunIDs))
+	for _, id := range excludeRunIDs {
+		exclude[id] = true
+	}
+	deadline := time.Now().Add(maxTimeToWait * time.Second)
+	ticker := time.NewTicker(pollTime * time.Second)
+	defer ticker.Stop()
+	for {
+		runs, err := QueryMLflowRuns(endpoint, experimentID)
+		if err != nil {
+			if time.Now().After(deadline) {
+				return fmt.Errorf("failed to query MLflow runs in experiment %s: %w", experimentID, err)
+			}
+			logger.Log("Failed to query MLflow runs, retrying: %v", err)
+			<-ticker.C
+			continue
+		}
+		allReady := true
+		for _, run := range runs {
+			if exclude[run.Info.RunID] {
+				continue
+			}
+			if run.Info.Status != expectedStatus {
+				allReady = false
+				logger.Log("MLflow run %s is in %s status, waiting for %s...", run.Info.RunID, run.Info.Status, expectedStatus)
+				break
+			}
+		}
+		if allReady {
+			logger.Log("All MLflow runs in experiment %s reached status %s", experimentID, expectedStatus)
+			return nil
+		}
+		if time.Now().After(deadline) {
+			var notReady []string
+			for _, run := range runs {
+				if !exclude[run.Info.RunID] && run.Info.Status != expectedStatus {
+					notReady = append(notReady, fmt.Sprintf("%s=%s", run.Info.RunID, run.Info.Status))
+				}
+			}
+			return fmt.Errorf("timeout waiting for all MLflow runs in experiment %s to reach %s; not ready: %v", experimentID, expectedStatus, notReady)
 		}
 		<-ticker.C
 	}

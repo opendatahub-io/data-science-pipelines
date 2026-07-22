@@ -68,23 +68,25 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        k8s_version: [ "v1.35.0" ]
+        k8s_version: [ "v1.36.1" ]
         cache_enabled: [ "true", "false" ]
+<<<<<<< HEAD
         proxy: [ "false" ]
         argo_version: [ "v3.7.3", "v3.5.14", "v4.0.4" ]
+=======
+        proxy: [ "true", "false" ]
+        argo_version: [ "v3.7.14", "v4.0.5" ]
+>>>>>>> upstream/master
         pipeline_store: [ "database" ]
         pod_to_pod_tls_enabled: [ "true" ]
         include:
-          - k8s_version: "v1.31.14"
+          - k8s_version: "v1.33.12"
             cache_enabled: "true"
-            argo_version: "v3.7.3"
-          - k8s_version: "v1.31.14"
+            argo_version: "v3.7.14"
+          - k8s_version: "v1.33.12"
             cache_enabled: "true"
-            argo_version: "v3.5.14"
-          - k8s_version: "v1.31.14"
-            cache_enabled: "true"
-            argo_version: "v4.0.4"
-          - k8s_version: "v1.35.0"
+            argo_version: "v4.0.5"
+          - k8s_version: "v1.36.1"
             cache_enabled: "true"
             pod_to_pod_tls_enabled: "true"
           - k8s_version: "v1.29.2"
@@ -165,6 +167,8 @@ jobs:
         uses: ./.github/actions/test-and-report
         if: ${{ steps.configure.outcome == 'success' }}
         id: test-run
+        env:
+          ARGO_COMPATIBILITY_TESTS: ${{ matrix.argo_version == 'v4.0.5' && matrix.k8s_version == 'v1.36.1' && matrix.cache_enabled == 'true' && matrix.proxy == 'false' && matrix.pod_to_pod_tls_enabled == 'false' }}
         with:
           pipeline_store: ${{ matrix.pipeline_store }}
           cache_enabled: ${{ matrix.cache_enabled }}
@@ -188,9 +192,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        k8s_version: [ "v1.35.0", "v1.31.14" ]
+        k8s_version: [ "v1.36.1", "v1.33.12" ]
         cache_enabled: [ "true" ]
         uploadPipelinesWithKubernetesClient: [ "true", "false" ]
+<<<<<<< HEAD
         pipeline_store: [ "kubernetes" ]
         pod_to_pod_tls_enabled: [ "true" ]
         include:
@@ -199,6 +204,10 @@ jobs:
             pipeline_store: "kubernetes"
             pod_to_pod_tls_enabled: "false"
             uploadPipelinesWithKubernetesClient: "false"
+=======
+        argo_version: [ "v3.7.14", "v4.0.5" ]
+        pipeline_store: [ "kubernetes" ]
+>>>>>>> upstream/master
       fail-fast: false # So that failure in 1 type of parameterized job does not cause other jobs to terminate prematurely
     name: KFP API Server tests K8s Native API - K8sVersion=${{ matrix.k8s_version }} podToPodTlsEnabled=${{ matrix.pod_to_pod_tls_enabled }} cacheEnabled=${{ matrix.cache_enabled }} argoVersion=${{ matrix.argo_version }} uploadPipelinesWithKubernetesClient=${{ matrix.uploadPipelinesWithKubernetesClient }}
 
@@ -255,7 +264,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        k8s_version: [ "v1.35.0"]
+        k8s_version: [ "v1.36.1"]
         cache_enabled: [ "true", "false" ]
         multi_user: [ "true" ]
       fail-fast: false # So that failure in 1 type of parameterized job does not cause other jobs to terminate prematurely
