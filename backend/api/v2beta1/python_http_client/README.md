@@ -145,11 +145,17 @@ Class | Method | HTTP request | Description
 
  - [AuthorizeRequestResources](docs/AuthorizeRequestResources.md)
  - [AuthorizeRequestVerb](docs/AuthorizeRequestVerb.md)
+<<<<<<< HEAD
  - [GetArtifactRequestArtifactView](docs/GetArtifactRequestArtifactView.md)
  - [GoogleRpcStatus](docs/GoogleRpcStatus.md)
  - [InlineObject](docs/InlineObject.md)
  - [InlineObject1](docs/InlineObject1.md)
  - [ListArtifactRequestField](docs/ListArtifactRequestField.md)
+=======
+ - [GoogleRpcStatus](docs/GoogleRpcStatus.md)
+ - [InlineObject](docs/InlineObject.md)
+ - [InlineObject1](docs/InlineObject1.md)
+>>>>>>> upstream/master
  - [MetadataValueRenderType](docs/MetadataValueRenderType.md)
  - [PipelineTaskDetailChildTask](docs/PipelineTaskDetailChildTask.md)
  - [PredicateIntValues](docs/PredicateIntValues.md)
@@ -158,7 +164,10 @@ Class | Method | HTTP request | Description
  - [ProtobufAny](docs/ProtobufAny.md)
  - [ProtobufNullValue](docs/ProtobufNullValue.md)
  - [RecurringRunMode](docs/RecurringRunMode.md)
+<<<<<<< HEAD
  - [V2beta1Artifact](docs/V2beta1Artifact.md)
+=======
+>>>>>>> upstream/master
  - [V2beta1ArtifactList](docs/V2beta1ArtifactList.md)
  - [V2beta1CreatePipelineAndVersionRequest](docs/V2beta1CreatePipelineAndVersionRequest.md)
  - [V2beta1CronSchedule](docs/V2beta1CronSchedule.md)

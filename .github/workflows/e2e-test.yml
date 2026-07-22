@@ -71,14 +71,26 @@ jobs:
       matrix:
         k8s_version: ["v1.35.0"]
         cache_enabled: ["true", "false"]
+<<<<<<< HEAD
         deploy_external_argo: [ "false" ]
         storage: [ "seaweedfs" ]
+=======
+        argo_version: [ "v3.7.14", "v4.0.5" ]
+>>>>>>> upstream/master
         proxy: [ "false" ]
         deploy_pypi_server: [ "false" ]
         test_label: [ "E2ECritical", "E2EEssential", "E2EParallelNested" ]
         pod_to_pod_tls_enabled: [ "true" ]
         include:
+<<<<<<< HEAD
           - k8s_version: "v1.31.0"
+=======
+          - k8s_version: "v1.31.14"
+            cache_enabled: "false"
+            argo_version: "v3.7.14"
+            test_label: "E2ECritical"
+          - k8s_version: "v1.35.0"
+>>>>>>> upstream/master
             cache_enabled: "false"
             proxy: "true"
             test_label: "E2EProxy"
@@ -288,6 +300,13 @@ jobs:
         run: |
           ./test/artifact-proxy/test-artifact-proxy.sh "$USER_NAMESPACE"
 
+      - name: Test namespace isolation (SeaweedFS multi-tenancy)
+        id: test-namespace-isolation
+        if: ${{ steps.deploy.outcome == 'success' }}
+        shell: bash
+        run: |
+          bash test/seaweedfs/namespace_isolation_test.sh
+
       - name: Run Tests
         uses: ./.github/actions/test-and-report
         if: ${{ steps.configure.outcome == 'success' }}
@@ -356,7 +375,11 @@ jobs:
 
       - name: Deploy MLflow
         id: deploy-mlflow        
+<<<<<<< HEAD
         uses: opendatahub-io/mlflow-operator/.github/actions/deploy@ec59b7c996ef4d14c448254132e21bd85fd1c28f
+=======
+        uses: opendatahub-io/mlflow-operator/.github/actions/deploy@b55bcb6aa528ccecf8904745bb0218350b1ff453
+>>>>>>> upstream/master
         if: ${{ steps.create-cluster.outcome == 'success' }}
         with:
           namespace: 'opendatahub'

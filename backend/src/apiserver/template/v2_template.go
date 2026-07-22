@@ -150,6 +150,7 @@ func (t *V2Spec) ScheduledWorkflow(modelJob *model.Job, ownerReferences []metav1
 			DefaultRunAsUser:     t.templateOptions.DefaultRunAsUser,
 			DefaultRunAsGroup:    t.templateOptions.DefaultRunAsGroup,
 			DefaultRunAsNonRoot:  t.templateOptions.DefaultRunAsNonRoot,
+			DefaultHostUsers:     t.templateOptions.DefaultHostUsers,
 		}
 		obj, err = argocompiler.Compile(job, kubernetesSpec, opts)
 	}
@@ -392,6 +393,7 @@ func (t *V2Spec) RunWorkflow(modelRun *model.Run, options RunWorkflowOptions) (u
 			DefaultRunAsUser:     t.templateOptions.DefaultRunAsUser,
 			DefaultRunAsGroup:    t.templateOptions.DefaultRunAsGroup,
 			DefaultRunAsNonRoot:  t.templateOptions.DefaultRunAsNonRoot,
+			DefaultHostUsers:     t.templateOptions.DefaultHostUsers,
 		}
 		obj, err = argocompiler.Compile(job, kubernetesSpec, opts)
 	}
