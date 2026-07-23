@@ -63,8 +63,8 @@ RUN case "${TARGETARCH}" in \
       go build -tags no_openssl -o /bin/apiserver ./backend/src/apiserver/
 
 # 2. Compile preloaded pipeline samples
-FROM registry.access.redhat.com/ubi9/python-311@sha256:7b6cb58d3ff034df7b300800bd89a469d9bd2f739d43250d76b9c9e805307ab5 AS python-311-multiarch
-FROM registry.access.redhat.com/ubi9/python-311@sha256:c7622eed60c05b1f75a0d2f71b265148c2e07c8a53a7a4bc6ebdd7fbb2168da3 AS python-311-arm64
+FROM registry.access.redhat.com/ubi9/python-311@sha256:a0bdb55576fc5b8d6704279307817828ef027e1065533ceba133fe9516003a6c AS python-311-multiarch
+FROM registry.access.redhat.com/ubi9/python-311@sha256:a0bdb55576fc5b8d6704279307817828ef027e1065533ceba133fe9516003a6c AS python-311-arm64
 FROM python-311-${BUILDER_ARCH} AS compiler
 
 ARG TARGETOS TARGETARCH
