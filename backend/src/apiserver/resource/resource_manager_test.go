@@ -69,7 +69,7 @@ const v1AllowedNamespaces = "V1_ALLOWED_NAMESPACES"
 
 func initEnvVars() {
 	viper.Set(common.PodNamespace, "ns1")
-	viper.Set(v1AllowedNamespaces, "ns1")
+	viper.Set(v1AllowedNamespaces, "ns1,kubeflow,user,user1")
 	proxy.InitializeConfigWithEmptyForTests()
 }
 
@@ -487,6 +487,7 @@ func initWithOneTimeFailedRunOffloaded(t *testing.T) (*FakeClientManager, *Resou
 
 // Tests CreatePipeline and CreatePipelineVersion
 func TestCreatePipeline(t *testing.T) {
+	initEnvVars()
 	tt := []struct {
 		msg            string
 		name           string // optional
@@ -813,6 +814,7 @@ func TestCreatePipelineOrVersion_V2PipelineName(t *testing.T) {
 }
 
 func TestResourceManager_CreatePipelineAndPipelineVersion(t *testing.T) {
+	initEnvVars()
 	tests := []struct {
 		name         string
 		p            *model.Pipeline
@@ -965,6 +967,82 @@ func TestResourceManager_CreatePipelineAndPipelineVersion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreatePipelineAndPipelineVersion_V1Blocked(t *testing.T) {
+	viper.Set(util.BlockV1Pipelines, "true")
+	viper.Set(v1AllowedNamespaces, "ns1")
+	viper.Set(common.PodNamespace, "ns1")
+	defer func() {
+		viper.Set(util.BlockV1Pipelines, nil)
+		viper.Set(v1AllowedNamespaces, nil)
+		viper.Set(common.PodNamespace, nil)
+	}()
+
+	store := NewFakeClientManagerOrFatalV2()
+	defer store.Close()
+	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
+
+	_, _, err := manager.CreatePipelineAndPipelineVersion(
+		&model.Pipeline{Name: "v1-pipeline", Namespace: "blocked-ns"},
+		&model.PipelineVersion{
+			Name:         "v1-version",
+			PipelineSpec: complexPipeline,
+		},
+	)
+	require.NotNil(t, err)
+	assert.Contains(t, err.Error(), "V1 pipeline specs are not allowed")
+}
+
+func TestCreatePipelineAndPipelineVersion_V1Blocked_PodNamespaceFallback(t *testing.T) {
+	viper.Set(util.BlockV1Pipelines, "true")
+	viper.Set(v1AllowedNamespaces, "ns1")
+	viper.Set(common.PodNamespace, "other-ns")
+	defer func() {
+		viper.Set(util.BlockV1Pipelines, nil)
+		viper.Set(v1AllowedNamespaces, nil)
+		viper.Set(common.PodNamespace, nil)
+	}()
+
+	store := NewFakeClientManagerOrFatalV2()
+	defer store.Close()
+	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
+
+	_, _, err := manager.CreatePipelineAndPipelineVersion(
+		&model.Pipeline{Name: "v1-pipeline"},
+		&model.PipelineVersion{
+			Name:         "v1-version",
+			PipelineSpec: complexPipeline,
+		},
+	)
+	require.NotNil(t, err)
+	assert.Contains(t, err.Error(), "V1 pipeline specs are not allowed")
+}
+
+func TestCreatePipelineVersion_V1Blocked(t *testing.T) {
+	viper.Set(util.BlockV1Pipelines, "true")
+	viper.Set(v1AllowedNamespaces, "ns1")
+	viper.Set(common.PodNamespace, "ns1")
+	defer func() {
+		viper.Set(util.BlockV1Pipelines, nil)
+		viper.Set(v1AllowedNamespaces, nil)
+		viper.Set(common.PodNamespace, nil)
+	}()
+
+	store := NewFakeClientManagerOrFatalV2()
+	defer store.Close()
+	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
+
+	p, err := manager.CreatePipeline(&model.Pipeline{Name: "test-pipeline", Namespace: "blocked-ns"})
+	require.Nil(t, err)
+
+	_, err = manager.CreatePipelineVersion(&model.PipelineVersion{
+		Name:         "v1-version",
+		PipelineId:   p.UUID,
+		PipelineSpec: complexPipeline,
+	})
+	require.NotNil(t, err)
+	assert.Contains(t, err.Error(), "V1 pipeline specs are not allowed")
 }
 
 // Tests GetPipelineByNameAndNamespace
@@ -1227,6 +1305,7 @@ func TestGetPipelineTemplate_PipelineMetadataNotFound(t *testing.T) {
 
 // Tests GetPipelineLatestTemplate (pipelineSpec NotFound)
 func TestGetPipelineTemplate_PipelineFileNotFound(t *testing.T) {
+	initEnvVars()
 	store := NewFakeClientManagerOrFatal(util.NewFakeTimeForEpoch())
 	defer store.Close()
 	pipeline, _ := store.PipelineStore().CreatePipeline(createPipelineV1("pipeline1"))
@@ -1238,6 +1317,7 @@ func TestGetPipelineTemplate_PipelineFileNotFound(t *testing.T) {
 
 // Tests ListPipelines
 func TestListPipelines(t *testing.T) {
+	initEnvVars()
 	store := NewFakeClientManagerOrFatal(util.NewFakeTimeForEpoch())
 	defer store.Close()
 	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
@@ -1299,6 +1379,7 @@ func TestListPipelines(t *testing.T) {
 
 // Tests ListPipelinesV1
 func TestListPipelinesV1(t *testing.T) {
+	initEnvVars()
 	store := NewFakeClientManagerOrFatal(util.NewFakeTimeForEpoch())
 	defer store.Close()
 	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
