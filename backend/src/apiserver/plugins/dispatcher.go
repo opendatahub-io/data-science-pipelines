@@ -39,8 +39,11 @@ type RunPluginDispatcher interface {
 
 	// OnBeforeRunCreation is called before the workflow is created.
 	// The dispatcher reads run.PluginsInput and may write run.PluginsOutput.
-	// Returns an error only for validation failures that should block
-	// run creation.
+	// Plugin handler failures are logged; when the handler returns
+	// a non-nil PluginOutput it is persisted as FailedPluginOutput.
+	// Handler failures do not block run creation.
+	// Returns an error only for dispatcher-level validation failures
+	// (nil arguments).
 	OnBeforeRunCreation(ctx context.Context, run *PendingRun, executionSpec util.ExecutionSpec) error
 
 	// OnRunEnd is called when a run reaches a terminal state. Returns
@@ -105,10 +108,8 @@ func (d *RunPluginDispatcherImpl) OnBeforeRunCreation(ctx context.Context, run *
 		return fmt.Errorf("dispatcher, run, and executionSpec must be non-nil")
 	}
 
-	var errs []error
 	for _, handler := range d.handlers {
-
-		err := func(ctx context.Context, run *PendingRun, executionSpec util.ExecutionSpec, handler RunPluginHandler) error {
+		func(ctx context.Context, run *PendingRun, executionSpec util.ExecutionSpec, handler RunPluginHandler) {
 			// Limit plugin pre-run calls to a short timeout budget while still
 			// honoring parent request cancellation.
 			pluginCtx, cancel := context.WithTimeout(ctx, preRunPluginTimeout)
@@ -117,36 +118,29 @@ func (d *RunPluginDispatcherImpl) OnBeforeRunCreation(ctx context.Context, run *
 			runPluginCfg, err := ResolvePluginRequestConfig(pluginCtx, d.kubeClients.GetClientSet(), handler, run.Namespace)
 			if err != nil {
 				glog.Errorf("failed to resolve plugin config for %s on run %q (KFP run creation will continue): %v", handler.Name(), run.RunID, err)
-				return nil
+				return
 			}
 			pluginOutput, pluginRuntimeEnv, pluginErr := handler.OnBeforeRunCreation(pluginCtx, run, runPluginCfg)
 			if pluginErr != nil {
-				return pluginErr
+				glog.Errorf("plugin %s OnBeforeRunCreation failed for run %q (KFP run creation will continue): %v", handler.Name(), run.RunID, pluginErr)
+				if pluginOutput != nil {
+					if err := SetPendingRunPluginOutput(run, handler.Name(), pluginOutput); err != nil {
+						glog.Warningf("Failed to persist %s failed plugin output for run %q: %v", handler.Name(), run.RunID, err)
+					}
+				}
+				return
 			}
-			if pluginOutput == nil {
-				return nil
-			}
-			if err := SetPendingRunPluginOutput(run, handler.Name(), pluginOutput); err != nil {
-				glog.Warningf("Failed to persist %s plugin output for run %q: %v", handler.Name(), run.RunID, err)
+			if pluginOutput != nil {
+				if err := SetPendingRunPluginOutput(run, handler.Name(), pluginOutput); err != nil {
+					glog.Warningf("Failed to persist %s plugin output for run %q: %v", handler.Name(), run.RunID, err)
+				}
 			}
 			if len(pluginRuntimeEnv) != 0 {
 				if err := InjectPluginRuntimeEnv(executionSpec, pluginRuntimeEnv); err != nil {
 					glog.Warningf("Failed to inject %s runtime env for run %q: %v", handler.Name(), run.RunID, err)
 				}
 			}
-			return nil
 		}(ctx, run, executionSpec, handler)
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		var errMsgs []string
-		for _, e := range errs {
-			errMsgs = append(errMsgs, e.Error())
-		}
-		return fmt.Errorf("OnBeforeRunCreation encountered %d error(s): %s", len(errs), strings.Join(errMsgs, "; "))
 	}
 	return nil
 }
