@@ -233,8 +233,41 @@ func TestOnBeforeRunCreation_HandlerFailure_ContinuesExecution(t *testing.T) {
 
 	err := dispatcher.OnBeforeRunCreation(context.Background(), pendingRun, newFakeExecutionSpec())
 
-	require.Error(t, err)
-	assert.Equal(t, "OnBeforeRunCreation encountered 1 error(s): plugin startup failed", err.Error())
+	require.NoError(t, err, "handler failure should not block run creation")
+}
+
+func TestOnBeforeRunCreation_HandlerFailure_PersistsFailedOutput(t *testing.T) {
+	failedOutput := &apiv2beta1.PluginOutput{
+		State:        apiv2beta1.PluginState_PLUGIN_FAILED,
+		StateMessage: "MLflow unreachable",
+	}
+	handler := &fakeHandler{
+		name:         "FakePlugin",
+		pluginOutput: failedOutput,
+		startErr:     fmt.Errorf("plugin startup failed"),
+	}
+	dispatcher, _ := newFakeDispatcher([]RunPluginHandler{handler})
+
+	run := &PendingRun{
+		RunID:     "run-456",
+		Namespace: "test-ns",
+	}
+	err := dispatcher.OnBeforeRunCreation(context.Background(), run, newFakeExecutionSpec())
+
+	require.NoError(t, err, "handler failure should not block run creation")
+	assert.NotNil(t, run.PluginsOutput, "failed plugin output should be persisted for observability")
+}
+
+func TestOnBeforeRunCreation_HandlerFailure_NilOutput_ContinuesExecution(t *testing.T) {
+	handler := &fakeHandler{
+		name:     "FakePlugin",
+		startErr: fmt.Errorf("plugin startup failed"),
+	}
+	dispatcher, _ := newFakeDispatcher([]RunPluginHandler{handler})
+
+	err := dispatcher.OnBeforeRunCreation(context.Background(), pendingRun, newFakeExecutionSpec())
+
+	require.NoError(t, err, "handler failure with nil output should not block run creation")
 }
 
 func TestOnRunEnd_HandlerFailure_ReturnsTrueWithoutParentRun(t *testing.T) {
