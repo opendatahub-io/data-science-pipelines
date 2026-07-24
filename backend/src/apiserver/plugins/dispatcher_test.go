@@ -301,10 +301,15 @@ func TestOnBeforeRunCreation_NilOutput_WithRuntimeEnv_InjectsEnv(t *testing.T) {
 	}
 	dispatcher, _ := newFakeDispatcher([]RunPluginHandler{handler})
 
+	run := &PendingRun{
+		RunID:     "run-nil-output",
+		Namespace: "test-ns",
+	}
 	spec := newFakeExecutionSpecWithDriverTemplate()
-	err := dispatcher.OnBeforeRunCreation(context.Background(), pendingRun, spec)
+	err := dispatcher.OnBeforeRunCreation(context.Background(), run, spec)
 
 	require.NoError(t, err)
+	assert.Nil(t, run.PluginsOutput, "nil plugin output should not be persisted")
 	wf := spec.(*util.Workflow)
 	found := false
 	for _, tmpl := range wf.Spec.Templates {
