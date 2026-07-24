@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -59,6 +60,29 @@ func newFakeExecutionSpec() util.ExecutionSpec {
 	return util.NewWorkflow(&workflowapi.Workflow{
 		TypeMeta:   metav1.TypeMeta{Kind: "Workflow", APIVersion: "argoproj.io/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "test-wf", Namespace: "test-ns"},
+	})
+}
+
+func newFakeExecutionSpecWithDriverTemplate() util.ExecutionSpec {
+	return util.NewWorkflow(&workflowapi.Workflow{
+		TypeMeta:   metav1.TypeMeta{Kind: "Workflow", APIVersion: "argoproj.io/v1alpha1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf", Namespace: "test-ns"},
+		Spec: workflowapi.WorkflowSpec{
+			Templates: []workflowapi.Template{
+				{
+					Name: "driver",
+					Metadata: workflowapi.Metadata{
+						Annotations: map[string]string{
+							util.AnnotationKeyRuntimeRole: string(util.ExecutionRuntimeRoleDriver),
+						},
+					},
+					Container: &corev1.Container{
+						Name:  "main",
+						Image: "driver:latest",
+					},
+				},
+			},
+		},
 	})
 }
 
@@ -268,6 +292,32 @@ func TestOnBeforeRunCreation_HandlerFailure_NilOutput_ContinuesExecution(t *test
 	err := dispatcher.OnBeforeRunCreation(context.Background(), pendingRun, newFakeExecutionSpec())
 
 	require.NoError(t, err, "handler failure with nil output should not block run creation")
+}
+
+func TestOnBeforeRunCreation_NilOutput_WithRuntimeEnv_InjectsEnv(t *testing.T) {
+	handler := &fakeHandler{
+		name:    "FakePlugin",
+		envVars: map[string]string{"MLFLOW_TRACKING_URI": "https://mlflow.example.com"},
+	}
+	dispatcher, _ := newFakeDispatcher([]RunPluginHandler{handler})
+
+	spec := newFakeExecutionSpecWithDriverTemplate()
+	err := dispatcher.OnBeforeRunCreation(context.Background(), pendingRun, spec)
+
+	require.NoError(t, err)
+	wf := spec.(*util.Workflow)
+	found := false
+	for _, tmpl := range wf.Spec.Templates {
+		if tmpl.Container == nil {
+			continue
+		}
+		for _, env := range tmpl.Container.Env {
+			if env.Name == "MLFLOW_TRACKING_URI" && env.Value == "https://mlflow.example.com" {
+				found = true
+			}
+		}
+	}
+	assert.True(t, found, "runtime env should be injected even when plugin output is nil")
 }
 
 func TestOnRunEnd_HandlerFailure_ReturnsTrueWithoutParentRun(t *testing.T) {

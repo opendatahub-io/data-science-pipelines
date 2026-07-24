@@ -39,8 +39,9 @@ type RunPluginDispatcher interface {
 
 	// OnBeforeRunCreation is called before the workflow is created.
 	// The dispatcher reads run.PluginsInput and may write run.PluginsOutput.
-	// Plugin handler failures are logged and recorded as
-	// FailedPluginOutput but do not block run creation.
+	// Plugin handler failures are logged; when the handler returns
+	// a non-nil PluginOutput it is persisted as FailedPluginOutput.
+	// Handler failures do not block run creation.
 	// Returns an error only for dispatcher-level validation failures
 	// (nil arguments).
 	OnBeforeRunCreation(ctx context.Context, run *PendingRun, executionSpec util.ExecutionSpec) error
@@ -129,11 +130,10 @@ func (d *RunPluginDispatcherImpl) OnBeforeRunCreation(ctx context.Context, run *
 				}
 				return
 			}
-			if pluginOutput == nil {
-				return
-			}
-			if err := SetPendingRunPluginOutput(run, handler.Name(), pluginOutput); err != nil {
-				glog.Warningf("Failed to persist %s plugin output for run %q: %v", handler.Name(), run.RunID, err)
+			if pluginOutput != nil {
+				if err := SetPendingRunPluginOutput(run, handler.Name(), pluginOutput); err != nil {
+					glog.Warningf("Failed to persist %s plugin output for run %q: %v", handler.Name(), run.RunID, err)
+				}
 			}
 			if len(pluginRuntimeEnv) != 0 {
 				if err := InjectPluginRuntimeEnv(executionSpec, pluginRuntimeEnv); err != nil {
