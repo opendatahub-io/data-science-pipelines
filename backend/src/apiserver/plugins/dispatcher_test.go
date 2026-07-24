@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -59,6 +60,29 @@ func newFakeExecutionSpec() util.ExecutionSpec {
 	return util.NewWorkflow(&workflowapi.Workflow{
 		TypeMeta:   metav1.TypeMeta{Kind: "Workflow", APIVersion: "argoproj.io/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "test-wf", Namespace: "test-ns"},
+	})
+}
+
+func newFakeExecutionSpecWithDriverTemplate() util.ExecutionSpec {
+	return util.NewWorkflow(&workflowapi.Workflow{
+		TypeMeta:   metav1.TypeMeta{Kind: "Workflow", APIVersion: "argoproj.io/v1alpha1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-wf", Namespace: "test-ns"},
+		Spec: workflowapi.WorkflowSpec{
+			Templates: []workflowapi.Template{
+				{
+					Name: "driver",
+					Metadata: workflowapi.Metadata{
+						Annotations: map[string]string{
+							util.AnnotationKeyRuntimeRole: string(util.ExecutionRuntimeRoleDriver),
+						},
+					},
+					Container: &corev1.Container{
+						Name:  "main",
+						Image: "driver:latest",
+					},
+				},
+			},
+		},
 	})
 }
 
@@ -233,8 +257,72 @@ func TestOnBeforeRunCreation_HandlerFailure_ContinuesExecution(t *testing.T) {
 
 	err := dispatcher.OnBeforeRunCreation(context.Background(), pendingRun, newFakeExecutionSpec())
 
-	require.Error(t, err)
-	assert.Equal(t, "OnBeforeRunCreation encountered 1 error(s): plugin startup failed", err.Error())
+	require.NoError(t, err, "handler failure should not block run creation")
+}
+
+func TestOnBeforeRunCreation_HandlerFailure_PersistsFailedOutput(t *testing.T) {
+	failedOutput := &apiv2beta1.PluginOutput{
+		State:        apiv2beta1.PluginState_PLUGIN_FAILED,
+		StateMessage: "MLflow unreachable",
+	}
+	handler := &fakeHandler{
+		name:         "FakePlugin",
+		pluginOutput: failedOutput,
+		startErr:     fmt.Errorf("plugin startup failed"),
+	}
+	dispatcher, _ := newFakeDispatcher([]RunPluginHandler{handler})
+
+	run := &PendingRun{
+		RunID:     "run-456",
+		Namespace: "test-ns",
+	}
+	err := dispatcher.OnBeforeRunCreation(context.Background(), run, newFakeExecutionSpec())
+
+	require.NoError(t, err, "handler failure should not block run creation")
+	assert.NotNil(t, run.PluginsOutput, "failed plugin output should be persisted for observability")
+}
+
+func TestOnBeforeRunCreation_HandlerFailure_NilOutput_ContinuesExecution(t *testing.T) {
+	handler := &fakeHandler{
+		name:     "FakePlugin",
+		startErr: fmt.Errorf("plugin startup failed"),
+	}
+	dispatcher, _ := newFakeDispatcher([]RunPluginHandler{handler})
+
+	err := dispatcher.OnBeforeRunCreation(context.Background(), pendingRun, newFakeExecutionSpec())
+
+	require.NoError(t, err, "handler failure with nil output should not block run creation")
+}
+
+func TestOnBeforeRunCreation_NilOutput_WithRuntimeEnv_InjectsEnv(t *testing.T) {
+	handler := &fakeHandler{
+		name:    "FakePlugin",
+		envVars: map[string]string{"MLFLOW_TRACKING_URI": "https://mlflow.example.com"},
+	}
+	dispatcher, _ := newFakeDispatcher([]RunPluginHandler{handler})
+
+	run := &PendingRun{
+		RunID:     "run-nil-output",
+		Namespace: "test-ns",
+	}
+	spec := newFakeExecutionSpecWithDriverTemplate()
+	err := dispatcher.OnBeforeRunCreation(context.Background(), run, spec)
+
+	require.NoError(t, err)
+	assert.Nil(t, run.PluginsOutput, "nil plugin output should not be persisted")
+	wf := spec.(*util.Workflow)
+	found := false
+	for _, tmpl := range wf.Spec.Templates {
+		if tmpl.Container == nil {
+			continue
+		}
+		for _, env := range tmpl.Container.Env {
+			if env.Name == "MLFLOW_TRACKING_URI" && env.Value == "https://mlflow.example.com" {
+				found = true
+			}
+		}
+	}
+	assert.True(t, found, "runtime env should be injected even when plugin output is nil")
 }
 
 func TestOnRunEnd_HandlerFailure_ReturnsTrueWithoutParentRun(t *testing.T) {
