@@ -15,6 +15,7 @@
 package testutil
 
 import (
+	"fmt"
 	"math/rand"
 	"slices"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	api_server "github.com/kubeflow/pipelines/backend/src/common/client/api_server/v2"
 	"github.com/kubeflow/pipelines/backend/test/logger"
 
+	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 )
 
@@ -76,9 +78,23 @@ func TerminatePipelineRun(client *api_server.RunClient, runID string) {
 
 func GetPipelineRun(runClient *api_server.RunClient, pipelineRunID *string) *run_model.V2beta1Run {
 	logger.Log("Get a pipeline run with id=%s", *pipelineRunID)
-	pipelineRun, runError := runClient.Get(&run_params.RunServiceGetRunParams{
-		RunID: *pipelineRunID,
-	})
+	var (
+		pipelineRun *run_model.V2beta1Run
+		runError    error
+	)
+	for attempt := 1; attempt <= 3; attempt++ {
+		pipelineRun, runError = runClient.Get(&run_params.RunServiceGetRunParams{
+			RunID: *pipelineRunID,
+		})
+		if runError == nil {
+			break
+		}
+		if !IsRetriableLocalAPIError(runError) || attempt == 3 {
+			break
+		}
+		logger.Log("Transient localhost API error while getting run %s (attempt %d/3): %v", *pipelineRunID, attempt, runError)
+		time.Sleep(2 * time.Second)
+	}
 	gomega.Expect(runError).NotTo(gomega.HaveOccurred(), "Failed to get run with id="+*pipelineRunID)
 	return pipelineRun
 }
@@ -102,7 +118,7 @@ func WaitForRunToBeInState(runClient *api_server.RunClient, pipelineRunID *strin
 			}
 
 			if time.Now().After(deadline) {
-				logger.Log("Pipeline run with id=%s is in %s state, did not reach one of '%s' ", *pipelineRunID, *currentPipelineRunState, expectedStates)
+				ginkgo.Fail(fmt.Sprintf("Pipeline run with id=%s did not reach one of %v within timeout, current state: %s", *pipelineRunID, expectedStates, *currentPipelineRunState), 1)
 				return
 			}
 			logger.Log("Pipeline run with id=%s is in %s state, waiting...", *pipelineRunID, *currentPipelineRunState)

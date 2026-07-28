@@ -16,21 +16,7 @@ Note that you may need to restart your shell after installing these resources in
 
 ## Testing
 
-To run all unittests for backend:
-
-```
-go test -v -cover ./backend/...
-```
-
-If running a [local API server](#run-the-kfp-backend-locally-with-a-kind-cluster), you can run the integration tests
-with:
-
-```bash
-LOCAL_API_SERVER=true go test -v ./backend/test/v2/integration/... -namespace kubeflow -args -runIntegrationTests=true
-```
-
-To run a specific test, you can use the `-run` flag. For example, to run the `TestCacheSingleRun` test in the
-`TestCache` suite, you can use the `-run 'TestCache/TestCacheSingleRun'` flag to the above command.
+See the [Local testing](../AGENTS.md#local-testing) section in AGENTS.md.
 
 ## Build
 
@@ -75,6 +61,35 @@ Run
 ```
 docker build . -f backend/Dockerfile.conformance -t <tag>
 ```
+
+## API Server Configuration
+
+### Driver Pod Labels and Annotations
+
+The API server supports configuring custom labels and annotations for driver pods through the configuration file or the Kubernetes ConfigMap. This is useful for integration with service mesh (Istio), monitoring systems, or other infrastructure requirements.
+
+**Configuration via config.json:**
+```json
+{
+  "DRIVER_POD_LABELS": {
+    "sidecar.istio.io/inject": "true",
+    "app": "ml-pipeline-driver"
+  },
+  "DRIVER_POD_ANNOTATIONS": {
+    "proxy.istio.io/config": "{\"holdApplicationUntilProxyStarts\":true}"
+  }
+}
+```
+
+**Configuration via Kubernetes ConfigMap (`pipeline-install-config`):**
+```yaml
+DRIVER_POD_LABELS: '{"sidecar.istio.io/inject":"true"}'
+DRIVER_POD_ANNOTATIONS: '{"proxy.istio.io/config":"{\"holdApplicationUntilProxyStarts\":true}"}'
+```
+
+When configured via the ConfigMap, every value must be a JSON string. Write `"true"` rather than the bare boolean `true`, and never `null`. The configuration is validated at API server startup: malformed JSON, any value that is not a JSON string, and label keys, label values, or annotation keys that Kubernetes would reject all cause startup to fail with a descriptive error rather than being silently ignored. Annotation values are free form, so a value such as an inline JSON document is accepted.
+
+Note: Labels and annotations with the prefix `pipelines.kubeflow.org/` are reserved and will be filtered out to prevent overriding system metadata. Changes to driver pod configuration require an API server restart.
 
 ## API Server Development
 

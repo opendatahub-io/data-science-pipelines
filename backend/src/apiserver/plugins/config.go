@@ -16,6 +16,7 @@ package plugins
 
 import (
 	"context"
+<<<<<<< HEAD
 	"encoding/json"
 	"fmt"
 	"time"
@@ -25,11 +26,21 @@ import (
 	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
 	"google.golang.org/protobuf/encoding/protojson"
+=======
+	"fmt"
+	"strings"
+
+	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
+	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
+	"github.com/kubeflow/pipelines/backend/src/common/util"
+	corev1 "k8s.io/api/core/v1"
+>>>>>>> upstream/master
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
+<<<<<<< HEAD
 type PluginsOutputEnvelope struct {
 	Plugins map[string]json.RawMessage
 }
@@ -74,11 +85,14 @@ const (
 	EntryEndpoint       = "endpoint"
 )
 
+=======
+>>>>>>> upstream/master
 const (
 	LauncherConfigMapName   = "kfp-launcher"
 	LauncherConfigKeyPrefix = "plugins."
 )
 
+<<<<<<< HEAD
 const (
 	// DefaultTimeout is the default HTTP request timeout for the plugin client.
 	DefaultTimeout = "30s"
@@ -91,6 +105,8 @@ const (
 	RunSyncModeRetry    RunSyncMode = "retry"
 )
 
+=======
+>>>>>>> upstream/master
 // KubeClientProvider abstracts Kubernetes clientset access.
 type KubeClientProvider interface {
 	GetClientSet() kubernetes.Interface
@@ -105,20 +121,35 @@ type PluginConfig struct {
 
 // InjectPluginRuntimeEnv upserts plugin-provided environment variables into the
 // driver and launcher containers of the execution spec.
+<<<<<<< HEAD
 func InjectPluginRuntimeEnv(executionSpec util.ExecutionSpec, env map[string]string) error {
 	if len(env) == 0 || executionSpec == nil {
 		return nil
 	}
 	return executionSpec.UpsertRuntimeEnvVars(env,
+=======
+func InjectPluginRuntimeEnv(executionSpec util.ExecutionSpec, envVars []corev1.EnvVar) error {
+	if len(envVars) == 0 || executionSpec == nil {
+		return nil
+	}
+	return executionSpec.UpsertRuntimeEnvVars(envVars,
+>>>>>>> upstream/master
 		util.ExecutionRuntimeRoleDriver,
 		util.ExecutionRuntimeRoleLauncher,
 	)
 }
 
+<<<<<<< HEAD
 // GetNamespacePluginConfig reads the namespace-level Plugin configuration
 // from the kfp-launcher ConfigMap.  Returns nil (no error) when the ConfigMap
 // or key is absent.
 func GetNamespacePluginConfig(ctx context.Context, clientSet kubernetes.Interface, pluginName, namespace string) (*PluginConfig, error) {
+=======
+// GetLauncherNamespacePluginConfigsMap retrieves a map of plugin configurations from a Kubernetes ConfigMap in a given namespace.
+// It requires a non-empty namespace and a valid Kubernetes clientset to access the ConfigMap.
+// Returns a map of plugin configurations or an error if the ConfigMap retrieval or parsing fails.
+func GetLauncherNamespacePluginConfigsMap(ctx context.Context, clientSet kubernetes.Interface, namespace string) (map[string]string, error) {
+>>>>>>> upstream/master
 	if namespace == "" {
 		return nil, util.NewInternalServerError(fmt.Errorf("namespace is empty"), "namespace must be specified when reading Plugin config")
 	}
@@ -130,6 +161,7 @@ func GetNamespacePluginConfig(ctx context.Context, clientSet kubernetes.Interfac
 		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
+<<<<<<< HEAD
 		return nil, util.NewInternalServerError(err, "failed to read %s plugin namespace config from configmap %q in namespace %q", pluginName, LauncherConfigMapName, namespace)
 	}
 	launcherConfigKey := LauncherConfigKeyPrefix + pluginName
@@ -253,6 +285,18 @@ func ResolvePluginRequestConfig(ctx context.Context, clientSet kubernetes.Interf
 		merged.Timeout = DefaultTimeout
 	}
 	return merged, nil
+=======
+		return nil, util.NewInternalServerError(err, "failed to read MLflow namespace config from configmap %q in namespace %q", LauncherConfigMapName, namespace)
+	}
+
+	cfgMap := make(map[string]string)
+	for key, value := range cm.Data {
+		if strings.HasPrefix(key, LauncherConfigKeyPrefix) {
+			cfgMap[strings.TrimPrefix(key, LauncherConfigKeyPrefix)] = value
+		}
+	}
+	return cfgMap, nil
+>>>>>>> upstream/master
 }
 
 // MergePluginConfig merges namespace-level overrides into the global config.
@@ -298,6 +342,7 @@ func mergeSettings(ns, global map[string]interface{}) map[string]interface{} {
 	return merged
 }
 
+<<<<<<< HEAD
 // ModelToPersistedRun converts a model.Run to a PersistedRun for the
 // post-run plugin hooks (OnRunEnd, OnRunRetry).
 func ModelToPersistedRun(m *model.Run, namespace string) (*PersistedRun, error) {
@@ -339,6 +384,8 @@ func DeserializePluginsOutput(raw *model.LargeText) (map[string]*apiv2beta1.Plug
 	return result, nil
 }
 
+=======
+>>>>>>> upstream/master
 func SetPluginOutputState(output *apiv2beta1.PluginOutput, state apiv2beta1.PluginState, stateMessage string) {
 	if output == nil {
 		return

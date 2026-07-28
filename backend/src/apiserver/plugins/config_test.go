@@ -2,14 +2,21 @@ package plugins
 
 import (
 	"context"
+<<<<<<< HEAD
 	"encoding/json"
+=======
+>>>>>>> upstream/master
 	"testing"
 
 	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+<<<<<<< HEAD
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+=======
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+>>>>>>> upstream/master
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -118,11 +125,16 @@ func TestResolvePluginRequestConfig_NeitherGlobalNorNamespace(t *testing.T) {
 	}
 	clientSet := fakeclientset.NewClientset()
 
+<<<<<<< HEAD
 	cfg, err := ResolvePluginRequestConfig(context.Background(), clientSet, handler, "test-ns")
+=======
+	cfg, err := handler.ResolveRunPluginConfig(context.Background(), clientSet, "", "test-ns")
+>>>>>>> upstream/master
 	require.NoError(t, err)
 	assert.Nil(t, cfg, "should return nil when neither global nor namespace config exists")
 }
 
+<<<<<<< HEAD
 func TestResolvePluginRequestConfig_NamespaceOnlyWithoutGlobal(t *testing.T) {
 	handler := &fakeHandler{
 		name:         "FakePlugin",
@@ -155,6 +167,8 @@ func TestResolvePluginRequestConfig_NamespaceOnlyWithoutGlobal(t *testing.T) {
 	assert.Equal(t, "ns-val", cfg.Settings["key"])
 }
 
+=======
+>>>>>>> upstream/master
 func TestResolvePluginRequestConfig_GlobalOnly(t *testing.T) {
 	handler := &fakeHandler{
 		name: "FakePlugin",
@@ -164,12 +178,20 @@ func TestResolvePluginRequestConfig_GlobalOnly(t *testing.T) {
 		},
 	}
 	clientSet := fakeclientset.NewClientset()
+<<<<<<< HEAD
 
 	cfg, err := ResolvePluginRequestConfig(context.Background(), clientSet, handler, "test-ns")
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 	assert.Equal(t, "https://global.example.com", cfg.Endpoint)
 	assert.Equal(t, "20s", cfg.Timeout)
+=======
+	cfg, err := handler.ResolveRunPluginConfig(context.Background(), clientSet, "", "test-ns")
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	// Note: fakeHandler returns the raw pluginConfig, not a fully resolved config.
+	// Plugin-specific tests should verify resolved config structure.
+>>>>>>> upstream/master
 }
 
 func TestResolvePluginRequestConfig_EmptyTimeout_DefaultApplied(t *testing.T) {
@@ -181,6 +203,7 @@ func TestResolvePluginRequestConfig_EmptyTimeout_DefaultApplied(t *testing.T) {
 	}
 	clientSet := fakeclientset.NewClientset()
 
+<<<<<<< HEAD
 	cfg, err := ResolvePluginRequestConfig(context.Background(), clientSet, handler, "test-ns")
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
@@ -194,4 +217,190 @@ func TestResolvePluginRequestConfig_NilHandler_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, cfg)
 	assert.Contains(t, err.Error(), "handler is nil")
+=======
+	cfg, err := handler.ResolveRunPluginConfig(context.Background(), clientSet, "", "test-ns")
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	// Note: fakeHandler returns the raw pluginConfig, not a fully resolved config.
+	// Plugin-specific tests should verify resolved config structure.
+}
+
+// ---- GetLauncherNamespacePluginConfigsMap tests ----
+
+func TestGetLauncherNamespacePluginConfigsMap_EmptyNamespace_ReturnsError(t *testing.T) {
+	clientSet := fakeclientset.NewClientset()
+
+	cfgMap, err := GetLauncherNamespacePluginConfigsMap(context.Background(), clientSet, "")
+
+	require.Error(t, err)
+	assert.Nil(t, cfgMap)
+	assert.Contains(t, err.Error(), "namespace must be specified when reading Plugin config")
+}
+
+func TestGetLauncherNamespacePluginConfigsMap_NilClientSet_ReturnsError(t *testing.T) {
+	cfgMap, err := GetLauncherNamespacePluginConfigsMap(context.Background(), nil, "test-ns")
+
+	require.Error(t, err)
+	assert.Nil(t, cfgMap)
+	assert.Contains(t, err.Error(), "Kubernetes clientset must be provided when reading Plugin namespace config")
+}
+
+func TestGetLauncherNamespacePluginConfigsMap_ConfigMapNotFound_ReturnsNilWithoutError(t *testing.T) {
+	clientSet := fakeclientset.NewClientset()
+
+	cfgMap, err := GetLauncherNamespacePluginConfigsMap(context.Background(), clientSet, "test-ns")
+
+	require.NoError(t, err, "should not return error when ConfigMap is not found")
+	assert.Nil(t, cfgMap, "should return nil map when ConfigMap is not found")
+}
+
+func TestGetLauncherNamespacePluginConfigsMap_WithMLflowPlugin_ReturnsConfig(t *testing.T) {
+	clientSet := fakeclientset.NewClientset()
+	namespace := "test-ns"
+
+	mlflowConfig := `{
+		"endpoint": "https://mlflow.example.com",
+		"timeout": "20s",
+		"settings": {
+			"authType": "none"
+		}
+	}`
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      LauncherConfigMapName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"plugins.mlflow": mlflowConfig,
+		},
+	}
+
+	_, err := clientSet.CoreV1().ConfigMaps(namespace).Create(context.Background(), cm, v1.CreateOptions{})
+	require.NoError(t, err)
+
+	cfgMap, err := GetLauncherNamespacePluginConfigsMap(context.Background(), clientSet, namespace)
+
+	require.NoError(t, err)
+	require.NotNil(t, cfgMap)
+	assert.Equal(t, 1, len(cfgMap))
+	assert.Contains(t, cfgMap, "mlflow")
+	assert.Equal(t, mlflowConfig, cfgMap["mlflow"])
+}
+
+func TestGetLauncherNamespacePluginConfigsMap_MultiplePlugins_ReturnsAllConfigs(t *testing.T) {
+	clientSet := fakeclientset.NewClientset()
+	namespace := "test-ns"
+
+	mlflowConfig := `{"endpoint": "https://mlflow.example.com"}`
+	customPluginConfig := `{"endpoint": "https://custom.example.com"}`
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      LauncherConfigMapName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"plugins.mlflow": mlflowConfig,
+			"plugins.custom": customPluginConfig,
+		},
+	}
+
+	_, err := clientSet.CoreV1().ConfigMaps(namespace).Create(context.Background(), cm, v1.CreateOptions{})
+	require.NoError(t, err)
+
+	cfgMap, err := GetLauncherNamespacePluginConfigsMap(context.Background(), clientSet, namespace)
+
+	require.NoError(t, err)
+	require.NotNil(t, cfgMap)
+	assert.Equal(t, 2, len(cfgMap))
+	assert.Contains(t, cfgMap, "mlflow")
+	assert.Contains(t, cfgMap, "custom")
+	assert.Equal(t, mlflowConfig, cfgMap["mlflow"])
+	assert.Equal(t, customPluginConfig, cfgMap["custom"])
+}
+
+func TestGetLauncherNamespacePluginConfigsMap_MixedKeys_FiltersPluginKeysOnly(t *testing.T) {
+	clientSet := fakeclientset.NewClientset()
+	namespace := "test-ns"
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      LauncherConfigMapName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"plugins.mlflow":   `{"endpoint": "https://mlflow.example.com"}`,
+			"other-key":        "should-be-ignored",
+			"another-key":      "also-ignored",
+			"plugins.custom":   `{"endpoint": "https://custom.example.com"}`,
+			"non-plugin-value": "not-included",
+		},
+	}
+
+	_, err := clientSet.CoreV1().ConfigMaps(namespace).Create(context.Background(), cm, v1.CreateOptions{})
+	require.NoError(t, err)
+
+	cfgMap, err := GetLauncherNamespacePluginConfigsMap(context.Background(), clientSet, namespace)
+
+	require.NoError(t, err)
+	require.NotNil(t, cfgMap)
+	assert.Equal(t, 2, len(cfgMap), "should only include keys with 'plugins.' prefix")
+	assert.Contains(t, cfgMap, "mlflow")
+	assert.Contains(t, cfgMap, "custom")
+	assert.NotContains(t, cfgMap, "other-key")
+	assert.NotContains(t, cfgMap, "another-key")
+	assert.NotContains(t, cfgMap, "non-plugin-value")
+}
+
+func TestGetLauncherNamespacePluginConfigsMap_NoPluginKeys_ReturnsEmptyOrNilMap(t *testing.T) {
+	clientSet := fakeclientset.NewClientset()
+	namespace := "test-ns"
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      LauncherConfigMapName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"other-key":   "value1",
+			"another-key": "value2",
+		},
+	}
+
+	_, err := clientSet.CoreV1().ConfigMaps(namespace).Create(context.Background(), cm, v1.CreateOptions{})
+	require.NoError(t, err)
+
+	cfgMap, err := GetLauncherNamespacePluginConfigsMap(context.Background(), clientSet, namespace)
+
+	require.NoError(t, err)
+	// Map should be either nil or empty when no plugin keys exist
+	if cfgMap != nil {
+		assert.Equal(t, 0, len(cfgMap), "should have no entries when no plugin keys exist")
+	}
+}
+
+func TestGetLauncherNamespacePluginConfigsMap_EmptyConfigMap_ReturnsEmptyOrNilMap(t *testing.T) {
+	clientSet := fakeclientset.NewClientset()
+	namespace := "test-ns"
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      LauncherConfigMapName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{},
+	}
+
+	_, err := clientSet.CoreV1().ConfigMaps(namespace).Create(context.Background(), cm, v1.CreateOptions{})
+	require.NoError(t, err)
+
+	cfgMap, err := GetLauncherNamespacePluginConfigsMap(context.Background(), clientSet, namespace)
+
+	require.NoError(t, err)
+	// Map should be either nil or empty when ConfigMap has no data
+	if cfgMap != nil {
+		assert.Equal(t, 0, len(cfgMap), "should have no entries when ConfigMap is empty")
+	}
+>>>>>>> upstream/master
 }
