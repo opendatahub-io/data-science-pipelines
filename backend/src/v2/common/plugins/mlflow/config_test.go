@@ -51,7 +51,11 @@ func TestParseKfpMLflowRuntimeConfig_Success(t *testing.T) {
 		InsecureSkipVerify: false,
 		InjectUserEnvVars:  false,
 		TLS: &commonplugins.TLSConfig{
+<<<<<<< HEAD
 			CABundlePath: testCABundlePath,
+=======
+			InsecureSkipVerify: false,
+>>>>>>> upstream/master
 		},
 	}
 

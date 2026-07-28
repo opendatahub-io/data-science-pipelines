@@ -14,7 +14,7 @@ import (
 func TestMlflowHandlerFactory_Name(t *testing.T) {
 	factory := &mlflowHandlerFactory{}
 
-	assert.Equal(t, "MLflow", factory.Name())
+	assert.Equal(t, "mlflow", factory.Name())
 }
 
 func TestMlflowHandlerFactory_IsEnabled_ConfigSet(t *testing.T) {
@@ -55,7 +55,7 @@ func TestMlflowHandlerFactory_Create_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, handler)
-	assert.Equal(t, "MLflow", handler.Name())
+	assert.Equal(t, "mlflow", handler.Name())
 }
 
 func TestMlflowHandlerFactory_Create_MissingConfig(t *testing.T) {
@@ -127,7 +127,7 @@ func TestInitRegistersFactory(t *testing.T) {
 
 	var found bool
 	for _, factory := range registered {
-		if factory.Name() == "MLflow" {
+		if factory.Name() == "mlflow" {
 			found = true
 			break
 		}

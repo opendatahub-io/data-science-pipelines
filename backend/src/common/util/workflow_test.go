@@ -20,13 +20,14 @@ import (
 	"testing"
 	"time"
 
-	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
-	argofake "github.com/argoproj/argo-workflows/v3/pkg/client/clientset/versioned/fake"
-	argoinformer "github.com/argoproj/argo-workflows/v3/pkg/client/informers/externalversions"
-	argolister "github.com/argoproj/argo-workflows/v3/pkg/client/listers/workflow/v1alpha1"
+	workflowapi "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
+	argofake "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned/fake"
+	argoinformer "github.com/argoproj/argo-workflows/v4/pkg/client/informers/externalversions"
+	argolister "github.com/argoproj/argo-workflows/v4/pkg/client/listers/workflow/v1alpha1"
 	"github.com/kubeflow/pipelines/backend/src/agent/persistence/client/artifactclient"
 	swfapi "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -1908,6 +1909,10 @@ func TestWorkflow_Decompress(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestArgoContext_ReusesContext(t *testing.T) {
+	assert.Same(t, ArgoContext(), ArgoContext())
+}
+
 func TestTransformJSONForBackwardCompatibility(t *testing.T) {
 	// numberValue → number_value
 	input := `{"metrics":[{"name":"accuracy","numberValue":0.95}]}`
@@ -2370,6 +2375,34 @@ func TestWorkflow_FindObjectStoreArtifactKeyOrEmpty_WithS3(t *testing.T) {
 	assert.Equal(t, "my-bucket/key/path", workflow.FindObjectStoreArtifactKeyOrEmpty("node1", "artifact1"))
 }
 
+func TestWorkflow_FindObjectStoreArtifactKeyOrEmpty_WithDerivedPodName(t *testing.T) {
+	workflow := NewWorkflow(&workflowapi.Workflow{
+		ObjectMeta: metav1.ObjectMeta{Name: "artifact-pipeline"},
+		Status: workflowapi.WorkflowStatus{
+			Nodes: map[string]workflowapi.NodeStatus{
+				"artifact-pipeline-3035043641": {
+					ID:           "artifact-pipeline-3035043641",
+					Name:         "artifact-pipeline.root.write-artifact.executor(0)",
+					TemplateName: "system-container-impl",
+					Outputs: &workflowapi.Outputs{
+						Artifacts: workflowapi.Artifacts{{
+							Name: "main-logs",
+							ArtifactLocation: workflowapi.ArtifactLocation{
+								S3: &workflowapi.S3Artifact{Key: "private-artifacts/custom/main.log"},
+							},
+						}},
+					},
+				},
+			},
+		},
+	})
+
+	assert.Equal(t, "private-artifacts/custom/main.log", workflow.FindObjectStoreArtifactKeyOrEmpty(
+		"artifact-pipeline-system-container-impl-3035043641",
+		"main-logs",
+	))
+}
+
 func TestWorkflow_FindObjectStoreArtifactKeyOrEmpty_NodeNotFound(t *testing.T) {
 	workflow := NewWorkflow(&workflowapi.Workflow{
 		Status: workflowapi.WorkflowStatus{
@@ -2379,6 +2412,94 @@ func TestWorkflow_FindObjectStoreArtifactKeyOrEmpty_NodeNotFound(t *testing.T) {
 		},
 	})
 	assert.Equal(t, "", workflow.FindObjectStoreArtifactKeyOrEmpty("node1", "artifact1"))
+}
+
+func TestWorkflow_FindObjectStoreArtifactKeyOrEmpty_RetryParentNode(t *testing.T) {
+	// Retry parent node (from global retryStrategy) delegates artifacts to child execution nodes.
+	workflow := NewWorkflow(&workflowapi.Workflow{
+		Status: workflowapi.WorkflowStatus{
+			Nodes: map[string]workflowapi.NodeStatus{
+				"retry-parent-node": {
+					ID:       "retry-parent-node",
+					Type:     workflowapi.NodeTypeRetry,
+					Children: []string{"retry-parent-node(0)"},
+				},
+				"retry-parent-node(0)": {
+					ID: "retry-parent-node(0)",
+					Outputs: &workflowapi.Outputs{
+						Artifacts: workflowapi.Artifacts{
+							{
+								Name: "artifact1",
+								ArtifactLocation: workflowapi.ArtifactLocation{
+									S3: &workflowapi.S3Artifact{
+										Key: "bucket/artifacts/retry-child-key",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	assert.Equal(t, "bucket/artifacts/retry-child-key",
+		workflow.FindObjectStoreArtifactKeyOrEmpty("retry-parent-node", "artifact1"))
+}
+
+func TestWorkflow_FindObjectStoreArtifactKeyOrEmpty_RetryParentNoChildren(t *testing.T) {
+	// Retry parent node with no children should return empty.
+	workflow := NewWorkflow(&workflowapi.Workflow{
+		Status: workflowapi.WorkflowStatus{
+			Nodes: map[string]workflowapi.NodeStatus{
+				"retry-parent-node": {
+					ID:   "retry-parent-node",
+					Type: workflowapi.NodeTypeRetry,
+				},
+			},
+		},
+	})
+	assert.Equal(t, "", workflow.FindObjectStoreArtifactKeyOrEmpty("retry-parent-node", "artifact1"))
+}
+
+func TestWorkflow_FindObjectStoreArtifactKeyOrEmpty_StepGroupToRetryToPod(t *testing.T) {
+	// With templateDefaults.retryStrategy, the hierarchy is:
+	// StepGroup → Retry parent → Pod (with artifacts).
+	// The test regex may capture the StepGroup node, so the function must
+	// traverse two levels to reach the Pod's artifacts.
+	workflow := NewWorkflow(&workflowapi.Workflow{
+		Status: workflowapi.WorkflowStatus{
+			Nodes: map[string]workflowapi.NodeStatus{
+				"step-group-node": {
+					ID:       "step-group-node",
+					Type:     workflowapi.NodeTypeStepGroup,
+					Children: []string{"retry-parent-node"},
+				},
+				"retry-parent-node": {
+					ID:       "retry-parent-node",
+					Type:     workflowapi.NodeTypeRetry,
+					Children: []string{"retry-parent-node(0)"},
+				},
+				"retry-parent-node(0)": {
+					ID:   "retry-parent-node(0)",
+					Type: workflowapi.NodeTypePod,
+					Outputs: &workflowapi.Outputs{
+						Artifacts: workflowapi.Artifacts{
+							{
+								Name: "artifact1",
+								ArtifactLocation: workflowapi.ArtifactLocation{
+									S3: &workflowapi.S3Artifact{
+										Key: "bucket/artifacts/deep-nested-key",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	assert.Equal(t, "bucket/artifacts/deep-nested-key",
+		workflow.FindObjectStoreArtifactKeyOrEmpty("step-group-node", "artifact1"))
 }
 
 // nonWorkflowExecution implements ExecutionSpec via embedding but is not *Workflow.
@@ -2651,25 +2772,24 @@ func TestUpsertRuntimeEnvVars_EmptyInputs(t *testing.T) {
 		annotatedTemplate("driver", ExecutionRuntimeRoleDriver),
 	)
 
-	// Empty env map — should be a no-op.
-	assert.NoError(t, w.UpsertRuntimeEnvVars(map[string]string{}, ExecutionRuntimeRoleDriver))
+	// Empty env slice — should be a no-op.
+	assert.NoError(t, w.UpsertRuntimeEnvVars([]corev1.EnvVar{}, ExecutionRuntimeRoleDriver))
 	assert.Empty(t, w.Spec.Templates[0].Container.Env)
 
-	// Nil env map — should be a no-op.
+	// Nil env slice — should be a no-op.
 	assert.NoError(t, w.UpsertRuntimeEnvVars(nil, ExecutionRuntimeRoleDriver))
 
 	// No templates.
 	empty := NewWorkflow(&workflowapi.Workflow{})
-	assert.NoError(t, empty.UpsertRuntimeEnvVars(map[string]string{"K": "V"}, ExecutionRuntimeRoleDriver))
+	assert.NoError(t, empty.UpsertRuntimeEnvVars([]corev1.EnvVar{{Name: "K", Value: "V"}}, ExecutionRuntimeRoleDriver))
 }
 
 func TestUpsertRuntimeEnvVars_DAGTemplateSkipped(t *testing.T) {
 	w := workflowWithTemplates(dagTemplate("dag"))
 	err := w.UpsertRuntimeEnvVars(
-		map[string]string{"K": "V"},
+		[]corev1.EnvVar{{Name: "K", Value: "V"}},
 		ExecutionRuntimeRoleDriver,
 		ExecutionRuntimeRoleLauncher,
-		ExecutionRuntimeRoleExecutor,
 	)
 	assert.NoError(t, err)
 	// DAG template has no container — nothing to modify.
@@ -2700,7 +2820,7 @@ func TestUpsertRuntimeEnvVars_Annotation_DriverRole(t *testing.T) {
 		annotatedTemplate("launcher", ExecutionRuntimeRoleLauncher),
 	)
 	err := w.UpsertRuntimeEnvVars(
-		map[string]string{"KEY": "val"},
+		[]corev1.EnvVar{{Name: "KEY", Value: "val"}},
 		ExecutionRuntimeRoleDriver,
 	)
 	assert.NoError(t, err)
@@ -2717,7 +2837,7 @@ func TestUpsertRuntimeEnvVars_Annotation_LauncherRole(t *testing.T) {
 		annotatedTemplate("launcher", ExecutionRuntimeRoleLauncher),
 	)
 	err := w.UpsertRuntimeEnvVars(
-		map[string]string{"KEY": "val"},
+		[]corev1.EnvVar{{Name: "KEY", Value: "val"}},
 		ExecutionRuntimeRoleLauncher,
 	)
 	assert.NoError(t, err)
@@ -2734,7 +2854,7 @@ func TestUpsertRuntimeEnvVars_Annotation_MultipleRoles(t *testing.T) {
 		dagTemplate("dag"),
 	)
 	err := w.UpsertRuntimeEnvVars(
-		map[string]string{"KEY": "val"},
+		[]corev1.EnvVar{{Name: "KEY", Value: "val"}},
 		ExecutionRuntimeRoleDriver,
 		ExecutionRuntimeRoleLauncher,
 	)
@@ -2752,7 +2872,10 @@ func TestUpsertRuntimeEnvVars_Annotation_UpsertReplacesExisting(t *testing.T) {
 			corev1.EnvVar{Name: "OLD", Value: "before"}),
 	)
 	err := w.UpsertRuntimeEnvVars(
-		map[string]string{"OLD": "after", "NEW": "fresh"},
+		[]corev1.EnvVar{
+			{Name: "OLD", Value: "after"},
+			{Name: "NEW", Value: "fresh"},
+		},
 		ExecutionRuntimeRoleDriver,
 	)
 	assert.NoError(t, err)
@@ -2763,16 +2886,43 @@ func TestUpsertRuntimeEnvVars_Annotation_UpsertReplacesExisting(t *testing.T) {
 	assert.Equal(t, corev1.EnvVar{Name: "NEW", Value: "fresh"}, env[1])
 }
 
+func TestUpsertRuntimeEnvVars_Annotation_UpsertsSecretKeyRef(t *testing.T) {
+	w := workflowWithTemplates(
+		annotatedTemplate("driver", ExecutionRuntimeRoleDriver),
+	)
+
+	err := w.UpsertRuntimeEnvVars(
+		[]corev1.EnvVar{{
+			Name: "MLFLOW_TRACKING_TOKEN",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "mlflow-secret"},
+					Key:                  "token",
+				},
+			},
+		}},
+		ExecutionRuntimeRoleDriver,
+	)
+	assert.NoError(t, err)
+
+	env := w.Spec.Templates[0].Container.Env
+	assert.Len(t, env, 1)
+	require.NotNil(t, env[0].ValueFrom)
+	require.NotNil(t, env[0].ValueFrom.SecretKeyRef)
+	assert.Equal(t, "MLFLOW_TRACKING_TOKEN", env[0].Name)
+	assert.Equal(t, "mlflow-secret", env[0].ValueFrom.SecretKeyRef.Name)
+	assert.Equal(t, "token", env[0].ValueFrom.SecretKeyRef.Key)
+}
+
 func TestUpsertRuntimeEnvVars_Annotation_UnknownRoleIgnored(t *testing.T) {
 	// A template with an unknown annotation value should not match any role.
 	w := workflowWithTemplates(
 		annotatedTemplate("unknown", "some-other-role"),
 	)
 	err := w.UpsertRuntimeEnvVars(
-		map[string]string{"KEY": "val"},
+		[]corev1.EnvVar{{Name: "KEY", Value: "val"}},
 		ExecutionRuntimeRoleDriver,
 		ExecutionRuntimeRoleLauncher,
-		ExecutionRuntimeRoleExecutor,
 	)
 	assert.NoError(t, err)
 	assert.Empty(t, w.Spec.Templates[0].Container.Env)

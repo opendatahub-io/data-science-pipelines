@@ -15,9 +15,14 @@ on:
       - 'rhoai-*'
     paths:
       - 'backend/**'
+<<<<<<< HEAD
       - 'test/presubmit-backend-test.sh'
       - '!**/*.md'
       - '!**/OWNERS'
+=======
+      - 'test/cache-deployer/**'
+      - 'test/presubmit-backend-test.sh'
+>>>>>>> upstream/master
 
 
 concurrency:
