@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # Remove the x if you need no print out of each command
-set -e
+set -eo pipefail
 
 REGISTRY="${REGISTRY:-kind-registry:5000}"
 EXIT_CODE=0
@@ -135,6 +135,8 @@ if [ "${MULTI_USER}" == "false" ] && [ "${PIPELINES_STORE}" != "kubernetes" ]; t
   TEST_MANIFESTS="${TEST_MANIFESTS}/standalone"
   if $CACHE_DISABLED && $USE_PROXY; then
     TEST_MANIFESTS="${TEST_MANIFESTS}/cache-disabled-proxy"
+  elif $CACHE_DISABLED && $POD_TO_POD_TLS_ENABLED; then
+    TEST_MANIFESTS="${TEST_MANIFESTS}/cache-disabled-tls"
   elif $CACHE_DISABLED; then
     TEST_MANIFESTS="${TEST_MANIFESTS}/cache-disabled"
   elif $USE_PROXY; then
