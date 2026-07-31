@@ -20,14 +20,7 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - persistentvolumes
   - persistentvolumeclaims
-  verbs:
-  - '*'
-- apiGroups:
-  - snapshot.storage.k8s.io
-  resources:
-  - volumesnapshots
   verbs:
   - create
   - delete
@@ -46,38 +39,14 @@ rules:
   - ""
   resources:
   - pods
-  - pods/exec
-  - pods/log
-  - services
   verbs:
-  - '*'
+  - get
 - apiGroups:
   - ""
-  - apps
-  - extensions
   resources:
-  - deployments
-  - replicasets
+  - pods/log
   verbs:
-  - '*'
-- apiGroups:
-  - kubeflow.org
-  resources:
-  - '*'
-  verbs:
-  - '*'
-- apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - '*'
-- apiGroups:
-  - machinelearning.seldon.io
-  resources:
-  - seldondeployments
-  verbs:
-  - '*'
+  - get
 - apiGroups:
   - argoproj.io
   resources:
