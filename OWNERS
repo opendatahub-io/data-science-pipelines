@@ -3,6 +3,7 @@ approvers:
   - alyssacgoins
   - dsp-developers
   - HumairAK
+<<<<<<< HEAD
   - hbelmiro
   - mprahl
   - nsingla
@@ -16,3 +17,8 @@ reviewers:
 emeritus_approvers:
   - gmfrasca
   - harshad16
+=======
+  - jeffspahr
+  - mprahl
+  - zazulam
+>>>>>>> upstream/master

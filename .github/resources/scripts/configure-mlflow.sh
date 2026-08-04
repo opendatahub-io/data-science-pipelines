@@ -33,6 +33,7 @@ MLFLOW_AUTH_TYPE="${4:-kubernetes}"
 MLFLOW_CREDENTIALS_SECRET_NAME="kfp-mlflow-credentials"
 MLFLOW_BASIC_AUTH_USERNAME="admin"
 MLFLOW_BASIC_AUTH_PASSWORD="password1234"
+<<<<<<< HEAD
 
 MLFLOW_CA_CONFIGMAP="mlflow-ca-cert"
 KFP_CA_BUNDLE_DIR="/kfp/certs"
@@ -41,6 +42,8 @@ KFP_CA_BUNDLE_PATH="${KFP_CA_BUNDLE_DIR}/ca.crt"
 MLFLOW_CA_CONFIGMAP="mlflow-ca-cert"
 KFP_CA_BUNDLE_DIR="/kfp/certs"
 KFP_CA_BUNDLE_PATH="${KFP_CA_BUNDLE_DIR}/ca.crt"
+=======
+>>>>>>> upstream/master
 
 echo "Services in ${MLFLOW_NAMESPACE} namespace:"
 kubectl get svc -n "$MLFLOW_NAMESPACE" --no-headers
@@ -59,6 +62,7 @@ fi
 MLFLOW_ENDPOINT="${MLFLOW_SCHEME}://${MLFLOW_HOST}:${MLFLOW_PORT}${MLFLOW_STATIC_PREFIX}"
 echo "MLflow service: $MLFLOW_SVC port=$MLFLOW_PORT endpoint=$MLFLOW_ENDPOINT"
 
+<<<<<<< HEAD
 # --- Extract CA certificate from the MLflow TLS secret ---
 CA_CERT_FILE="/tmp/mlflow-ca.crt"
 
@@ -96,6 +100,8 @@ MLFLOW_PATCH=$(jq -n --arg endpoint "$MLFLOW_ENDPOINT" --arg caBundlePath "$KFP_
   tls: { caBundlePath: $caBundlePath },
   settings: { workspacesEnabled: true }
 }')
+=======
+>>>>>>> upstream/master
 case "$MLFLOW_AUTH_TYPE" in
   kubernetes)
     MLFLOW_PATCH=$(jq -n --arg endpoint "$MLFLOW_ENDPOINT" '{
@@ -188,6 +194,7 @@ if [ -n "${GITHUB_ENV:-}" ]; then
   echo "MLFLOW_PORT_FORWARD_NS=$MLFLOW_NAMESPACE" >> "$GITHUB_ENV"
   echo "MLFLOW_PORT_FORWARD_SVC=$MLFLOW_SVC" >> "$GITHUB_ENV"
   echo "MLFLOW_PORT_FORWARD_REMOTE_PORT=$MLFLOW_PORT" >> "$GITHUB_ENV"
+<<<<<<< HEAD
   echo "MLFLOW_CA_BUNDLE_PATH=$CA_CERT_FILE" >> "$GITHUB_ENV"
   if [ -n "$SA_TOKEN" ]; then
     echo "MLFLOW_BEARER_TOKEN=$SA_TOKEN" >> "$GITHUB_ENV"
@@ -196,6 +203,8 @@ if [ -n "${GITHUB_ENV:-}" ]; then
     echo "WARNING: Could not create SA token; MLflow requests may be unauthenticated"
     echo "Exported MLFLOW_WORKSPACE and MLFLOW_CA_BUNDLE_PATH only"
   fi
+=======
+>>>>>>> upstream/master
   case "$MLFLOW_AUTH_TYPE" in
     kubernetes)
       echo "MLFLOW_WORKSPACE=$KFP_NAMESPACE" >> "$GITHUB_ENV"
@@ -238,10 +247,13 @@ esac
 
 STATUS=000
 for i in $(seq 1 30); do
+<<<<<<< HEAD
   STATUS=$(curl -s --cacert "$CA_CERT_FILE" -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 \
     "${CURL_HEADERS[@]}" "$HEALTH_URL" 2>/dev/null || echo "000")
   if [ "$STATUS" != "000" ] && [ "$STATUS" -lt 500 ] 2>/dev/null; then
     echo "MLflow backend is healthy on localhost:8080 (HTTPS, status=$STATUS)"
+=======
+>>>>>>> upstream/master
   STATUS=$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 \
     "${CURL_ARGS[@]}" "${CURL_HEADERS[@]}" "$HEALTH_URL" 2>/dev/null || echo "000")
   if [ "$STATUS" = "200" ]; then

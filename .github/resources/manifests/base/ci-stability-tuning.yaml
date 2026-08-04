@@ -16,3 +16,24 @@ spec:
           startupProbe:
             failureThreshold: 24
             timeoutSeconds: 5
+<<<<<<< HEAD
+=======
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seaweedfs
+  namespace: kubeflow
+spec:
+  template:
+    spec:
+      containers:
+        - name: seaweedfs
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+>>>>>>> upstream/master

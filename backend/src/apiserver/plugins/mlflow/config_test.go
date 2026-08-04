@@ -22,7 +22,11 @@ import (
 	"path/filepath"
 	"testing"
 
+<<<<<<< HEAD
 	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+=======
+	workflowapi "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
+>>>>>>> upstream/master
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	commonplugins "github.com/kubeflow/pipelines/backend/src/common/plugins"
 	commonmlflow "github.com/kubeflow/pipelines/backend/src/common/plugins/mlflow"
