@@ -696,6 +696,10 @@ func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model
 		}
 	}
 
+	if err := r.authorizeServiceAccount(ctx, executionSpec.ServiceAccount(), k8sNamespace); err != nil {
+		return nil, util.Wrap(err, "Failed to create a run due to service account authorization error")
+	}
+
 	executionSpec.SetExecutionNamespace(k8sNamespace)
 
 	// assign OwnerReference and canonical labels to scheduledworkflow
@@ -1313,15 +1317,9 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 			return nil, util.NewInternalServerError(err, "Failed to create a recurring run with an invalid pipeline spec manifest")
 		}
 
-		// When plugins are enabled, the SWF controller must call the CreateRun API
-		// so that per-run plugin logic executes.
 		if r.pluginDispatcher.PluginsRegistered() {
-			// Plugin-enabled: create a lightweight SWF without inline workflow spec
-			// so the SWF controller calls the CreateRun API for per-run plugin logic.
 			scheduledWorkflow, err = template.NewGenericScheduledWorkflow(job, r.getOwnerReferences())
 		} else {
-			// TODO(gkcalat): consider changing the flow. Other resource UUIDs are assigned by their respective stores (DB).
-			// Convert modelJob into scheduledWorkflow.
 			scheduledWorkflow, err = tmpl.ScheduledWorkflow(job, r.getOwnerReferences())
 		}
 		if err != nil {
@@ -1351,14 +1349,14 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 			return nil, util.Wrap(err, "Failed to fetch a template with an invalid pipeline spec manifest")
 		}
 
-		_, err = tmpl.ScheduledWorkflow(job, r.getOwnerReferences())
-		if v2Tmpl, ok := tmpl.(*template.V2Spec); ok {
-			err = v2Tmpl.ValidateJobInputs(job)
-		} else {
-			_, err = tmpl.ScheduledWorkflow(job, r.getOwnerReferences())
-		}
+		validatedScheduledWorkflow, err := tmpl.ScheduledWorkflow(job, r.getOwnerReferences())
 		if err != nil {
 			return nil, util.Wrap(err, "Failed to validate the input parameters on the latest pipeline version")
+		}
+		if v2Tmpl, ok := tmpl.(*template.V2Spec); ok {
+			if err = v2Tmpl.ValidateJobInputs(job); err != nil {
+				return nil, util.Wrap(err, "Failed to validate the input parameters on the latest pipeline version")
+			}
 		}
 
 		scheduledWorkflow, err = template.NewGenericScheduledWorkflow(job, r.getOwnerReferences())
@@ -1374,6 +1372,7 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 		scheduledWorkflow.Spec.Workflow = &scheduledworkflow.WorkflowResource{
 			Parameters: parameters, PipelineRoot: string(job.PipelineRoot),
 		}
+		scheduledWorkflow.Spec.ServiceAccount = validatedScheduledWorkflow.Spec.ServiceAccount
 	}
 
 	if tmpl != nil && common.GetBoolConfigWithDefault(common.BlockV1Pipelines, false) && tmpl.GetTemplateType() == template.V1 {
@@ -1381,6 +1380,14 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 		if !isNamespaceAllowed(k8sNamespace, allowedNamespaces) {
 			return nil, util.NewInvalidInputError("Namespace %s is not allowed to run v1 pipelines. Please migrate to using KFP V2 pipelines.", k8sNamespace)
 		}
+	}
+
+	resolvedJobServiceAccount := scheduledWorkflow.Spec.ServiceAccount
+	if resolvedJobServiceAccount == "" {
+		resolvedJobServiceAccount = job.ServiceAccount
+	}
+	if err := r.authorizeServiceAccount(ctx, resolvedJobServiceAccount, k8sNamespace); err != nil {
+		return nil, util.Wrap(err, "Failed to create a recurring run due to service account authorization error")
 	}
 
 	newScheduledWorkflow, err := r.getScheduledWorkflowClient(k8sNamespace).Create(ctx, scheduledWorkflow)
@@ -2278,6 +2285,25 @@ func (r *ResourceManager) GetPipelineVersionTemplate(pipelineVersionId string) (
 	} else {
 		return bytes, nil
 	}
+}
+
+func (r *ResourceManager) authorizeServiceAccount(ctx context.Context, serviceAccount, namespace string) error {
+	if serviceAccount == "" {
+		return nil
+	}
+	if err := common.ValidateServiceAccountAllowList(serviceAccount); err != nil {
+		return util.NewInvalidInputError("%s", err)
+	}
+	defaultServiceAccount := common.GetStringConfigWithDefault(common.DefaultPipelineRunnerServiceAccountFlag, common.DefaultPipelineRunnerServiceAccount)
+	if serviceAccount == defaultServiceAccount {
+		return nil
+	}
+	return r.IsAuthorized(ctx, &authorizationv1.ResourceAttributes{
+		Verb:      common.RbacResourceVerbUse,
+		Namespace: namespace,
+		Resource:  "serviceaccounts",
+		Name:      serviceAccount,
+	})
 }
 
 // Verifies whether the user identity, which is contained in the context object,
