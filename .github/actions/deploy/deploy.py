@@ -11,6 +11,7 @@ via the build action.
 """
 
 import argparse
+import json
 import os
 import shutil
 import tempfile
@@ -260,6 +261,8 @@ class DSPDeployer:
 
                 self.deploy_dsp_direct()
 
+            self._patch_v1_allowed_namespaces()
+
             self.infra.forward_port(is_operator=use_operator)
 
             print('🎉 Deployment completed successfully!')
@@ -270,6 +273,27 @@ class DSPDeployer:
         finally:
             if self.temp_dir and os.path.exists(self.temp_dir):
                 shutil.rmtree(self.temp_dir)
+
+    def _patch_v1_allowed_namespaces(self):
+        """Allow V1 pipelines in the deployment namespace for CI tests."""
+        namespace = self.deployment_namespace or self.args.namespace
+        env_value = json.dumps({
+            'name': 'V1_ALLOWED_NAMESPACES', 'value': namespace
+        })
+        print(f'🔧 Setting V1_ALLOWED_NAMESPACES={namespace}')
+        for deploy in ['ml-pipeline', 'ml-pipeline-scheduledworkflow']:
+            self.deployment_manager.run_command([
+                'kubectl', 'set', 'env',
+                f'deployment/{deploy}',
+                f'V1_ALLOWED_NAMESPACES={namespace}',
+                '-n', namespace
+            ])
+        for deploy in ['ml-pipeline', 'ml-pipeline-scheduledworkflow']:
+            self.deployment_manager.run_command([
+                'kubectl', 'rollout', 'status',
+                f'deployment/{deploy}',
+                '-n', namespace, '--timeout=120s'
+            ])
 
     def output_deployment_metadata(self):
         """Output deployment metadata for GitHub Actions."""
