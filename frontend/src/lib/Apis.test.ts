@@ -169,6 +169,23 @@ describe('Apis', () => {
     );
   });
 
+  it('buildReadFileUrl for download carries providerInfo', () => {
+    expect(
+      Apis.buildReadFileUrl({
+        path: {
+          bucket: 'testbucket',
+          key: 'testkey',
+          source: StorageService.S3,
+        },
+        namespace: 'testnamespace',
+        providerInfo: '{"Provider":"s3"}',
+        isDownload: true,
+      }),
+    ).toEqual(
+      'artifacts/s3/testbucket/testkey?namespace=testnamespace&providerInfo=%7B%22Provider%22%3A%22s3%22%7D',
+    );
+  });
+
   it('buildArtifactLinkText', () => {
     expect(
       Apis.buildArtifactLinkText({
@@ -182,14 +199,14 @@ describe('Apis', () => {
   it('getTensorboardApp', async () => {
     const spy = fetchSpy(
       JSON.stringify({
-        podAddress: 'http://some/address',
+        proxyPath: 'apps/tensorboard/proxy/test-token/',
         tfVersion: '1.14.0',
         image: 'tensorflow/tensorflow:1.14.0',
       }),
     );
     const tensorboardInstance = await Apis.getTensorboardApp('gs://log/dir', 'test-ns');
     expect(tensorboardInstance).toEqual({
-      podAddress: 'http://some/address',
+      proxyPath: 'apps/tensorboard/proxy/test-token/',
       tfVersion: '1.14.0',
       image: 'tensorflow/tensorflow:1.14.0',
     });
@@ -206,7 +223,7 @@ describe('Apis', () => {
       namespace: 'test-ns',
     };
     it('starts tensorboard app', async () => {
-      const spy = fetchSpy('http://some/address');
+      const spy = fetchSpy('apps/tensorboard/proxy/test-token/');
       await Apis.startTensorboardApp(defaultArgs);
       expect(spy).toHaveBeenCalledWith(
         'apps/tensorboard?logdir=' +
@@ -323,17 +340,77 @@ describe('Apis', () => {
     );
   });
 
+  it('uploadPipelineV2 with codeSourceUrl', async () => {
+    const spy = fetchSpy(JSON.stringify({ pipeline_id: 'new-pipeline-id' }));
+    await Apis.uploadPipelineV2(
+      'test pipeline name',
+      'test display name',
+      'test description',
+      new File([], 'test name'),
+      'test-ns',
+      'https://github.com/example/repo',
+    );
+    expect(spy).toHaveBeenCalledWith(
+      'apis/v2beta1/pipelines/upload?name=' +
+        encodeURIComponent('test pipeline name') +
+        '&display_name=' +
+        encodeURIComponent('test display name') +
+        '&description=' +
+        encodeURIComponent('test description') +
+        '&namespace=' +
+        encodeURIComponent('test-ns') +
+        '&code_source_url=' +
+        encodeURIComponent('https://github.com/example/repo'),
+      {
+        body: expect.anything(),
+        cache: 'no-cache',
+        credentials: 'same-origin',
+        method: 'POST',
+      },
+    );
+  });
+
+  it('uploadPipelineVersionV2 with codeSourceUrl', async () => {
+    const spy = fetchSpy(JSON.stringify({ pipeline_version_id: 'new-version-id' }));
+    await Apis.uploadPipelineVersionV2(
+      'test version name',
+      'test display name',
+      'test-pipeline-id',
+      new File([], 'test name'),
+      'test description',
+      'https://github.com/example/repo',
+    );
+    expect(spy).toHaveBeenCalledWith(
+      'apis/v2beta1/pipelines/upload_version?name=' +
+        encodeURIComponent('test version name') +
+        '&pipelineid=' +
+        encodeURIComponent('test-pipeline-id') +
+        '&display_name=' +
+        encodeURIComponent('test display name') +
+        '&description=' +
+        encodeURIComponent('test description') +
+        '&code_source_url=' +
+        encodeURIComponent('https://github.com/example/repo'),
+      {
+        body: expect.anything(),
+        cache: 'no-cache',
+        credentials: 'same-origin',
+        method: 'POST',
+      },
+    );
+  });
+
   it('checks if Tensorboard pod is ready', async () => {
     const spy = fetchSpy('');
-    const ready = await Apis.isTensorboardPodReady('apis/v1beta1/_proxy/pod_address');
+    const ready = await Apis.isTensorboardPodReady('apps/tensorboard/proxy/test-token/');
     expect(ready).toBe(true);
-    expect(spy).toHaveBeenCalledWith('apis/v1beta1/_proxy/pod_address', { method: 'HEAD' });
+    expect(spy).toHaveBeenCalledWith('apps/tensorboard/proxy/test-token/', { method: 'HEAD' });
   });
 
   it('checks if Tensorboard pod is not ready', async () => {
     const spy = failedFetchSpy('');
-    const ready = await Apis.isTensorboardPodReady('apis/v1beta1/_proxy/pod_address');
+    const ready = await Apis.isTensorboardPodReady('apps/tensorboard/proxy/test-token/');
     expect(ready).toBe(false);
-    expect(spy).toHaveBeenCalledWith('apis/v1beta1/_proxy/pod_address', { method: 'HEAD' });
+    expect(spy).toHaveBeenCalledWith('apps/tensorboard/proxy/test-token/', { method: 'HEAD' });
   });
 });

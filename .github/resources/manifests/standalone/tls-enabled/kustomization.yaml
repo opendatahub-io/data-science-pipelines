@@ -43,7 +43,10 @@ patches:
       kind: Deployment
       name: ml-pipeline
   - path: ../../base/ci-stability-tuning.yaml
+<<<<<<< HEAD
   - path: ../../base/seaweedfs-ci-stability-tuning.yaml
+=======
+>>>>>>> upstream/master
   - path: apiserver-env.yaml
     target:
       kind: Deployment

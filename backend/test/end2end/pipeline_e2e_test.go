@@ -133,7 +133,7 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		var pipelineDir = "valid/critical"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
-			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
+			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), Label(E2eCriticalShardForPipeline(pipelineFile)), FlakeAttempts(2), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})
 		}
@@ -249,6 +249,7 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		}
 	})
 
+<<<<<<< HEAD
 	// E2eGpu-labeled specs run even when the package has no --label-filter; see
 	// AGENTS.md (Local testing → Backend Ginkgo test suites → End-to-end tests).
 	Context("GPU component test >", Label(E2eGpu), func() {
@@ -258,6 +259,15 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 			if !gpuPipelineFixtureSelected(pipelineFile) {
 				continue
 			}
+=======
+	// Schedule-only NVIDIA GPU check (Kind + FGO fake). Does not assert CUDA/torch.
+	// Filter with --label-filter=gpu-scheduling-check. Without a filter this also
+	// runs and needs a cluster that advertises nvidia.com/gpu (real or FGO fake).
+	Context("GPU scheduling check >", Label(E2eGpuSchedulingCheck), func() {
+		var pipelineDir = "valid/gpu-scheduling"
+		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
+		for _, pipelineFile := range pipelineFiles {
+>>>>>>> upstream/master
 			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})

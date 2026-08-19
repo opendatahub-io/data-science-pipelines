@@ -16,7 +16,7 @@ package driver
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 
@@ -101,6 +101,11 @@ type Options struct {
 	DefaultRunAsGroup *int64
 	// Admin-configured default runAsNonRoot for user containers. Nil means not set.
 	DefaultRunAsNonRoot *bool
+	// Administrator-configured default hostUsers for user workload pods. Nil means not set.
+	// When set to false the pod runs in a dedicated Linux user namespace:
+	// UID 0 inside the pod maps to an unprivileged host UID, so root processes
+	// in the container are not root on the host.
+	DefaultHostUsers *bool
 }
 
 // TaskConfig needs to stay aligned with the TaskConfig in the SDK.
@@ -795,7 +800,7 @@ func provisionOutputs(
 	// Place the executor output file under localTaskRoot to enable Pythonic artifacts. The SDK's pythonic artifact
 	// runtime derives CONTAINER_TASK_ROOT from the directory of OutputFile to use it in dsl.get_uri.
 	if localTaskRoot, err := component.LocalPathForURI(taskRootRemote); err == nil {
-		outputs.OutputFile = filepath.Join(localTaskRoot, "output_metadata.json")
+		outputs.OutputFile = path.Join(localTaskRoot, "output_metadata.json")
 	} else {
 		// Fallback to legacy path if the pipeline root scheme is not recognized.
 		outputs.OutputFile = component.OutputMetadataFilepath
