@@ -626,7 +626,7 @@ func (s *PipelineServerV1) DeletePipelineV1(ctx context.Context, request *apiv1b
 		deletePipelineRequests.Inc()
 	}
 
-	if err := s.deletePipeline(ctx, request.GetId(), false); err != nil {
+	if err := s.deletePipeline(ctx, request.GetId(), true); err != nil {
 		return nil, util.Wrapf(err, "Failed to delete pipeline (v1beta1) %s. Check error stack", request.GetId())
 	}
 
