@@ -218,7 +218,7 @@ pytz==2025.2
     # via pandas
 pyyaml==6.0.2
     # via bokeh
-pyzmq==27.1.0
+pyzmq==27.2.0
     # via
     #   ipykernel
     #   jupyter-client
