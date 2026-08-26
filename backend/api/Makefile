@@ -21,8 +21,9 @@ REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator
 API_VERSION ?= v2beta1
 
 # Keep in sync with the version used in test/release/Dockerfile.release
-PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:master
-RELEASE_IMAGE=ghcr.io/kubeflow/kfp-release:master
+# Pin off :master so CI does not rewrite generated files (protoc-gen-go v1.36.11).
+PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:release-2.17@sha256:28f1aaa56c2abefedecf162f5917843283253d2cd8d99bc53c18587033320370
+RELEASE_IMAGE=ghcr.io/kubeflow/kfp-release:release-2.17@sha256:ac28d91d9e42e6dbcebbacb63b7850a0acdf0e3bd580395f07a36051707baefe
 CONTAINER_ENGINE ?= docker
 
 # Generate clients using a pre-built api-generator image.

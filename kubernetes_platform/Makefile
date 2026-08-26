@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:master
+# Pin off :master so CI does not rewrite generated files (protoc-gen-go v1.36.11).
+PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:release-2.17@sha256:28f1aaa56c2abefedecf162f5917843283253d2cd8d99bc53c18587033320370
 
 # Set USE_FIND_LINKS=true to use local sdk and pipeline_spec for buildling python builds rather than pulling from pypi
 # applies to `make python` and make pythone-dev` commands.

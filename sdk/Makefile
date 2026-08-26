@@ -13,7 +13,8 @@
 # limitations under the License.
 
 # Contact one of chensun, HumairAK if this remote image needs an update.
-PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:master
+# Pin off :master so CI does not rewrite generated files (protoc-gen-go v1.36.11).
+PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:release-2.17@sha256:28f1aaa56c2abefedecf162f5917843283253d2cd8d99bc53c18587033320370
 
 .PHONY: python
 python: python
