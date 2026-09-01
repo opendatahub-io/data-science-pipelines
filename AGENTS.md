@@ -7,7 +7,7 @@
 
 ### Document metadata
 
-- Last updated: 2026-05-31
+- Last updated: 2026-09-10
 - Scope: KFP master branch (v2 engine), backend (Go), SDK (Python), frontend (React 19)
 
 ### Maintenance (agents and contributors)
@@ -322,6 +322,9 @@ The following files are generated; edit their sources and regenerate:
 - `kubernetes_platform/python/kfp/kubernetes/kubernetes_executor_config_pb2.py`
   - Source: `kubernetes_platform/proto/kubernetes_executor_config.proto`
   - Generate: `make -C kubernetes_platform python` (or `make -C kubernetes_platform python-dev`)
+- `kubernetes_platform/go/kubernetesplatform/kubernetes_executor_config.pb.go`
+  - Source: `kubernetes_platform/proto/kubernetes_executor_config.proto`
+  - Generate: `make -C kubernetes_platform golang`
 - Frontend OpenAPI clients under `frontend/src/apis`, `frontend/src/apisv2beta1`, `frontend/server/src/generated/apis`, and `frontend/server/src/generated/apisv2beta1`, with shared runtime/model support under `frontend/src/generated/openapi` and `frontend/server/src/generated/openapi`
   - Sources: Swagger specs under `backend/api/**/swagger/*.json`
   - Generate: `cd frontend && npm run apis` / `npm run apis:v2beta1` / `npm run apis:all` (uses pinned Docker image `openapitools/openapi-generator-cli:v7.19.0`)
@@ -530,6 +533,7 @@ When changing an effect-heavy frontend component, add or run the smallest releva
   - Example: `e2e-test.yml` job "API integration tests v2 - K8s with ${pipeline_store}" and "compile pipelines with Kubernetes".
 - Argo Workflows version matrix for compatibility (where relevant): `e2e-test.yml` exercises `v3.5.14`, `v3.7.3`, and `v4.0.4` across the standard cache/test-label matrix, while `api-server-tests.yml` covers standalone and Kubernetes-native Argo compatibility across the standard matrices (with standalone low-Kubernetes spot lanes per supported Argo version).
 - Proxy / cache toggles: dedicated jobs run with HTTP proxy enabled and with execution cache disabled to validate those modes.
+- Dynamic Resource Allocation (DRA): `e2e-test.yml` has a `dra-check` Kind lane on Kubernetes `v1.34.3`. It installs the DRA example driver and validates static, JSON, and passthrough pod resource claims.
 - Artifacts: failing logs and test outputs are uploaded as workflow artifacts for debugging.
 
 ### CI cluster setup and helpers

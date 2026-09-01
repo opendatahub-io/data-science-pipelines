@@ -36,6 +36,8 @@ const (
 	E2eProxy string = "E2EProxy"
 	// E2eGpu - For pipelines that require GPU-capable clusters (accelerator workloads)
 	E2eGpu string = "gpu"
+	// E2eDraCheck - DRA (Dynamic Resource Allocation) checks (e.g. Kind + dra-example-driver).
+	E2eDraCheck string = "dra-check"
 
 	WorkflowCompiler       string = "WorkflowCompiler"
 	WorkflowCompilerVisits string = "WorkflowCompilerVisits"

@@ -36,9 +36,9 @@ import (
 // of the mlmd.Client in tests to mock specific calls to MLMD. TODO Future tests which need to mock
 // other parts of MLMD will have to add functions to the FakeClient struct for mocking those calls.
 type FakeClient struct {
-	contexts             []*pb.Context
-	artifacts            []*pb.Artifact
-	artifactIdsToContext map[int64]*pb.Context
+	contexts                      []*pb.Context
+	artifacts                     []*pb.Artifact
+	artifactIdsToContext          map[int64]*pb.Context
 	CreateExecutionFunc           func(ctx context.Context, pipeline *Pipeline, config *ExecutionConfig) (*Execution, error)
 	GetExecutionByTypeAndNameFunc func(ctx context.Context, typeName, name string) (*Execution, error)
 	GetPipelineFunc               func(ctx context.Context, pipelineName, runID, namespace, runResource, pipelineRoot string, storeSessionInfo string) (*Pipeline, error)

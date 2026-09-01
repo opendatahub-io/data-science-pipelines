@@ -24,11 +24,11 @@ import (
 	pb "github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-	"google.golang.org/protobuf/proto"
 )
 
 func Test_validateRootDAG(t *testing.T) {

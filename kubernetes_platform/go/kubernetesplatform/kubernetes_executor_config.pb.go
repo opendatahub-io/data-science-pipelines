@@ -58,6 +58,7 @@ type KubernetesExecutorConfig struct {
 	EnabledSharedMemory    *EnabledSharedMemory      `protobuf:"bytes,16,opt,name=enabled_shared_memory,json=enabledSharedMemory,proto3" json:"enabled_shared_memory,omitempty"`
 	EmptyDirMounts         []*EmptyDirMount          `protobuf:"bytes,17,rep,name=empty_dir_mounts,json=emptyDirMounts,proto3" json:"empty_dir_mounts,omitempty"`
 	SecurityContext        *SecurityContext          `protobuf:"bytes,18,opt,name=security_context,json=securityContext,proto3" json:"security_context,omitempty"`
+	PodResourceClaims      []*PodResourceClaim       `protobuf:"bytes,19,rep,name=pod_resource_claims,json=podResourceClaims,proto3" json:"pod_resource_claims,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -214,6 +215,13 @@ func (x *KubernetesExecutorConfig) GetEmptyDirMounts() []*EmptyDirMount {
 func (x *KubernetesExecutorConfig) GetSecurityContext() *SecurityContext {
 	if x != nil {
 		return x.SecurityContext
+	}
+	return nil
+}
+
+func (x *KubernetesExecutorConfig) GetPodResourceClaims() []*PodResourceClaim {
+	if x != nil {
+		return x.PodResourceClaims
 	}
 	return nil
 }
@@ -1820,6 +1828,63 @@ func (x *EmptyDirMount) GetSizeLimit() string {
 	return ""
 }
 
+// Pod-level resource claim for Dynamic Resource Allocation.
+// Maps to corev1.PodResourceClaim.
+type PodResourceClaim struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Name of a ResourceClaimTemplate in the same namespace.
+	ResourceClaimTemplateName string `protobuf:"bytes,1,opt,name=resource_claim_template_name,json=resourceClaimTemplateName,proto3" json:"resource_claim_template_name,omitempty"`
+	// JSON parameter for runtime-resolved claims.
+	// When set, takes precedence over the static field above.
+	ResourceClaimJson *pipelinespec.TaskInputsSpec_InputParameterSpec `protobuf:"bytes,2,opt,name=resource_claim_json,json=resourceClaimJson,proto3" json:"resource_claim_json,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *PodResourceClaim) Reset() {
+	*x = PodResourceClaim{}
+	mi := &file_kubernetes_executor_config_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PodResourceClaim) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PodResourceClaim) ProtoMessage() {}
+
+func (x *PodResourceClaim) ProtoReflect() protoreflect.Message {
+	mi := &file_kubernetes_executor_config_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PodResourceClaim.ProtoReflect.Descriptor instead.
+func (*PodResourceClaim) Descriptor() ([]byte, []int) {
+	return file_kubernetes_executor_config_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *PodResourceClaim) GetResourceClaimTemplateName() string {
+	if x != nil {
+		return x.ResourceClaimTemplateName
+	}
+	return ""
+}
+
+func (x *PodResourceClaim) GetResourceClaimJson() *pipelinespec.TaskInputsSpec_InputParameterSpec {
+	if x != nil {
+		return x.ResourceClaimJson
+	}
+	return nil
+}
+
 type SecretAsEnv_SecretKeyToEnvMap struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Corresponds to a key of the Secret.data field.
@@ -1832,7 +1897,7 @@ type SecretAsEnv_SecretKeyToEnvMap struct {
 
 func (x *SecretAsEnv_SecretKeyToEnvMap) Reset() {
 	*x = SecretAsEnv_SecretKeyToEnvMap{}
-	mi := &file_kubernetes_executor_config_proto_msgTypes[21]
+	mi := &file_kubernetes_executor_config_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1844,7 +1909,7 @@ func (x *SecretAsEnv_SecretKeyToEnvMap) String() string {
 func (*SecretAsEnv_SecretKeyToEnvMap) ProtoMessage() {}
 
 func (x *SecretAsEnv_SecretKeyToEnvMap) ProtoReflect() protoreflect.Message {
-	mi := &file_kubernetes_executor_config_proto_msgTypes[21]
+	mi := &file_kubernetes_executor_config_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1886,7 +1951,7 @@ type ConfigMapAsEnv_ConfigMapKeyToEnvMap struct {
 
 func (x *ConfigMapAsEnv_ConfigMapKeyToEnvMap) Reset() {
 	*x = ConfigMapAsEnv_ConfigMapKeyToEnvMap{}
-	mi := &file_kubernetes_executor_config_proto_msgTypes[25]
+	mi := &file_kubernetes_executor_config_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1898,7 +1963,7 @@ func (x *ConfigMapAsEnv_ConfigMapKeyToEnvMap) String() string {
 func (*ConfigMapAsEnv_ConfigMapKeyToEnvMap) ProtoMessage() {}
 
 func (x *ConfigMapAsEnv_ConfigMapKeyToEnvMap) ProtoReflect() protoreflect.Message {
-	mi := &file_kubernetes_executor_config_proto_msgTypes[25]
+	mi := &file_kubernetes_executor_config_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1932,7 +1997,7 @@ var File_kubernetes_executor_config_proto protoreflect.FileDescriptor
 
 const file_kubernetes_executor_config_proto_rawDesc = "" +
 	"\n" +
-	" kubernetes_executor_config.proto\x12\x0ekfp_kubernetes\x1a\x1cgoogle/protobuf/struct.proto\x1a\x13pipeline_spec.proto\"\x93\n" +
+	" kubernetes_executor_config.proto\x12\x0ekfp_kubernetes\x1a\x1cgoogle/protobuf/struct.proto\x1a\x13pipeline_spec.proto\"\xe5\n" +
 	"\n" +
 	"\x18KubernetesExecutorConfig\x12H\n" +
 	"\x10secret_as_volume\x18\x01 \x03(\v2\x1e.kfp_kubernetes.SecretAsVolumeR\x0esecretAsVolume\x12?\n" +
@@ -1953,7 +2018,8 @@ const file_kubernetes_executor_config_proto_rawDesc = "" +
 	"\fpod_affinity\x18\x0f \x03(\v2\x1f.kfp_kubernetes.PodAffinityTermR\vpodAffinity\x12W\n" +
 	"\x15enabled_shared_memory\x18\x10 \x01(\v2#.kfp_kubernetes.EnabledSharedMemoryR\x13enabledSharedMemory\x12G\n" +
 	"\x10empty_dir_mounts\x18\x11 \x03(\v2\x1d.kfp_kubernetes.EmptyDirMountR\x0eemptyDirMounts\x12J\n" +
-	"\x10security_context\x18\x12 \x01(\v2\x1f.kfp_kubernetes.SecurityContextR\x0fsecurityContext\"J\n" +
+	"\x10security_context\x18\x12 \x01(\v2\x1f.kfp_kubernetes.SecurityContextR\x0fsecurityContext\x12P\n" +
+	"\x13pod_resource_claims\x18\x13 \x03(\v2 .kfp_kubernetes.PodResourceClaimR\x11podResourceClaims\"J\n" +
 	"\x13EnabledSharedMemory\x12\x1f\n" +
 	"\vvolume_name\x18\x01 \x01(\tR\n" +
 	"volumeName\x12\x12\n" +
@@ -2116,7 +2182,10 @@ const file_kubernetes_executor_config_proto_rawDesc = "" +
 	"\n" +
 	"size_limit\x18\x04 \x01(\tH\x01R\tsizeLimit\x88\x01\x01B\t\n" +
 	"\a_mediumB\r\n" +
-	"\v_size_limitBIZGgithub.com/kubeflow/pipelines/kubernetes_platform/go/kubernetesplatformb\x06proto3"
+	"\v_size_limit\"\xb4\x01\n" +
+	"\x10PodResourceClaim\x12?\n" +
+	"\x1cresource_claim_template_name\x18\x01 \x01(\tR\x19resourceClaimTemplateName\x12_\n" +
+	"\x13resource_claim_json\x18\x02 \x01(\v2/.ml_pipelines.TaskInputsSpec.InputParameterSpecR\x11resourceClaimJsonBIZGgithub.com/kubeflow/pipelines/kubernetes_platform/go/kubernetesplatformb\x06proto3"
 
 var (
 	file_kubernetes_executor_config_proto_rawDescOnce sync.Once
@@ -2130,7 +2199,7 @@ func file_kubernetes_executor_config_proto_rawDescGZIP() []byte {
 	return file_kubernetes_executor_config_proto_rawDescData
 }
 
-var file_kubernetes_executor_config_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_kubernetes_executor_config_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_kubernetes_executor_config_proto_goTypes = []any{
 	(*KubernetesExecutorConfig)(nil),            // 0: kfp_kubernetes.KubernetesExecutorConfig
 	(*EnabledSharedMemory)(nil),                 // 1: kfp_kubernetes.EnabledSharedMemory
@@ -2153,16 +2222,17 @@ var file_kubernetes_executor_config_proto_goTypes = []any{
 	(*PodAffinityTerm)(nil),                     // 18: kfp_kubernetes.PodAffinityTerm
 	(*SecurityContext)(nil),                     // 19: kfp_kubernetes.SecurityContext
 	(*EmptyDirMount)(nil),                       // 20: kfp_kubernetes.EmptyDirMount
-	(*SecretAsEnv_SecretKeyToEnvMap)(nil),       // 21: kfp_kubernetes.SecretAsEnv.SecretKeyToEnvMap
-	nil,                                         // 22: kfp_kubernetes.NodeSelector.LabelsEntry
-	nil,                                         // 23: kfp_kubernetes.PodMetadata.LabelsEntry
-	nil,                                         // 24: kfp_kubernetes.PodMetadata.AnnotationsEntry
-	(*ConfigMapAsEnv_ConfigMapKeyToEnvMap)(nil), // 25: kfp_kubernetes.ConfigMapAsEnv.ConfigMapKeyToEnvMap
-	nil, // 26: kfp_kubernetes.PodAffinityTerm.MatchPodLabelsEntry
-	nil, // 27: kfp_kubernetes.PodAffinityTerm.MatchNamespaceLabelsEntry
-	(*pipelinespec.TaskInputsSpec_InputParameterSpec)(nil),                         // 28: ml_pipelines.TaskInputsSpec.InputParameterSpec
-	(*pipelinespec.TaskInputsSpec_InputParameterSpec_TaskOutputParameterSpec)(nil), // 29: ml_pipelines.TaskInputsSpec.InputParameterSpec.TaskOutputParameterSpec
-	(*structpb.Struct)(nil), // 30: google.protobuf.Struct
+	(*PodResourceClaim)(nil),                    // 21: kfp_kubernetes.PodResourceClaim
+	(*SecretAsEnv_SecretKeyToEnvMap)(nil),       // 22: kfp_kubernetes.SecretAsEnv.SecretKeyToEnvMap
+	nil,                                         // 23: kfp_kubernetes.NodeSelector.LabelsEntry
+	nil,                                         // 24: kfp_kubernetes.PodMetadata.LabelsEntry
+	nil,                                         // 25: kfp_kubernetes.PodMetadata.AnnotationsEntry
+	(*ConfigMapAsEnv_ConfigMapKeyToEnvMap)(nil), // 26: kfp_kubernetes.ConfigMapAsEnv.ConfigMapKeyToEnvMap
+	nil, // 27: kfp_kubernetes.PodAffinityTerm.MatchPodLabelsEntry
+	nil, // 28: kfp_kubernetes.PodAffinityTerm.MatchNamespaceLabelsEntry
+	(*pipelinespec.TaskInputsSpec_InputParameterSpec)(nil),                         // 29: ml_pipelines.TaskInputsSpec.InputParameterSpec
+	(*pipelinespec.TaskInputsSpec_InputParameterSpec_TaskOutputParameterSpec)(nil), // 30: ml_pipelines.TaskInputsSpec.InputParameterSpec.TaskOutputParameterSpec
+	(*structpb.Struct)(nil), // 31: google.protobuf.Struct
 }
 var file_kubernetes_executor_config_proto_depIdxs = []int32{
 	2,  // 0: kfp_kubernetes.KubernetesExecutorConfig.secret_as_volume:type_name -> kfp_kubernetes.SecretAsVolume
@@ -2181,36 +2251,38 @@ var file_kubernetes_executor_config_proto_depIdxs = []int32{
 	1,  // 13: kfp_kubernetes.KubernetesExecutorConfig.enabled_shared_memory:type_name -> kfp_kubernetes.EnabledSharedMemory
 	20, // 14: kfp_kubernetes.KubernetesExecutorConfig.empty_dir_mounts:type_name -> kfp_kubernetes.EmptyDirMount
 	19, // 15: kfp_kubernetes.KubernetesExecutorConfig.security_context:type_name -> kfp_kubernetes.SecurityContext
-	28, // 16: kfp_kubernetes.SecretAsVolume.secret_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
-	21, // 17: kfp_kubernetes.SecretAsEnv.key_to_env:type_name -> kfp_kubernetes.SecretAsEnv.SecretKeyToEnvMap
-	28, // 18: kfp_kubernetes.SecretAsEnv.secret_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
-	29, // 19: kfp_kubernetes.PvcMount.task_output_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec.TaskOutputParameterSpec
-	28, // 20: kfp_kubernetes.PvcMount.pvc_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
-	30, // 21: kfp_kubernetes.CreatePvc.annotations:type_name -> google.protobuf.Struct
-	5,  // 22: kfp_kubernetes.CreatePvc.data_source:type_name -> kfp_kubernetes.TypedLocalObjectReference
-	29, // 23: kfp_kubernetes.DeletePvc.task_output_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec.TaskOutputParameterSpec
-	22, // 24: kfp_kubernetes.NodeSelector.labels:type_name -> kfp_kubernetes.NodeSelector.LabelsEntry
-	28, // 25: kfp_kubernetes.NodeSelector.node_selector_json:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
-	23, // 26: kfp_kubernetes.PodMetadata.labels:type_name -> kfp_kubernetes.PodMetadata.LabelsEntry
-	24, // 27: kfp_kubernetes.PodMetadata.annotations:type_name -> kfp_kubernetes.PodMetadata.AnnotationsEntry
-	28, // 28: kfp_kubernetes.ConfigMapAsVolume.config_map_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
-	25, // 29: kfp_kubernetes.ConfigMapAsEnv.key_to_env:type_name -> kfp_kubernetes.ConfigMapAsEnv.ConfigMapKeyToEnvMap
-	28, // 30: kfp_kubernetes.ConfigMapAsEnv.config_map_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
-	9,  // 31: kfp_kubernetes.GenericEphemeralVolume.metadata:type_name -> kfp_kubernetes.PodMetadata
-	28, // 32: kfp_kubernetes.ImagePullSecret.secret_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
-	28, // 33: kfp_kubernetes.Toleration.toleration_json:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
-	16, // 34: kfp_kubernetes.NodeAffinityTerm.match_expressions:type_name -> kfp_kubernetes.SelectorRequirement
-	16, // 35: kfp_kubernetes.NodeAffinityTerm.match_fields:type_name -> kfp_kubernetes.SelectorRequirement
-	28, // 36: kfp_kubernetes.NodeAffinityTerm.node_affinity_json:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
-	16, // 37: kfp_kubernetes.PodAffinityTerm.match_pod_expressions:type_name -> kfp_kubernetes.SelectorRequirement
-	26, // 38: kfp_kubernetes.PodAffinityTerm.match_pod_labels:type_name -> kfp_kubernetes.PodAffinityTerm.MatchPodLabelsEntry
-	16, // 39: kfp_kubernetes.PodAffinityTerm.match_namespace_expressions:type_name -> kfp_kubernetes.SelectorRequirement
-	27, // 40: kfp_kubernetes.PodAffinityTerm.match_namespace_labels:type_name -> kfp_kubernetes.PodAffinityTerm.MatchNamespaceLabelsEntry
-	41, // [41:41] is the sub-list for method output_type
-	41, // [41:41] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	21, // 16: kfp_kubernetes.KubernetesExecutorConfig.pod_resource_claims:type_name -> kfp_kubernetes.PodResourceClaim
+	29, // 17: kfp_kubernetes.SecretAsVolume.secret_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
+	22, // 18: kfp_kubernetes.SecretAsEnv.key_to_env:type_name -> kfp_kubernetes.SecretAsEnv.SecretKeyToEnvMap
+	29, // 19: kfp_kubernetes.SecretAsEnv.secret_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
+	30, // 20: kfp_kubernetes.PvcMount.task_output_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec.TaskOutputParameterSpec
+	29, // 21: kfp_kubernetes.PvcMount.pvc_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
+	31, // 22: kfp_kubernetes.CreatePvc.annotations:type_name -> google.protobuf.Struct
+	5,  // 23: kfp_kubernetes.CreatePvc.data_source:type_name -> kfp_kubernetes.TypedLocalObjectReference
+	30, // 24: kfp_kubernetes.DeletePvc.task_output_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec.TaskOutputParameterSpec
+	23, // 25: kfp_kubernetes.NodeSelector.labels:type_name -> kfp_kubernetes.NodeSelector.LabelsEntry
+	29, // 26: kfp_kubernetes.NodeSelector.node_selector_json:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
+	24, // 27: kfp_kubernetes.PodMetadata.labels:type_name -> kfp_kubernetes.PodMetadata.LabelsEntry
+	25, // 28: kfp_kubernetes.PodMetadata.annotations:type_name -> kfp_kubernetes.PodMetadata.AnnotationsEntry
+	29, // 29: kfp_kubernetes.ConfigMapAsVolume.config_map_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
+	26, // 30: kfp_kubernetes.ConfigMapAsEnv.key_to_env:type_name -> kfp_kubernetes.ConfigMapAsEnv.ConfigMapKeyToEnvMap
+	29, // 31: kfp_kubernetes.ConfigMapAsEnv.config_map_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
+	9,  // 32: kfp_kubernetes.GenericEphemeralVolume.metadata:type_name -> kfp_kubernetes.PodMetadata
+	29, // 33: kfp_kubernetes.ImagePullSecret.secret_name_parameter:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
+	29, // 34: kfp_kubernetes.Toleration.toleration_json:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
+	16, // 35: kfp_kubernetes.NodeAffinityTerm.match_expressions:type_name -> kfp_kubernetes.SelectorRequirement
+	16, // 36: kfp_kubernetes.NodeAffinityTerm.match_fields:type_name -> kfp_kubernetes.SelectorRequirement
+	29, // 37: kfp_kubernetes.NodeAffinityTerm.node_affinity_json:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
+	16, // 38: kfp_kubernetes.PodAffinityTerm.match_pod_expressions:type_name -> kfp_kubernetes.SelectorRequirement
+	27, // 39: kfp_kubernetes.PodAffinityTerm.match_pod_labels:type_name -> kfp_kubernetes.PodAffinityTerm.MatchPodLabelsEntry
+	16, // 40: kfp_kubernetes.PodAffinityTerm.match_namespace_expressions:type_name -> kfp_kubernetes.SelectorRequirement
+	28, // 41: kfp_kubernetes.PodAffinityTerm.match_namespace_labels:type_name -> kfp_kubernetes.PodAffinityTerm.MatchNamespaceLabelsEntry
+	29, // 42: kfp_kubernetes.PodResourceClaim.resource_claim_json:type_name -> ml_pipelines.TaskInputsSpec.InputParameterSpec
+	43, // [43:43] is the sub-list for method output_type
+	43, // [43:43] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_kubernetes_executor_config_proto_init() }
@@ -2248,7 +2320,7 @@ func file_kubernetes_executor_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kubernetes_executor_config_proto_rawDesc), len(file_kubernetes_executor_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

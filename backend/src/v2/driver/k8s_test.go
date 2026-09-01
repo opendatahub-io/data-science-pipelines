@@ -2185,10 +2185,10 @@ func Test_extendPodSpecPatch_SecurityContext(t *testing.T) {
 			},
 		},
 		{
-			"Valid - RunAsUser only",
+			"Valid - non-root RunAsUser only",
 			&kubernetesplatform.KubernetesExecutorConfig{
 				SecurityContext: &kubernetesplatform.SecurityContext{
-					RunAsUser: int64Ptr(0),
+					RunAsUser: int64Ptr(1000),
 				},
 			},
 			&k8score.PodSpec{
@@ -2196,7 +2196,7 @@ func Test_extendPodSpecPatch_SecurityContext(t *testing.T) {
 					{
 						Name: "main",
 						SecurityContext: &k8score.SecurityContext{
-							RunAsUser: int64Ptr(0),
+							RunAsUser: int64Ptr(1000),
 							Capabilities: &k8score.Capabilities{
 								Drop: []k8score.Capability{"ALL"},
 							},
@@ -2370,7 +2370,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminDefaultsNoUserOverride(t *test
 	assert.Equal(t, int64(1000), *got.Containers[0].SecurityContext.RunAsUser)
 }
 
-func Test_extendPodSpecPatch_SecurityContext_RootOnHardenedContainer(t *testing.T) {
+func Test_extendPodSpecPatch_SecurityContext_RootRejected(t *testing.T) {
 	rootUID := int64(0)
 	allowPrivEsc := false
 
@@ -2396,24 +2396,7 @@ func Test_extendPodSpecPatch_SecurityContext_RootOnHardenedContainer(t *testing.
 		map[string]*structpb.Value{},
 		nil,
 	)
-	assert.Nil(t, err)
-	assert.NotNil(t, got)
-	// runAsUser=0 is applied but the container is flagged as hardened
-	// (allowPrivilegeEscalation=false), so a warning is logged.
-	assert.Equal(t, &k8score.PodSpec{
-		Containers: []k8score.Container{
-			{
-				Name: "main",
-				SecurityContext: &k8score.SecurityContext{
-					RunAsUser:                &rootUID,
-					AllowPrivilegeEscalation: &allowPrivEsc,
-					Capabilities: &k8score.Capabilities{
-						Drop: []k8score.Capability{"ALL"},
-					},
-				},
-			},
-		},
-	}, got)
+	assert.ErrorContains(t, err, "runAsUser=0 (root) is not allowed")
 }
 
 func Test_extendPodSpecPatch_SecurityContext_AdminRunAsNonRoot(t *testing.T) {
@@ -3285,6 +3268,10 @@ func int64Ptr(val int64) *int64 {
 	return &val
 }
 
+func stringPtr(val string) *string {
+	return &val
+}
+
 func int32Ptr(val int32) *int32 {
 	return &val
 }
@@ -3424,4 +3411,535 @@ func Test_buildPVCDataSource(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_extendPodSpecPatch_PodResourceClaims(t *testing.T) {
+	tests := []struct {
+		name                    string
+		taskName                string
+		k8sExecCfg              *kubernetesplatform.KubernetesExecutorConfig
+		expected                *k8score.PodSpec
+		inputParams             map[string]*structpb.Value
+		existingContainerClaims []k8score.ResourceClaim
+		existingPodClaims       []k8score.PodResourceClaim
+		wantErr                 bool
+		wantErrMsg              string
+	}{
+		{
+			name:       "No claims - pod spec unchanged",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{Name: "main"}},
+			},
+		},
+		{
+			name: "Static single claim",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{ResourceClaimTemplateName: "gpu-claim-template"},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{
+					Name: "main",
+					Resources: k8score.ResourceRequirements{
+						Claims: []k8score.ResourceClaim{
+							{Name: "gpu-claim-template"},
+						},
+					},
+				}},
+				ResourceClaims: []k8score.PodResourceClaim{
+					{
+						Name:                      "gpu-claim-template",
+						ResourceClaimTemplateName: stringPtr("gpu-claim-template"),
+					},
+				},
+			},
+		},
+		{
+			name: "Multiple static claims",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{ResourceClaimTemplateName: "gpu-claim-template"},
+					{ResourceClaimTemplateName: "nic-claim-template"},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{
+					Name: "main",
+					Resources: k8score.ResourceRequirements{
+						Claims: []k8score.ResourceClaim{
+							{Name: "gpu-claim-template"},
+							{Name: "nic-claim-template"},
+						},
+					},
+				}},
+				ResourceClaims: []k8score.PodResourceClaim{
+					{
+						Name:                      "gpu-claim-template",
+						ResourceClaimTemplateName: stringPtr("gpu-claim-template"),
+					},
+					{
+						Name:                      "nic-claim-template",
+						ResourceClaimTemplateName: stringPtr("nic-claim-template"),
+					},
+				},
+			},
+		},
+		{
+			name: "JSON constant - single struct",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{
+						ResourceClaimJson: structInputParamConstant(map[string]any{
+							"resourceClaimTemplateName": "gpu-claim-template",
+						}),
+					},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{
+					Name: "main",
+					Resources: k8score.ResourceRequirements{
+						Claims: []k8score.ResourceClaim{
+							{Name: "gpu-claim-template"},
+						},
+					},
+				}},
+				ResourceClaims: []k8score.PodResourceClaim{
+					{
+						Name:                      "gpu-claim-template",
+						ResourceClaimTemplateName: stringPtr("gpu-claim-template"),
+					},
+				},
+			},
+		},
+		{
+			name: "JSON component input - list of claims",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{
+						ResourceClaimJson: inputParamComponent("param_1"),
+					},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{
+					Name: "main",
+					Resources: k8score.ResourceRequirements{
+						Claims: []k8score.ResourceClaim{
+							{Name: "gpu-claim-template"},
+							{Name: "nic-claim-template"},
+						},
+					},
+				}},
+				ResourceClaims: []k8score.PodResourceClaim{
+					{
+						Name:                      "gpu-claim-template",
+						ResourceClaimTemplateName: stringPtr("gpu-claim-template"),
+					},
+					{
+						Name:                      "nic-claim-template",
+						ResourceClaimTemplateName: stringPtr("nic-claim-template"),
+					},
+				},
+			},
+			inputParams: map[string]*structpb.Value{
+				"param_1": validListOfStructsOrPanic([]map[string]any{
+					{"resourceClaimTemplateName": "gpu-claim-template"},
+					{"resourceClaimTemplateName": "nic-claim-template"},
+				}),
+			},
+		},
+		{
+			name: "JSON component input - single claim",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{
+						ResourceClaimJson: inputParamComponent("param_1"),
+					},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{
+					Name: "main",
+					Resources: k8score.ResourceRequirements{
+						Claims: []k8score.ResourceClaim{
+							{Name: "gpu-claim-template"},
+						},
+					},
+				}},
+				ResourceClaims: []k8score.PodResourceClaim{
+					{
+						Name:                      "gpu-claim-template",
+						ResourceClaimTemplateName: stringPtr("gpu-claim-template"),
+					},
+				},
+			},
+			inputParams: map[string]*structpb.Value{
+				"param_1": validValueStructOrPanic(map[string]any{
+					"resourceClaimTemplateName": "gpu-claim-template",
+				}),
+			},
+		},
+		{
+			name:     "JSON component input with invalid claim - error includes task name",
+			taskName: "training-task",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{ResourceClaimJson: inputParamComponent("param_1")},
+				},
+			},
+			inputParams: map[string]*structpb.Value{
+				"param_1": validValueStructOrPanic(map[string]any{
+					"resourceClaimTemplateName": 1,
+				}),
+			},
+			wantErr:    true,
+			wantErrMsg: "failed to unmarshal single resource claim from JSON for task \"training-task\"",
+		},
+		{
+			name: "Empty resource_claim_template_name - error",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{ResourceClaimTemplateName: ""},
+				},
+			},
+			wantErr:    true,
+			wantErrMsg: "resourceClaimTemplateName must be non-empty",
+		},
+		{
+			name: "JSON with empty resourceClaimTemplateName - error",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{
+						ResourceClaimJson: structInputParamConstant(map[string]any{
+							"resourceClaimTemplateName": "",
+						}),
+					},
+				},
+			},
+			wantErr:    true,
+			wantErrMsg: "resourceClaimTemplateName must be non-empty",
+		},
+		{
+			name: "JSON with empty object - error",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{
+						ResourceClaimJson: structInputParamConstant(map[string]any{}),
+					},
+				},
+			},
+			wantErr:    true,
+			wantErrMsg: "resource claim JSON must be a non-empty object",
+		},
+		{
+			name: "Null optional parameter - skip claim",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{
+						ResourceClaimJson: inputParamComponent("param_1"),
+					},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{Name: "main"}},
+			},
+			inputParams: map[string]*structpb.Value{
+				"param_1": structpb.NewNullValue(),
+			},
+		},
+		{
+			name: "Mixed static + JSON claims",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{ResourceClaimTemplateName: "gpu-claim-template"},
+					{
+						ResourceClaimJson: structInputParamConstant(map[string]any{
+							"resourceClaimTemplateName": "nic-claim-template",
+						}),
+					},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{
+					Name: "main",
+					Resources: k8score.ResourceRequirements{
+						Claims: []k8score.ResourceClaim{
+							{Name: "gpu-claim-template"},
+							{Name: "nic-claim-template"},
+						},
+					},
+				}},
+				ResourceClaims: []k8score.PodResourceClaim{
+					{
+						Name:                      "gpu-claim-template",
+						ResourceClaimTemplateName: stringPtr("gpu-claim-template"),
+					},
+					{
+						Name:                      "nic-claim-template",
+						ResourceClaimTemplateName: stringPtr("nic-claim-template"),
+					},
+				},
+			},
+		},
+		{
+			name: "Existing Resources.Claims on container - appended not overwritten",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{ResourceClaimTemplateName: "gpu-claim-template"},
+				},
+			},
+			existingContainerClaims: []k8score.ResourceClaim{
+				{Name: "existing-claim"},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{
+					Name: "main",
+					Resources: k8score.ResourceRequirements{
+						Claims: []k8score.ResourceClaim{
+							{Name: "existing-claim"},
+							{Name: "gpu-claim-template"},
+						},
+					},
+				}},
+				ResourceClaims: []k8score.PodResourceClaim{
+					{
+						Name:                      "gpu-claim-template",
+						ResourceClaimTemplateName: stringPtr("gpu-claim-template"),
+					},
+				},
+			},
+		},
+		{
+			name: "Existing Resources.Claims matching pod claim - not duplicated",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{ResourceClaimTemplateName: "gpu-claim-template"},
+				},
+			},
+			existingContainerClaims: []k8score.ResourceClaim{
+				{Name: "gpu-claim-template"},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{
+					Name: "main",
+					Resources: k8score.ResourceRequirements{
+						Claims: []k8score.ResourceClaim{{Name: "gpu-claim-template"}},
+					},
+				}},
+				ResourceClaims: []k8score.PodResourceClaim{{
+					Name:                      "gpu-claim-template",
+					ResourceClaimTemplateName: stringPtr("gpu-claim-template"),
+				}},
+			},
+		},
+		{
+			name: "Nil claim in list - skipped",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					nil,
+					{ResourceClaimTemplateName: "gpu-claim-template"},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{{
+					Name: "main",
+					Resources: k8score.ResourceRequirements{
+						Claims: []k8score.ResourceClaim{
+							{Name: "gpu-claim-template"},
+						},
+					},
+				}},
+				ResourceClaims: []k8score.PodResourceClaim{
+					{
+						Name:                      "gpu-claim-template",
+						ResourceClaimTemplateName: stringPtr("gpu-claim-template"),
+					},
+				},
+			},
+		},
+		{
+			name: "JSON resolves to unexpected type - error",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{
+						ResourceClaimJson: inputParamComponent("param_1"),
+					},
+				},
+			},
+			inputParams: map[string]*structpb.Value{
+				"param_1": structpb.NewStringValue("not-a-struct-or-list"),
+			},
+			wantErr:    true,
+			wantErrMsg: "must be either struct or list type",
+		},
+		{
+			name: "List with valid and invalid claims - error on invalid",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{ResourceClaimTemplateName: "gpu-claim-template"},
+					{ResourceClaimTemplateName: ""},
+				},
+			},
+			wantErr:    true,
+			wantErrMsg: "resourceClaimTemplateName must be non-empty",
+		},
+		{
+			name: "Duplicate resource claim names - error",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{ResourceClaimTemplateName: "gpu-claim-template"},
+					{ResourceClaimTemplateName: "gpu-claim-template"},
+				},
+			},
+			wantErr:    true,
+			wantErrMsg: "duplicate resource claim name",
+		},
+		{
+			name: "Duplicate with pre-existing podSpec claim - error",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+					{ResourceClaimTemplateName: "gpu-claim-template"},
+				},
+			},
+			existingPodClaims: []k8score.PodResourceClaim{
+				{
+					Name:                      "gpu-claim-template",
+					ResourceClaimTemplateName: stringPtr("gpu-claim-template"),
+				},
+			},
+			wantErr:    true,
+			wantErrMsg: "duplicate resource claim name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := &k8score.PodSpec{Containers: []k8score.Container{{Name: "main"}}}
+
+			if tt.existingContainerClaims != nil {
+				got.Containers[0].Resources.Claims = tt.existingContainerClaims
+			}
+			if tt.existingPodClaims != nil {
+				got.ResourceClaims = tt.existingPodClaims
+			}
+
+			taskConfig := &TaskConfig{}
+			err := extendPodSpecPatch(
+				context.Background(),
+				got,
+				Options{TaskName: tt.taskName, KubernetesExecutorConfig: tt.k8sExecCfg},
+				nil,
+				nil,
+				nil,
+				tt.inputParams,
+				taskConfig,
+			)
+
+			if tt.wantErr {
+				assert.ErrorContains(t, err, tt.wantErrMsg)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, got)
+			assert.Empty(t, taskConfig.ResourceClaims)
+		})
+	}
+}
+
+func Test_extendPodSpecPatch_PodResourceClaims_Passthrough_NotAppliedToPod(t *testing.T) {
+	podSpec := &k8score.PodSpec{Containers: []k8score.Container{{Name: "main"}}}
+	cfg := &kubernetesplatform.KubernetesExecutorConfig{
+		PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+			{ResourceClaimTemplateName: "gpu-claim-template"},
+		},
+	}
+	comp := &pipelinespec.ComponentSpec{
+		TaskConfigPassthroughs: []*pipelinespec.TaskConfigPassthrough{{
+			Field:       pipelinespec.TaskConfigPassthroughType_KUBERNETES_RESOURCE_CLAIMS,
+			ApplyToTask: false,
+		}},
+	}
+	taskCfg := &TaskConfig{}
+	err := extendPodSpecPatch(
+		context.Background(),
+		podSpec,
+		Options{KubernetesExecutorConfig: cfg, Component: comp},
+		nil,
+		nil,
+		nil,
+		nil,
+		taskCfg,
+	)
+	assert.NoError(t, err)
+
+	assert.Empty(t, podSpec.ResourceClaims)
+	assert.Empty(t, podSpec.Containers[0].Resources.Claims)
+
+	assert.NotEmpty(t, taskCfg.ResourceClaims)
+	assert.Equal(t, "gpu-claim-template", taskCfg.ResourceClaims[0].Name)
+}
+
+func Test_extendPodSpecPatch_PodResourceClaims_Passthrough_AppliedToPod(t *testing.T) {
+	podSpec := &k8score.PodSpec{Containers: []k8score.Container{{Name: "main"}}}
+	cfg := &kubernetesplatform.KubernetesExecutorConfig{
+		PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+			{ResourceClaimTemplateName: "gpu-claim-template"},
+		},
+	}
+	comp := &pipelinespec.ComponentSpec{
+		TaskConfigPassthroughs: []*pipelinespec.TaskConfigPassthrough{{
+			Field:       pipelinespec.TaskConfigPassthroughType_KUBERNETES_RESOURCE_CLAIMS,
+			ApplyToTask: true,
+		}},
+	}
+	taskCfg := &TaskConfig{}
+	err := extendPodSpecPatch(
+		context.Background(),
+		podSpec,
+		Options{KubernetesExecutorConfig: cfg, Component: comp},
+		nil,
+		nil,
+		nil,
+		nil,
+		taskCfg,
+	)
+	assert.NoError(t, err)
+
+	assert.NotEmpty(t, podSpec.ResourceClaims)
+	assert.NotEmpty(t, podSpec.Containers[0].Resources.Claims)
+	assert.NotEmpty(t, taskCfg.ResourceClaims)
+}
+
+func Test_extendPodSpecPatch_PodResourceClaims_DefaultSetOnPod(t *testing.T) {
+	podSpec := &k8score.PodSpec{Containers: []k8score.Container{{Name: "main"}}}
+	cfg := &kubernetesplatform.KubernetesExecutorConfig{
+		PodResourceClaims: []*kubernetesplatform.PodResourceClaim{
+			{ResourceClaimTemplateName: "gpu-claim-template"},
+		},
+	}
+	comp := &pipelinespec.ComponentSpec{
+		TaskConfigPassthroughs: []*pipelinespec.TaskConfigPassthrough{{
+			Field:       pipelinespec.TaskConfigPassthroughType_KUBERNETES_TOLERATIONS,
+			ApplyToTask: false,
+		}},
+	}
+	taskCfg := &TaskConfig{}
+	err := extendPodSpecPatch(
+		context.Background(),
+		podSpec,
+		Options{KubernetesExecutorConfig: cfg, Component: comp},
+		nil,
+		nil,
+		nil,
+		nil,
+		taskCfg,
+	)
+	assert.NoError(t, err)
+
+	assert.NotEmpty(t, podSpec.ResourceClaims)
+	assert.NotEmpty(t, podSpec.Containers[0].Resources.Claims)
+	assert.Empty(t, taskCfg.ResourceClaims)
 }
