@@ -271,7 +271,7 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 			Image:     c.driverImage,
 			Command:   c.driverCommand,
 			Args:      args,
-			Resources: driverResources,
+			Resources: GetDriverResources(),
 			Env:       append(proxy.GetConfig().GetEnvVars(), commonEnvs...),
 		},
 	}
@@ -517,7 +517,7 @@ func (c *workflowCompiler) addContainerExecutorTemplate(task *pipelinespec.Pipel
 						MountPath: component.VolumePathKFPLauncher,
 					},
 				},
-				Resources: launcherResources,
+				Resources: GetLauncherResources(),
 			},
 		}},
 		Container: &k8score.Container{
