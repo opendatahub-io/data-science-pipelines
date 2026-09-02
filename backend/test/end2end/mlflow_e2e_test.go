@@ -48,7 +48,6 @@ var _ = Describe("MLflow Integration >", Label(MLflow, FullRegression), func() {
 
 	BeforeEach(func() {
 		e2e_utils.SkipIfMLflowDisabled()
-		Skip("temporarily skipped: pipeline runs stuck in RUNNING state in CI")
 		mlflowEndpoint = e2e_utils.GetMLflowEndpoint()
 
 		logger.Log("################### Setup before each MLflow test #####################")
