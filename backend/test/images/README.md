@@ -144,10 +144,13 @@ podman run -it \
 
 Based on the default configuration:
 
-- `E2ECritical` - Critical end-to-end tests (default)
-- `smoke` - Basic functionality validation
-- `integration` - Integration test scenarios
-- `regression` - Regression test suite
+- `smoke` - Component-level critical tests (default for RHOAI nightly)
+- `Tier1` - High-priority tests excluding Smoke
+- `Tier2` - Medium- and low-priority positive tests
+- `Tier3` - Negative and destructive tests
+- `E2ECritical` - Legacy folder label (now also tagged Tier2)
+- `integration` - Cross-component integration (also tagged Tier1)
+- `gpu` - Accelerator-required E2E (also tagged Tier2)
 
 ## Test Execution Flow
 

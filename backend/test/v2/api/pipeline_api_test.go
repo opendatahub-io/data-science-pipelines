@@ -116,7 +116,7 @@ func eventuallyListPipelineVersions(
 
 // ################## POSITIVE TESTS ##################
 
-var _ = Describe("List Pipelines API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineList", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("List Pipelines API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineList", constants.APIServerTests, constants.FullRegression, constants.Tier2), func() {
 
 	Context("Basic List Operations >", func() {
 
@@ -468,7 +468,7 @@ var _ = Describe("List Pipelines API Tests >", Label(constants.POSITIVE, constan
 			}
 		})
 
-		It("Filter by pipeline_id IN with string_value should fail", Label(constants.NEGATIVE), func() {
+		It("Filter by pipeline_id IN with string_value should fail", Label(constants.NEGATIVE, constants.Tier3), func() {
 			pipelineDir := "valid"
 			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
 			createdPipeline := uploadPipelineAndVerify(pipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
@@ -609,7 +609,7 @@ var _ = Describe("List Pipelines API Tests >", Label(constants.POSITIVE, constan
 	})
 })
 
-var _ = Describe("List Pipelines Versions API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineVersionList", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("List Pipelines Versions API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineVersionList", constants.APIServerTests, constants.FullRegression, constants.Tier2), func() {
 
 	Context("Basic List Operations >", func() {
 		It("When no pipeline versions exist", func() {
@@ -1011,7 +1011,7 @@ var _ = Describe("List Pipelines Versions API Tests >", Label(constants.POSITIVE
 			}
 		})
 
-		It("Filter by pipeline_version_id IN with string_value should fail", Label(constants.NEGATIVE), func() {
+		It("Filter by pipeline_version_id IN with string_value should fail", Label(constants.NEGATIVE, constants.Tier3), func() {
 			pipelineDir := "valid"
 			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
 			createdPipeline := uploadPipelineAndVerify(pipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
@@ -1247,7 +1247,7 @@ var _ = Describe("List Pipelines Versions API Tests >", Label(constants.POSITIVE
 			Expect(versions).To(BeEmpty())
 		})
 
-		It("Filter by tag with non-EQUALS operation should fail", Label(constants.NEGATIVE), func() {
+		It("Filter by tag with non-EQUALS operation should fail", Label(constants.NEGATIVE, constants.Tier3), func() {
 			pipelineDir := "valid"
 			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
 			createdPipeline := uploadPipelineAndVerify(pipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
@@ -1291,7 +1291,7 @@ var _ = Describe("List Pipelines Versions API Tests >", Label(constants.POSITIVE
 	})
 })
 
-var _ = Describe("Create Pipeline API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineCreate", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Create Pipeline API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineCreate", constants.APIServerTests, constants.FullRegression, constants.Tier1), func() {
 
 	Context("Create a pipeline using '/pipelines' >", func() {
 		It("With just name", func() {
@@ -1458,7 +1458,7 @@ var _ = Describe("Create Pipeline API Tests >", Label(constants.POSITIVE, consta
 				testContext.Pipeline.CreatedPipelines = append(testContext.Pipeline.CreatedPipelines, toUploadModel(createdPipeline))
 
 				versions, err := utils.GetSortedPipelineVersionsByCreatedAt(pipelineClient, createdPipeline.PipelineID, nil)
-			Expect(err).NotTo(HaveOccurred())
+				Expect(err).NotTo(HaveOccurred())
 				Expect(versions).Should(HaveLen(1))
 				actualPipelineSpec := versions[0].PipelineSpec.(map[string]interface{})
 				matcher.MatchPipelineSpecs(actualPipelineSpec, inputFileContent)
@@ -1474,7 +1474,7 @@ var _ = Describe("Create Pipeline API Tests >", Label(constants.POSITIVE, consta
 	})
 })
 
-var _ = Describe("Get Pipeline API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineGet", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Get Pipeline API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineGet", constants.APIServerTests, constants.FullRegression, constants.Tier1), func() {
 
 	Context("Get by ID '/pipelines/{pipeline_id}' >", func() {
 		It("With ID", func() {
@@ -1560,7 +1560,7 @@ var _ = Describe("Get Pipeline API Tests >", Label(constants.POSITIVE, constants
 	})
 })
 
-var _ = Describe("Get Pipeline Version API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineVersionGet", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Get Pipeline Version API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineVersionGet", constants.APIServerTests, constants.FullRegression, constants.Tier1), func() {
 
 	Context("Get by id '/pipelines/{pipeline_id}/versions/{pipeline_version_id}' >", func() {
 		It("With valid pipeline id and version id", func() {
@@ -1712,7 +1712,7 @@ var _ = Describe("Get Pipeline Version API Tests >", Label(constants.POSITIVE, c
 	})
 })
 
-var _ = Describe("Create Pipeline Version API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineVersionCreate", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Create Pipeline Version API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineVersionCreate", constants.APIServerTests, constants.FullRegression, constants.Tier1), func() {
 	Context("Create version via CreatePipelineVersion RPC '/pipelines/{pipeline_id}/versions' >", func() {
 		It("Create version with valid pipeline ID, pipeline version body including PipelineID", func() {
 			pipelineDir := "valid"
@@ -1812,7 +1812,7 @@ var _ = Describe("Create Pipeline Version API Tests >", Label(constants.POSITIVE
 	})
 })
 
-var _ = Describe("Delete Pipeline API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineDelete", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Delete Pipeline API Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineDelete", constants.APIServerTests, constants.FullRegression, constants.Tier1), func() {
 
 	Context("Delete pipeline by ID '/pipelines/{pipeline_id}' >", func() {
 		It("Delete pipeline by ID that does not have any versions", func() {
@@ -1934,7 +1934,7 @@ var _ = Describe("Delete Pipeline API Tests >", Label(constants.POSITIVE, consta
 
 // ################## NEGATIVE TESTS ##################
 
-var _ = Describe("Verify Pipeline Negative Tests >", Label("Negative", constants.Pipeline, constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Verify Pipeline Negative Tests >", Label("Negative", constants.Pipeline, constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
 	Context("Create a pipeline with version using '/pipelines/create' >", func() {
 		It("With a valid pipeline and pipeline version name but invalid pipeline spec file", func() {
 			pipelineVersionName := testContext.Pipeline.PipelineGeneratedName + "-v1"
@@ -2239,7 +2239,7 @@ var _ = Describe("Verify Pipeline Negative Tests >", Label("Negative", constants
 
 // ################## PIPELINE UPDATE (WITH TAGS) TESTS ##################
 
-var _ = Describe("Update Pipeline - Positive Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineTags", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Update Pipeline - Positive Tests >", Label(constants.POSITIVE, constants.Pipeline, "PipelineTags", constants.APIServerTests, constants.FullRegression, constants.Tier2), func() {
 
 	Context("Update pipeline via PATCH '/pipelines/{pipeline_id}' >", func() {
 		It("Add tags to a pipeline that has no tags", func() {
@@ -2422,7 +2422,7 @@ var _ = Describe("Update Pipeline - Positive Tests >", Label(constants.POSITIVE,
 	})
 })
 
-var _ = Describe("Update Pipeline - Negative Tests >", Label(constants.NEGATIVE, constants.Pipeline, "PipelineTags", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Update Pipeline - Negative Tests >", Label(constants.NEGATIVE, constants.Pipeline, "PipelineTags", constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
 
 	Context("Update pipeline with invalid parameters >", func() {
 		It("Update tags for non-existing pipeline ID", func() {
@@ -2809,7 +2809,7 @@ var _ = Describe("Update Pipeline - Negative Tests >", Label(constants.NEGATIVE,
 	})
 })
 
-var _ = Describe("Update Pipeline Version >", Label(constants.POSITIVE, constants.Pipeline, "PipelineVersionTags", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Update Pipeline Version >", Label(constants.POSITIVE, constants.Pipeline, "PipelineVersionTags", constants.APIServerTests, constants.FullRegression, constants.Tier2), func() {
 
 	Context("Update pipeline version tags via UpdatePipelineVersion >", func() {
 		It("Add tags to an existing pipeline version", func() {
@@ -2906,7 +2906,7 @@ var _ = Describe("Update Pipeline Version >", Label(constants.POSITIVE, constant
 	})
 })
 
-var _ = Describe("Update Pipeline Version - Negative Tests >", Label(constants.NEGATIVE, constants.Pipeline, "PipelineVersionTags", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Update Pipeline Version - Negative Tests >", Label(constants.NEGATIVE, constants.Pipeline, "PipelineVersionTags", constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
 
 	Context("Update pipeline version with invalid parameters >", func() {
 		It("Update tags with empty key on pipeline version should fail", func() {

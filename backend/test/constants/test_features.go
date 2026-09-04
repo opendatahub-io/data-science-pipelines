@@ -18,8 +18,12 @@ package constants
 const (
 	// Smoke - quality gate tag for smoke testing
 	Smoke string = "smoke"
-	// Sanity - quality gate tag for sanity level testing
-	Sanity string = "sanity"
+	// Tier1 - high-priority tests excluding Smoke
+	Tier1 string = "Tier1"
+	// Tier2 - medium- and low-priority positive tests
+	Tier2 string = "Tier2"
+	// Tier3 - negative and destructive tests
+	Tier3 string = "Tier3"
 	// Disconnected - quality gate tag for disconnected testing
 	Disconnected string = "disconnected"
 	// Integration - quality gate tag for integration testing with other components
