@@ -45,7 +45,7 @@ inputs:
     default: "10"
   test_label:
     required: true
-    description: "Test Label to filter on, for e.g. Regression, Smoke, APIServerTests etc."
+    description: "Test Label to filter on, for e.g. smoke, Tier1, Tier2, Tier3, ApiServerTests"
   upload_pipelines_with_kubernetes_client:
     required: false
     default: 'false'

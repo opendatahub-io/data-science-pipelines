@@ -89,6 +89,7 @@ MatchMaps(actualMap, expectedMap, "pipeline parameters")
 
 **Static Test Labels:**
 - `test_type.go`: Test categories (Smoke, CriticalOnly, FullRegression)
+- `test_features.go`: Quality gates (`smoke`, `Tier1`, `Tier2`, `Tier3`)
 
 **Example Test Labeling:**
 ```go
@@ -108,7 +109,7 @@ var _ = Describe("Pipeline API Tests", Label(POSITIVE, "Pipeline"), func() {
 
 **Current List of Labels**
 ```
-Smoke, CriticalOnly, FullRegression, POSITIVE, "Negative", "PipelineUpload", API_SERVER_TESTS
+Smoke, smoke, Tier1, Tier2, Tier3, CriticalOnly, FullRegression, POSITIVE, "Negative", "PipelineUpload", API_SERVER_TESTS
 ```
 
 ### Reports Generation
@@ -166,10 +167,12 @@ Each API service has dedicated test files with comprehensive endpoint coverage:
 
 ### Test Categorization
 
-**By Test Type:**
-- **Smoke Tests**: Critical path validation
-- **Regression Tests**: Comprehensive feature coverage
-- **Integration Tests**: Cross-service interaction validation
+**By Quality Gate:**
+- **Smoke**: Critical path validation
+- **Tier1**: High-priority tests excluding Smoke
+- **Tier2**: Medium- and low-priority positive tests
+- **Tier3**: Negative and destructive tests
+- **Regression**: Comprehensive feature coverage (`FullRegression`)
 
 ## Test Creation Process
 
@@ -325,7 +328,10 @@ go test -v ./backend/test/v2/api/ \
 
 ```bash
 # Run only smoke tests
-ginkgo -v --label-filter="Smoke" ./backend/test/v2/api/
+ginkgo -v --label-filter="smoke" ./backend/test/v2/api/
+ginkgo -v --label-filter="Tier1" ./backend/test/v2/api/
+ginkgo -v --label-filter="Tier2" ./backend/test/v2/api/
+ginkgo -v --label-filter="Tier3" ./backend/test/v2/api/
 
 # Run pipeline-specific tests
 ginkgo -v --label-filter="Pipeline" ./backend/test/v2/api/
