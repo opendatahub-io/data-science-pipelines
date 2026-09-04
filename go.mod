@@ -56,13 +56,13 @@ require (
 	// The tags are misleading, they are actual releases:
 	// https://pkg.go.dev/google.golang.org/genproto/googleapis/api?tab=versions
 	// https://pkg.go.dev/google.golang.org/genproto/googleapis/rpc?tab=versions
-	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478
+	google.golang.org/genproto/googleapis/api v0.0.0-20260831171406-18b4a7587f8a
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5
 	google.golang.org/grpc v1.82.1
 	// These runtime protoc-gen-go-grpc & protobuf versions should be identical to the package versions
 	// used for the generated code (see PROTOC_GEN_GO_GRPC & PROTOBUF_GO in backend/api/Dockerfile)
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.2
 	k8s.io/apimachinery v0.35.2
