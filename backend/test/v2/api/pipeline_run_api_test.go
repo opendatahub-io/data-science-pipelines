@@ -69,7 +69,7 @@ var _ = Describe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.Pi
 	Context("Create a valid pipeline and verify the created run >", func() {
 		for _, param := range testParams {
 			for _, pipelineFilePath := range pipelineFilePaths {
-				It(fmt.Sprintf("Create a '%s' pipeline with cacheEnabled=%t and verify run", pipelineFilePath, param.pipelineCacheEnabled), func() {
+				It(fmt.Sprintf("Create a '%s' pipeline with cacheEnabled=%t and verify run", pipelineFilePath, param.pipelineCacheEnabled), Label(constants.Tier2), func() {
 					createdExperiment := createExperiment(experimentName)
 					pipelineFilePath := pipelineFilePath
 					pipelineFileName := filepath.Base(pipelineFilePath)
@@ -84,7 +84,7 @@ var _ = Describe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.Pi
 			}
 		}
 		pipelineFile := pipelineFilePaths[0]
-		It(fmt.Sprintf("Create a '%s' pipeline, create an experiement and verify run with associated experiment", pipelineFile), Label(constants.SMOKE), func() {
+		It(fmt.Sprintf("Create a '%s' pipeline, create an experiement and verify run with associated experiment", pipelineFile), Label(constants.SMOKE, constants.Smoke), func() {
 			createdExperiment := createExperiment(experimentName)
 			createdPipeline := uploadAPipeline(pipelineFile, &testContext.Pipeline.PipelineGeneratedName)
 			createdPipelineVersion := testutil.GetLatestPipelineVersion(pipelineClient, &createdPipeline.PipelineID)
@@ -94,7 +94,7 @@ var _ = Describe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.Pi
 		})
 	})
 
-	Context("Associate a single experiment with multiple pipeline runs >", func() {
+	Context("Associate a single experiment with multiple pipeline runs >", Label(constants.Tier1), func() {
 		pipelineFile := pipelineFilePaths[0]
 		It("Create an experiment and associate it multiple pipeline runs of the same pipeline", func() {
 			createdExperiment := createExperiment(experimentName)
@@ -124,7 +124,7 @@ var _ = Describe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.Pi
 		})
 	})
 
-	Context("Create a pipeline run with HTTP proxy >", func() {
+	Context("Create a pipeline run with HTTP proxy >", Label(constants.Tier2), func() {
 		pipelineFile := filepath.Join(pipelineFilesRootDir, pipelineDirectory, "env-var.yaml")
 		It(fmt.Sprintf("Create a pipeline run with http proxy, using specs: %s", pipelineFile), func() {
 			createdExperiment := createExperiment(experimentName)
@@ -138,7 +138,7 @@ var _ = Describe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.Pi
 		})
 	})
 
-	Context("Archive pipeline run(s) >", func() {
+	Context("Archive pipeline run(s) >", Label(constants.Tier2), func() {
 		pipelineFile := filepath.Join(pipelineFilesRootDir, pipelineDirectory, "hello_world.yaml")
 		It("Create a pipeline run, wait for the run state to be reported, archive it and verify that archiving keeps the runtime state reported", func() {
 			createdExperiment := createExperiment(experimentName)
@@ -196,7 +196,7 @@ var _ = Describe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.Pi
 		})
 	})
 
-	Context("Unarchive pipeline run(s) >", func() {
+	Context("Unarchive pipeline run(s) >", Label(constants.Tier2), func() {
 		pipelineFile := filepath.Join(pipelineFilesRootDir, pipelineDirectory, "hello_world.yaml")
 		It("Create a pipeline run, archive it and unarchive it and verify the storage state", func() {
 			createdExperiment := createExperiment(experimentName)
@@ -211,7 +211,7 @@ var _ = Describe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.Pi
 		})
 	})
 
-	PContext("Terminate a pipeline run >", func() {
+	PContext("Terminate a pipeline run >", Label(constants.Tier2), func() {
 		It("Terminate a run in RUNNING state", func() {
 		})
 		It("Terminate a run in PENDING state", func() {
@@ -220,7 +220,7 @@ var _ = Describe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.Pi
 		})
 	})
 
-	PContext("Get All pipeline run >", func() {
+	PContext("Get All pipeline run >", Label(constants.Tier2), func() {
 		It("Create a Pipeline Run and validate that it gets returned in the List Runs API call", func() {
 		})
 		It("Create 2 pipeline Runs, and list it", func() {
@@ -270,7 +270,7 @@ var _ = Describe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.Pi
 
 // ################## NEGATIVE TESTS ##################
 
-var _ = Describe("Verify Pipeline Run Negative Tests >", Label(constants.NEGATIVE, constants.PipelineRun, constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Verify Pipeline Run Negative Tests >", Label(constants.NEGATIVE, constants.PipelineRun, constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
 
 	var pipelineFile string
 	var createdPipeline *pipeline_upload_model.V2beta1Pipeline
