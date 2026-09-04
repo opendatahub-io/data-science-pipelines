@@ -468,18 +468,6 @@ var _ = Describe("List Pipelines API Tests >", Label(constants.POSITIVE, constan
 			}
 		})
 
-		It("Filter by pipeline_id IN with string_value should fail", Label(constants.NEGATIVE, constants.Tier3), func() {
-			pipelineDir := "valid"
-			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
-			createdPipeline := uploadPipelineAndVerify(pipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
-
-			filter := fmt.Sprintf(`{"predicates":[{"key":"pipeline_id","operation":"IN","string_value":"%s"}]}`, createdPipeline.PipelineID)
-			params := newListPipelinesParams()
-			params.Filter = &filter
-			_, _, _, err := pipelineClient.List(params)
-			Expect(err).To(HaveOccurred(), "IN filter with scalar string_value should be rejected")
-		})
-
 		It("Filter by pipeline_id IN with stringValues array", func() {
 			pipelineDir := "valid"
 			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
@@ -605,6 +593,22 @@ var _ = Describe("List Pipelines API Tests >", Label(constants.POSITIVE, constan
 			Expect(err).NotTo(HaveOccurred())
 			Expect(totalSize).To(Equal(0))
 			Expect(pipelines).To(BeEmpty())
+		})
+	})
+})
+
+var _ = Describe("List Pipelines API Negative Tests >", Label(constants.NEGATIVE, constants.Pipeline, "PipelineList", constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
+	Context("Filtering >", func() {
+		It("Filter by pipeline_id IN with string_value should fail", func() {
+			pipelineDir := "valid"
+			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
+			createdPipeline := uploadPipelineAndVerify(pipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
+
+			filter := fmt.Sprintf(`{"predicates":[{"key":"pipeline_id","operation":"IN","string_value":"%s"}]}`, createdPipeline.PipelineID)
+			params := newListPipelinesParams()
+			params.Filter = &filter
+			_, _, _, err := pipelineClient.List(params)
+			Expect(err).To(HaveOccurred(), "IN filter with scalar string_value should be rejected")
 		})
 	})
 })
@@ -1011,25 +1015,6 @@ var _ = Describe("List Pipelines Versions API Tests >", Label(constants.POSITIVE
 			}
 		})
 
-		It("Filter by pipeline_version_id IN with string_value should fail", Label(constants.NEGATIVE, constants.Tier3), func() {
-			pipelineDir := "valid"
-			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
-			createdPipeline := uploadPipelineAndVerify(pipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
-
-			versions, _, _, err := pipelineClient.ListPipelineVersions(&pipeline_params.PipelineServiceListPipelineVersionsParams{
-				PipelineID: createdPipeline.PipelineID,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(len(versions)).To(BeNumerically(">=", 1))
-
-			filter := fmt.Sprintf(`{"predicates":[{"key":"pipeline_version_id","operation":"IN","string_value":"%s"}]}`, versions[0].PipelineVersionID)
-			_, _, _, err = pipelineClient.ListPipelineVersions(&pipeline_params.PipelineServiceListPipelineVersionsParams{
-				PipelineID: createdPipeline.PipelineID,
-				Filter:     &filter,
-			})
-			Expect(err).To(HaveOccurred(), "IN filter with scalar string_value should be rejected")
-		})
-
 		It("Filter by pipeline_version_id IN with stringValues array", func() {
 			pipelineDir := "valid"
 			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
@@ -1247,19 +1232,6 @@ var _ = Describe("List Pipelines Versions API Tests >", Label(constants.POSITIVE
 			Expect(versions).To(BeEmpty())
 		})
 
-		It("Filter by tag with non-EQUALS operation should fail", Label(constants.NEGATIVE, constants.Tier3), func() {
-			pipelineDir := "valid"
-			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
-			createdPipeline := uploadPipelineAndVerify(pipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
-
-			filter := `{"predicates":[{"key":"tags.env","operation":"NOT_EQUALS","string_value":"prod"}]}`
-			_, _, _, err := pipelineClient.ListPipelineVersions(&pipeline_params.PipelineServiceListPipelineVersionsParams{
-				PipelineID: createdPipeline.PipelineID,
-				Filter:     &filter,
-			})
-			Expect(err).To(HaveOccurred(), "Non-EQUALS operation on tag filter should fail")
-		})
-
 		It("Filter by tag combined with name filter", func() {
 			pipelineDir := "valid"
 			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
@@ -1287,6 +1259,44 @@ var _ = Describe("List Pipelines Versions API Tests >", Label(constants.POSITIVE
 			Expect(totalSize).To(Equal(1))
 			Expect(versions[0].Name).To(Equal(vName))
 			Expect(versions[0].Tags).To(HaveKeyWithValue("env", "combined-test"))
+		})
+	})
+})
+
+var _ = Describe("List Pipeline Versions API Negative Tests >", Label(constants.NEGATIVE, constants.Pipeline, "PipelineVersionList", constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
+	Context("Filtering >", func() {
+		It("Filter by pipeline_version_id IN with string_value should fail", func() {
+			pipelineDir := "valid"
+			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
+			createdPipeline := uploadPipelineAndVerify(pipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
+
+			versions, _, _, err := pipelineClient.ListPipelineVersions(&pipeline_params.PipelineServiceListPipelineVersionsParams{
+				PipelineID: createdPipeline.PipelineID,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(versions)).To(BeNumerically(">=", 1))
+
+			filter := fmt.Sprintf(`{"predicates":[{"key":"pipeline_version_id","operation":"IN","string_value":"%s"}]}`, versions[0].PipelineVersionID)
+			_, _, _, err = pipelineClient.ListPipelineVersions(&pipeline_params.PipelineServiceListPipelineVersionsParams{
+				PipelineID: createdPipeline.PipelineID,
+				Filter:     &filter,
+			})
+			Expect(err).To(HaveOccurred(), "IN filter with scalar string_value should be rejected")
+		})
+	})
+
+	Context("Filter by Tags >", func() {
+		It("Filter by tag with non-EQUALS operation should fail", func() {
+			pipelineDir := "valid"
+			pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
+			createdPipeline := uploadPipelineAndVerify(pipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
+
+			filter := `{"predicates":[{"key":"tags.env","operation":"NOT_EQUALS","string_value":"prod"}]}`
+			_, _, _, err := pipelineClient.ListPipelineVersions(&pipeline_params.PipelineServiceListPipelineVersionsParams{
+				PipelineID: createdPipeline.PipelineID,
+				Filter:     &filter,
+			})
+			Expect(err).To(HaveOccurred(), "Non-EQUALS operation on tag filter should fail")
 		})
 	})
 })
