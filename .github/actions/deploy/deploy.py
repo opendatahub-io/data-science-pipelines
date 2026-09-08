@@ -11,7 +11,6 @@ via the build action.
 """
 
 import argparse
-import json
 import os
 import shutil
 import tempfile
@@ -277,18 +276,23 @@ class DSPDeployer:
     def _patch_v1_allowed_namespaces(self):
         """Allow V1 pipelines in the deployment namespace for CI tests."""
         namespace = self.deployment_namespace or self.args.namespace
-        env_value = json.dumps({
-            'name': 'V1_ALLOWED_NAMESPACES', 'value': namespace
-        })
+        if self.is_operator_deployment:
+            deployments = [
+                f'ds-pipeline-{self.dspa_name}',
+                f'ds-pipeline-scheduledworkflow-{self.dspa_name}',
+            ]
+        else:
+            deployments = ['ml-pipeline', 'ml-pipeline-scheduledworkflow']
+
         print(f'🔧 Setting V1_ALLOWED_NAMESPACES={namespace}')
-        for deploy in ['ml-pipeline', 'ml-pipeline-scheduledworkflow']:
+        for deploy in deployments:
             self.deployment_manager.run_command([
                 'kubectl', 'set', 'env',
                 f'deployment/{deploy}',
                 f'V1_ALLOWED_NAMESPACES={namespace}',
                 '-n', namespace
             ])
-        for deploy in ['ml-pipeline', 'ml-pipeline-scheduledworkflow']:
+        for deploy in deployments:
             self.deployment_manager.run_command([
                 'kubectl', 'rollout', 'status',
                 f'deployment/{deploy}',
