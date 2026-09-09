@@ -260,6 +260,8 @@ class DSPDeployer:
 
                 self.deploy_dsp_direct()
 
+            self._patch_v1_allowed_namespaces()
+
             self.infra.forward_port(is_operator=use_operator)
 
             print('🎉 Deployment completed successfully!')
@@ -270,6 +272,32 @@ class DSPDeployer:
         finally:
             if self.temp_dir and os.path.exists(self.temp_dir):
                 shutil.rmtree(self.temp_dir)
+
+    def _patch_v1_allowed_namespaces(self):
+        """Allow V1 pipelines in the deployment namespace for CI tests."""
+        namespace = self.deployment_namespace or self.args.namespace
+        if self.is_operator_deployment:
+            deployments = [
+                f'ds-pipeline-{self.dspa_name}',
+                f'ds-pipeline-scheduledworkflow-{self.dspa_name}',
+            ]
+        else:
+            deployments = ['ml-pipeline', 'ml-pipeline-scheduledworkflow']
+
+        print(f'🔧 Setting V1_ALLOWED_NAMESPACES={namespace}')
+        for deploy in deployments:
+            self.deployment_manager.run_command([
+                'kubectl', 'set', 'env',
+                f'deployment/{deploy}',
+                f'V1_ALLOWED_NAMESPACES={namespace}',
+                '-n', namespace
+            ])
+        for deploy in deployments:
+            self.deployment_manager.run_command([
+                'kubectl', 'rollout', 'status',
+                f'deployment/{deploy}',
+                '-n', namespace, '--timeout=120s'
+            ])
 
     def output_deployment_metadata(self):
         """Output deployment metadata for GitHub Actions."""

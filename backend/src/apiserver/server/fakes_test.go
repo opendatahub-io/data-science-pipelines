@@ -141,6 +141,7 @@ var referencesOfInvalidPipelineVersion = []*apiv1beta1.ResourceReference{
 // This automatically runs before all the tests.
 func initEnvVars() {
 	viper.Set(common.PodNamespace, "ns1")
+	viper.Set("V1_ALLOWED_NAMESPACES", "ns1")
 	proxy.InitializeConfigWithEmptyForTests()
 }
 

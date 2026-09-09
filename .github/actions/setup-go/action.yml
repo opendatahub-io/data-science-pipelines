@@ -10,6 +10,7 @@ runs:
       run: |
         set -euo pipefail
         docker rm -f go-toolset 2>/dev/null || true
+        bash ./.github/resources/scripts/docker-pull-with-retry.sh "$GO_TOOLSET_IMAGE"
         docker create --name go-toolset "$GO_TOOLSET_IMAGE"
         docker cp go-toolset:/usr/lib/golang $HOME/go-toolset
         docker rm go-toolset

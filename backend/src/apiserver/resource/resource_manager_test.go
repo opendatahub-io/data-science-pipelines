@@ -66,8 +66,12 @@ func strPtr(i string) *string {
 	return &i
 }
 
+// v1AllowedNamespaces mirrors the unexported constant in backend/src/common/util/v1_support.go.
+const v1AllowedNamespaces = "V1_ALLOWED_NAMESPACES"
+
 func initEnvVars() {
 	viper.Set(common.PodNamespace, "ns1")
+	viper.Set(v1AllowedNamespaces, "ns1,kubeflow,user,user1")
 	proxy.InitializeConfigWithEmptyForTests()
 }
 
@@ -485,6 +489,7 @@ func initWithOneTimeFailedRunOffloaded(t *testing.T) (*FakeClientManager, *Resou
 
 // Tests CreatePipeline and CreatePipelineVersion
 func TestCreatePipeline(t *testing.T) {
+	initEnvVars()
 	tt := []struct {
 		msg            string
 		name           string // optional
@@ -811,6 +816,7 @@ func TestCreatePipelineOrVersion_V2PipelineName(t *testing.T) {
 }
 
 func TestResourceManager_CreatePipelineAndPipelineVersion(t *testing.T) {
+	initEnvVars()
 	tests := []struct {
 		name         string
 		p            *model.Pipeline
@@ -963,6 +969,82 @@ func TestResourceManager_CreatePipelineAndPipelineVersion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreatePipelineAndPipelineVersion_V1Blocked(t *testing.T) {
+	viper.Set(util.BlockV1Pipelines, "true")
+	viper.Set(v1AllowedNamespaces, "ns1")
+	viper.Set(common.PodNamespace, "ns1")
+	defer func() {
+		viper.Set(util.BlockV1Pipelines, nil)
+		viper.Set(v1AllowedNamespaces, nil)
+		viper.Set(common.PodNamespace, nil)
+	}()
+
+	store := NewFakeClientManagerOrFatalV2()
+	defer store.Close()
+	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
+
+	_, _, err := manager.CreatePipelineAndPipelineVersion(
+		&model.Pipeline{Name: "v1-pipeline", Namespace: "blocked-ns"},
+		&model.PipelineVersion{
+			Name:         "v1-version",
+			PipelineSpec: complexPipeline,
+		},
+	)
+	require.NotNil(t, err)
+	assert.Contains(t, err.Error(), "V1 pipeline specs are not allowed")
+}
+
+func TestCreatePipelineAndPipelineVersion_V1Blocked_PodNamespaceFallback(t *testing.T) {
+	viper.Set(util.BlockV1Pipelines, "true")
+	viper.Set(v1AllowedNamespaces, "ns1")
+	viper.Set(common.PodNamespace, "other-ns")
+	defer func() {
+		viper.Set(util.BlockV1Pipelines, nil)
+		viper.Set(v1AllowedNamespaces, nil)
+		viper.Set(common.PodNamespace, nil)
+	}()
+
+	store := NewFakeClientManagerOrFatalV2()
+	defer store.Close()
+	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
+
+	_, _, err := manager.CreatePipelineAndPipelineVersion(
+		&model.Pipeline{Name: "v1-pipeline"},
+		&model.PipelineVersion{
+			Name:         "v1-version",
+			PipelineSpec: complexPipeline,
+		},
+	)
+	require.NotNil(t, err)
+	assert.Contains(t, err.Error(), "V1 pipeline specs are not allowed")
+}
+
+func TestCreatePipelineVersion_V1Blocked(t *testing.T) {
+	viper.Set(util.BlockV1Pipelines, "true")
+	viper.Set(v1AllowedNamespaces, "ns1")
+	viper.Set(common.PodNamespace, "ns1")
+	defer func() {
+		viper.Set(util.BlockV1Pipelines, nil)
+		viper.Set(v1AllowedNamespaces, nil)
+		viper.Set(common.PodNamespace, nil)
+	}()
+
+	store := NewFakeClientManagerOrFatalV2()
+	defer store.Close()
+	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
+
+	p, err := manager.CreatePipeline(&model.Pipeline{Name: "test-pipeline", Namespace: "blocked-ns"})
+	require.Nil(t, err)
+
+	_, err = manager.CreatePipelineVersion(&model.PipelineVersion{
+		Name:         "v1-version",
+		PipelineId:   p.UUID,
+		PipelineSpec: complexPipeline,
+	})
+	require.NotNil(t, err)
+	assert.Contains(t, err.Error(), "V1 pipeline specs are not allowed")
 }
 
 // Tests GetPipelineByNameAndNamespace
@@ -1225,6 +1307,7 @@ func TestGetPipelineTemplate_PipelineMetadataNotFound(t *testing.T) {
 
 // Tests GetPipelineLatestTemplate (pipelineSpec NotFound)
 func TestGetPipelineTemplate_PipelineFileNotFound(t *testing.T) {
+	initEnvVars()
 	store := NewFakeClientManagerOrFatal(util.NewFakeTimeForEpoch())
 	defer store.Close()
 	pipeline, _ := store.PipelineStore().CreatePipeline(createPipelineV1("pipeline1"))
@@ -1236,6 +1319,7 @@ func TestGetPipelineTemplate_PipelineFileNotFound(t *testing.T) {
 
 // Tests ListPipelines
 func TestListPipelines(t *testing.T) {
+	initEnvVars()
 	store := NewFakeClientManagerOrFatal(util.NewFakeTimeForEpoch())
 	defer store.Close()
 	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
@@ -1297,6 +1381,7 @@ func TestListPipelines(t *testing.T) {
 
 // Tests ListPipelinesV1
 func TestListPipelinesV1(t *testing.T) {
+	initEnvVars()
 	store := NewFakeClientManagerOrFatal(util.NewFakeTimeForEpoch())
 	defer store.Close()
 	manager := NewResourceManager(store, &ResourceManagerOptions{CollectMetrics: false})
@@ -1834,94 +1919,6 @@ func TestDeletePipeline(t *testing.T) {
 	assert.Contains(t, err.Error(), fmt.Sprintf("as it has existing pipeline versions (e.g. %v)", FakeUUIDOne))
 }
 
-func TestIsNamespaceAllowed(t *testing.T) {
-	tt := []struct {
-		msg               string
-		namespace         string
-		allowedNamespaces string
-		expected          bool
-	}{
-		{
-			msg:               "EmptyAllowedNamespaces",
-			namespace:         "ns1",
-			allowedNamespaces: "",
-			expected:          false,
-		},
-		{
-			msg:               "NamespaceInList",
-			namespace:         "ns1",
-			allowedNamespaces: "ns1,ns2,ns3",
-			expected:          true,
-		},
-		{
-			msg:               "NamespaceNotInList",
-			namespace:         "ns4",
-			allowedNamespaces: "ns1,ns2,ns3",
-			expected:          false,
-		},
-		{
-			msg:               "SingleAllowedNamespace_Match",
-			namespace:         "ns1",
-			allowedNamespaces: "ns1",
-			expected:          true,
-		},
-		{
-			msg:               "SingleAllowedNamespace_NoMatch",
-			namespace:         "ns2",
-			allowedNamespaces: "ns1",
-			expected:          false,
-		},
-		{
-			msg:               "CaseInsensitiveNamespace",
-			namespace:         "NS1",
-			allowedNamespaces: "ns1,ns2",
-			expected:          true,
-		},
-		{
-			msg:               "CaseInsensitiveAllowedList",
-			namespace:         "ns1",
-			allowedNamespaces: "NS1,NS2",
-			expected:          true,
-		},
-		{
-			msg:               "WhitespaceAroundNamespace",
-			namespace:         "  ns1  ",
-			allowedNamespaces: "ns1,ns2",
-			expected:          true,
-		},
-		{
-			msg:               "WhitespaceAroundAllowedEntries",
-			namespace:         "ns1",
-			allowedNamespaces: "  ns1  ,  ns2  ",
-			expected:          true,
-		},
-		{
-			msg:               "WhitespaceAndCaseInsensitive",
-			namespace:         "  NS1  ",
-			allowedNamespaces: "  ns1  ,  ns2  ",
-			expected:          true,
-		},
-		{
-			msg:               "EmptyNamespace_EmptyAllowed",
-			namespace:         "",
-			allowedNamespaces: "",
-			expected:          false,
-		},
-		{
-			msg:               "EmptyNamespace_NonEmptyAllowed",
-			namespace:         "",
-			allowedNamespaces: "ns1,ns2",
-			expected:          false,
-		},
-	}
-	for _, test := range tt {
-		t.Run(test.msg, func(t *testing.T) {
-			result := isNamespaceAllowed(test.namespace, test.allowedNamespaces)
-			assert.Equal(t, test.expected, result)
-		})
-	}
-}
-
 func TestCreateRun_BlockV1Pipelines(t *testing.T) {
 	tt := []struct {
 		msg               string
@@ -1955,13 +1952,7 @@ func TestCreateRun_BlockV1Pipelines(t *testing.T) {
 			namespace:         "ns2",
 			useV2Spec:         false,
 		},
-		{
-			msg:               "BlockV1_Disabled_AnyNamespaceAllowed",
-			blockV1:           false,
-			allowedNamespaces: "",
-			namespace:         "ns1",
-			useV2Spec:         false,
-		},
+		// BlockV1_Disabled_AnyNamespaceAllowed removed: V1 is unconditionally blocked in DSP
 		{
 			msg:               "BlockV1_V2PipelineNotBlocked",
 			blockV1:           true,
@@ -1989,15 +1980,15 @@ func TestCreateRun_BlockV1Pipelines(t *testing.T) {
 
 	for _, test := range tt {
 		t.Run(test.msg, func(t *testing.T) {
-			viper.Set(common.BlockV1Pipelines, test.blockV1)
-			viper.Set(common.V1NamespaceWhitelist, test.allowedNamespaces)
-			defer func() {
-				viper.Set(common.BlockV1Pipelines, false)
-				viper.Set(common.V1NamespaceWhitelist, "")
-			}()
-
 			store, manager, exp := initWithExperiment(t)
 			defer store.Close()
+
+			viper.Set(util.BlockV1Pipelines, test.blockV1)
+			viper.Set(v1AllowedNamespaces, test.allowedNamespaces)
+			defer func() {
+				viper.Set(util.BlockV1Pipelines, nil)
+				viper.Set(v1AllowedNamespaces, nil)
+			}()
 
 			var apiRun *model.Run
 			if test.useV2Spec {
@@ -3032,13 +3023,7 @@ func TestCreateJob_BlocksV1Pipelines(t *testing.T) {
 			namespace:         "ns2",
 			useV2Spec:         false,
 		},
-		{
-			msg:               "BlockV1_Disabled_AnyNamespaceAllowed",
-			blockV1:           false,
-			allowedNamespaces: "",
-			namespace:         "ns1",
-			useV2Spec:         false,
-		},
+		// BlockV1_Disabled_AnyNamespaceAllowed removed: V1 is unconditionally blocked in DSP
 		{
 			msg:               "BlockV1_V2PipelineNotBlocked",
 			blockV1:           true,
@@ -3066,15 +3051,15 @@ func TestCreateJob_BlocksV1Pipelines(t *testing.T) {
 
 	for _, test := range tt {
 		t.Run(test.msg, func(t *testing.T) {
-			viper.Set(common.BlockV1Pipelines, test.blockV1)
-			viper.Set(common.V1NamespaceWhitelist, test.allowedNamespaces)
-			defer func() {
-				viper.Set(common.BlockV1Pipelines, false)
-				viper.Set(common.V1NamespaceWhitelist, "")
-			}()
-
 			store, manager, exp := initWithExperiment(t)
 			defer store.Close()
+
+			viper.Set(util.BlockV1Pipelines, test.blockV1)
+			viper.Set(v1AllowedNamespaces, test.allowedNamespaces)
+			defer func() {
+				viper.Set(util.BlockV1Pipelines, nil)
+				viper.Set(v1AllowedNamespaces, nil)
+			}()
 
 			job := &model.Job{
 				DisplayName:  "j1",
@@ -3767,7 +3752,7 @@ func TestReportWorkflowResource_WorkflowCompleted(t *testing.T) {
 		ObjectMeta: v1.ObjectMeta{
 			Name:      run.K8SName,
 			Namespace: namespace,
-			UID:       types.UID(run.UUID),
+			UID:       testWorkflow.UID,
 			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
 		},
 		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
@@ -3810,7 +3795,7 @@ func TestReportWorkflowResource_SkipsTerminalPluginSyncWhenReportedWorkflowIsSta
 		ObjectMeta: v1.ObjectMeta{
 			Name:            run.K8SName,
 			Namespace:       namespace,
-			UID:             types.UID(run.UUID),
+			UID:             testWorkflow.UID,
 			ResourceVersion: "terminal-version",
 			Labels:          map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
 		},
@@ -3891,7 +3876,7 @@ func TestReportWorkflowResource_SkipsPersistedFinalStateLabelWhenRunRetriedDurin
 		ObjectMeta: v1.ObjectMeta{
 			Name:      run.K8SName,
 			Namespace: namespace,
-			UID:       types.UID(run.UUID),
+			UID:       testWorkflow.UID,
 			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
 		},
 		Status: v1alpha1.WorkflowStatus{
@@ -3965,7 +3950,7 @@ func TestReportWorkflow_WithMLflowOnRunEnd(t *testing.T) {
 		ObjectMeta: v1.ObjectMeta{
 			Name:      run.K8SName,
 			Namespace: "ns1",
-			UID:       types.UID(run.UUID),
+			UID:       testWorkflow.UID,
 			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
 		},
 		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
@@ -4008,7 +3993,7 @@ func TestReportWorkflowResource_WorkflowCompleted_FinalStatePersisted(t *testing
 		ObjectMeta: v1.ObjectMeta{
 			Name:      run.K8SName,
 			Namespace: "ns1",
-			UID:       types.UID(run.UUID),
+			UID:       testWorkflow.UID,
 			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID, util.LabelKeyWorkflowPersistedFinalState: "true"},
 		},
 		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
@@ -4039,19 +4024,37 @@ func TestReportWorkflowResource_WorkflowCompleted_FinalStatePersisted_DeleteFail
 	store, manager, run := initWithOneTimeRun(t)
 	manager.execClient = client.NewFakeExecClientWithBadWorkflow()
 	defer store.Close()
-	// report workflow
+	// UID validation rejects before Delete is reached because the bad client
+	// returns a non-NotFound error on Get.
 	workflow := util.NewWorkflow(&v1alpha1.Workflow{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      run.K8SName,
 			Namespace: "ns1",
-			UID:       types.UID(run.UUID),
+			UID:       testWorkflow.UID,
 			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID, util.LabelKeyWorkflowPersistedFinalState: "true"},
 		},
 		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
 	})
 	_, err := manager.ReportWorkflowResource(context.Background(), workflow)
 	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "failed to delete workflow")
+	assert.Contains(t, err.Error(), "Failed to report workflow")
+}
+
+func TestReportWorkflowResource_UIDMismatch_Rejected(t *testing.T) {
+	store, manager, run := initWithOneTimeRun(t)
+	defer store.Close()
+	workflow := util.NewWorkflow(&v1alpha1.Workflow{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      run.K8SName,
+			Namespace: "ns1",
+			UID:       "forged-uid",
+			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
+		},
+		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
+	})
+	_, err := manager.ReportWorkflowResource(context.Background(), workflow)
+	require.NotNil(t, err)
+	assert.Contains(t, err.Error(), "Failed to report workflow")
 }
 
 func TestReportScheduledWorkflowResource_Success(t *testing.T) {
