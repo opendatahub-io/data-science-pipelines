@@ -362,9 +362,7 @@ jobs:
           image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
 
       - name: Deploy MLflow with Kubernetes auth
-        id: deploy-mlflow        
-        uses: opendatahub-io/mlflow-operator/.github/actions/deploy@ec59b7c996ef4d14c448254132e21bd85fd1c28f
-        if: ${{ steps.create-cluster.outcome == 'success' }}
+        id: deploy-mlflow
         uses: opendatahub-io/mlflow-operator/.github/actions/deploy@b55bcb6aa528ccecf8904745bb0218350b1ff453
         if: ${{ steps.create-cluster.outcome == 'success' && matrix.mlflow_auth_type == 'kubernetes' }}
         with:
