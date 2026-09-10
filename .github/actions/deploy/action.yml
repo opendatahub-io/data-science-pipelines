@@ -157,8 +157,6 @@ runs:
         bash ./.github/resources/scripts/docker-pull-with-retry.sh registry.access.redhat.com/ubi9/python-311:latest
         kind load docker-image python:3.11 --name ${{ inputs.cluster_name }}
         kind load docker-image registry.access.redhat.com/ubi9/python-311:latest --name ${{ inputs.cluster_name }}
-        docker image rm python:3.11
-        docker image rm registry.access.redhat.com/ubi9/python-311:latest
 
     - name: Install Python Dependencies
       shell: bash

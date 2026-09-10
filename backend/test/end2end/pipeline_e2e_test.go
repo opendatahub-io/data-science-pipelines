@@ -300,7 +300,7 @@ func gpuPipelineFixtureSelected(pipelineFile string) bool {
 	}
 }
 
-func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testContext *apitests.TestContext) {
+func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testContext *apitests.TestContext) string {
 	testutil.CheckIfSkipping(pipelineFile)
 	pipelineFilePath := filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir, pipelineFile)
 	logger.Log("Uploading pipeline file %s", pipelineFile)
