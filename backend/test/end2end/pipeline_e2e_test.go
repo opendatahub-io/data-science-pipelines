@@ -263,6 +263,24 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 			})
 		}
 	})
+
+	// Filter with --label-filter=dra-check. Requires a cluster with a DRA
+	// driver installed (e.g. Kind + dra-example-driver).
+	Context("DRA scheduling check >", Label(E2eDraCheck), func() {
+		var pipelineDir = "valid/dra"
+		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
+		Expect(pipelineFiles).NotTo(BeEmpty(), "no pipeline files found in %s", pipelineDir)
+		for _, pipelineFile := range pipelineFiles {
+			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
+				runID := validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
+				expectedClaims := []string{"dra-test-claim"}
+				if pipelineFile == "dra_static_claim_check.yaml" {
+					expectedClaims = append(expectedClaims, "dra-test-claim-secondary")
+				}
+				e2e_utils.ValidateDRAResourceClaims(k8Client, *config.Namespace, runID, expectedClaims)
+			})
+		}
+	})
 })
 
 // gpuPipelineFixtureSelected returns whether to run an E2E for this IR fixture.
@@ -282,7 +300,7 @@ func gpuPipelineFixtureSelected(pipelineFile string) bool {
 	}
 }
 
-func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testContext *apitests.TestContext) {
+func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testContext *apitests.TestContext) string {
 	testutil.CheckIfSkipping(pipelineFile)
 	pipelineFilePath := filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir, pipelineFile)
 	logger.Log("Uploading pipeline file %s", pipelineFile)
@@ -299,7 +317,7 @@ func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testCon
 	}
 	compiledWorkflow := workflowutils.UnmarshallWorkflowYAML(filepath.Join(testutil.GetCompiledWorkflowsFilesDir(), pipelineFile))
 	e2e_utils.ValidateComponentStatuses(runClient, k8Client, testContext, createdRunID, compiledWorkflow)
-
+	return createdRunID
 }
 
 func cleanupE2ETestResources(testContext *apitests.TestContext) {

@@ -4,6 +4,7 @@ KIND_NAME ?= dev-pipelines-api
 TLS_ENABLED ?= "false"
 
 CERT_MANAGER_VERSION ?= v1.16.2
+DRA_DRIVER_NAMESPACE ?= dra-example-driver
 
 # TARGETARCH specifies the target architecture for the binary (amd64 or arm64).
 # Default is amd64.
@@ -140,6 +141,11 @@ dev-kind-cluster:
 	kubectl apply -f $(CURDIR)/../tools/kind/webhook-proxy.yaml
 	kubectl -n kubeflow wait --for condition=Available --timeout=10m deployment/mysql
 	kubectl -n kubeflow wait --for condition=Available --timeout=3m deployment/metadata-grpc-deployment
+
+.PHONY: install-dra-driver
+install-dra-driver:
+	NAMESPACE="$(DRA_DRIVER_NAMESPACE)" \
+	bash "$(MOD_ROOT)/.github/actions/install-dra-driver/install-dra-driver.sh"
 
 .PHONY: kind-load-driver-debug
 kind-load-driver-debug:

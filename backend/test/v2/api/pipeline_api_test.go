@@ -1458,7 +1458,7 @@ var _ = Describe("Create Pipeline API Tests >", Label(constants.POSITIVE, consta
 				testContext.Pipeline.CreatedPipelines = append(testContext.Pipeline.CreatedPipelines, toUploadModel(createdPipeline))
 
 				versions, err := utils.GetSortedPipelineVersionsByCreatedAt(pipelineClient, createdPipeline.PipelineID, nil)
-			Expect(err).NotTo(HaveOccurred())
+				Expect(err).NotTo(HaveOccurred())
 				Expect(versions).Should(HaveLen(1))
 				actualPipelineSpec := versions[0].PipelineSpec.(map[string]interface{})
 				matcher.MatchPipelineSpecs(actualPipelineSpec, inputFileContent)
