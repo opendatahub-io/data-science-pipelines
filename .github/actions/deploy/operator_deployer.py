@@ -5,7 +5,6 @@ operator, and configuring it for external Argo.
 """
 
 import os
-import subprocess
 
 from deployment_manager import K8sDeploymentManager
 from deployment_manager import ResourceType
@@ -26,27 +25,69 @@ class OperatorDeployer:
         self.temp_dir = temp_dir
         self.operator_namespace = operator_namespace
         self.operator_repo_path = None
+        self.operator_image = None
+
+    @staticmethod
+    def _operator_branch(target_branch: str) -> str:
+        """Map a DSP branch to its DSPO branch."""
+        return 'main' if target_branch == 'master' else target_branch
+
+    def _clone_from_branch(self, owner: str, branch: str,
+                           operator_path: str) -> bool:
+        """Clone one DSPO branch, returning false when it is unavailable."""
+        operator_repo_url = (
+            f'https://github.com/{owner}/data-science-pipelines-operator.git')
+        ref_result = self.deployment_manager.run_command([
+            'git', 'ls-remote', '--exit-code', '--heads', operator_repo_url,
+            f'refs/heads/{branch}'
+        ], check=False)
+        if ref_result.returncode != 0:
+            return False
+
+        self.deployment_manager.run_command([
+            'git', 'clone', '--depth', '1', '--branch', branch,
+            operator_repo_url, operator_path
+        ])
+        print(f'✅ Cloned {owner}/data-science-pipelines-operator@{branch}')
+        return True
 
     def clone_operator_repo(self) -> str:
         """Clone data-science-pipelines-operator repository."""
-        operator_repo_url = f'https://github.com/{self.repo_owner}/data-science-pipelines-operator'
         operator_path = os.path.join(self.temp_dir,
                                      'data-science-pipelines-operator')
+        operator_branch = self._operator_branch(self.target_branch)
+        preferred_owner = getattr(self.args, 'operator_repo_owner', None)
+        upstream_owner = getattr(
+            self.args, 'operator_upstream_owner', None) or self.repo_owner
+        candidate_owners = []
+        source_owners = ((upstream_owner,) if self.args.operator_branch_required
+                         else (preferred_owner, upstream_owner))
+        for owner in source_owners:
+            if owner and owner not in candidate_owners:
+                candidate_owners.append(owner)
 
-        print(f'📥 Cloning operator repository: {operator_repo_url}')
-        self.deployment_manager.run_command(
-            ['git', 'clone', operator_repo_url, operator_path])
-
-        # Map target branch to operator branch (master -> main for operator repo)
-        operator_branch = 'main' if self.target_branch == 'master' else self.target_branch
-
-        print(f'🔄 Checking out branch: {operator_branch}')
-        try:
-            self.deployment_manager.run_command(
-                ['git', 'checkout', operator_branch], cwd=operator_path)
-        except subprocess.CalledProcessError:
+        for owner in candidate_owners:
             print(
-                f'⚠️  Branch {operator_branch} not found, using default branch')
+                f'🔍 Checking {owner}/data-science-pipelines-operator '
+                f'for branch {operator_branch}')
+            if self._clone_from_branch(owner, operator_branch, operator_path):
+                break
+        else:
+            if self.args.operator_branch_required:
+                raise RuntimeError(
+                    f'Required DSPO branch {operator_branch} was not found')
+            default_branch = 'main'
+            upstream_url = (
+                f'https://github.com/{upstream_owner}/data-science-pipelines-operator.git'
+            )
+            print(
+                f'⚠️  Branch {operator_branch} unavailable; cloning '
+                f'{upstream_owner}/data-science-pipelines-operator@{default_branch}'
+            )
+            self.deployment_manager.run_command([
+                'git', 'clone', '--depth', '1', '--branch', default_branch,
+                upstream_url, operator_path
+            ])
 
         # Fix Makefile permissions if it exists
         makefile_path = os.path.join(operator_path, 'Makefile')
@@ -58,6 +99,31 @@ class OperatorDeployer:
 
         self.operator_repo_path = operator_path
         return operator_path
+
+    def build_operator_image(self) -> str:
+        """Build DSPO image from cloned source and load it into Kind."""
+        if not self.operator_repo_path:
+            raise ValueError('Operator repository not cloned')
+
+        revision_result = self.deployment_manager.run_command(
+            ['git', 'rev-parse', '--short=12', 'HEAD'],
+            cwd=self.operator_repo_path)
+        revision = revision_result.stdout.strip()
+        if not revision:
+            raise RuntimeError('Could not determine operator source revision')
+
+        operator_image = f'dspo-ci:{revision}'
+        print(f'🏗️  Building operator image from revision {revision}')
+        self.deployment_manager.run_command(
+            ['docker', 'build', '-t', operator_image, '.'],
+            cwd=self.operator_repo_path,
+            timeout=1800)
+        self.deployment_manager.run_command([
+            'kind', 'load', 'docker-image', operator_image, '--name',
+            self.args.cluster_name
+        ], timeout=600)
+        self.operator_image = operator_image
+        return operator_image
 
     def create_operator_namespace(self):
         """Create operator namespace if it doesn't exist."""
@@ -143,16 +209,9 @@ class OperatorDeployer:
         # Patch params.env to replace Red Hat registry images before deploying
         self._patch_params_for_kind()
 
-        operator_image_tag = getattr(self.args, 'operator_image_tag', '') or ''
-        if operator_image_tag:
-            dspo_tag = operator_image_tag
-        elif self.target_branch == 'stable':
-            dspo_tag = 'odh-stable'
-        elif self.target_branch == 'master':
-            dspo_tag = 'odh-main' if self.repo_owner == 'opendatahub-io' else 'main'
-        else:
-            dspo_tag = self.target_branch
-        operator_image = f'quay.io/opendatahub/data-science-pipelines-operator:{dspo_tag}'
+        if not self.operator_image:
+            raise ValueError('Operator image not built from cloned source')
+        operator_image = self.operator_image
 
         print(f'🏷️  Using operator image: {operator_image}')
 

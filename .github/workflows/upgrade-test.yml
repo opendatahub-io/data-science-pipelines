@@ -7,7 +7,8 @@ env:
   CLUSTER_NAME: "kfp"
   NAMESPACE: "kubeflow"
   PYTHON_VERSION: "3.9"
-  SKIP_OPERATOR_DEPLOYMENT: ${{ github.repository_owner != 'opendatahub-io' }}
+  # Keep direct-deployment conditionals intact; removing them is follow-up work.
+  SKIP_OPERATOR_DEPLOYMENT: 'false'
 
 on:
   push:
@@ -40,7 +41,6 @@ jobs:
     uses: ./.github/workflows/image-builds.yml
 
   upgrade-test:
-    if: github.repository_owner == 'opendatahub-io'
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -76,7 +76,6 @@ jobs:
           image_tag: "odh-stable"
           image_registry: "quay.io"
           pod_to_pod_tls_enabled: ${{ matrix.tls_enabled }}
-          operator_image_tag: "odh-stable"
           skip_load_docker_images: 'true'
           skip_operator_deployment: ${{ env.SKIP_OPERATOR_DEPLOYMENT }}
           operator_branch: 'stable'
