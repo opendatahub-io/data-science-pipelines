@@ -7,7 +7,8 @@ env:
   PYTHON_VERSION: "3.9"
   USER_NAMESPACE: "kubeflow-user-example-com"
   CA_CERT_PATH: ""
-  SKIP_OPERATOR_DEPLOYMENT: ${{ github.repository_owner != 'opendatahub-io' }}
+  # Keep direct-deployment conditionals intact; removing them is follow-up work.
+  SKIP_OPERATOR_DEPLOYMENT: 'false'
   AWS_ACCESS_KEY_ID: 'minio'
   AWS_SECRET_ACCESS_KEY: 'minio123'
   AWS_S3_BUCKET: 'mlpipeline'
