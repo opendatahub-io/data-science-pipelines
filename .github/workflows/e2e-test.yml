@@ -78,6 +78,22 @@ jobs:
         test_label: [ "E2ECritical", "E2EEssential", "E2EParallelNested" ]
         pod_to_pod_tls_enabled: [ "true" ]
         include:
+          - k8s_version: "v1.35.0"
+            cache_enabled: "true"
+            deploy_external_argo: "false"
+            storage: "seaweedfs"
+            proxy: "false"
+            deploy_pypi_server: "false"
+            test_label: "smoke"
+            pod_to_pod_tls_enabled: "true"
+          - k8s_version: "v1.35.0"
+            cache_enabled: "true"
+            deploy_external_argo: "false"
+            storage: "seaweedfs"
+            proxy: "false"
+            deploy_pypi_server: "false"
+            test_label: "Tier1"
+            pod_to_pod_tls_enabled: "true"
           - k8s_version: "v1.31.0"
             cache_enabled: "false"
             proxy: "true"
