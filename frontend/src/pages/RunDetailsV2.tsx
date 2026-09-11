@@ -167,8 +167,9 @@ export function RunDetailsV2(props: RunDetailsV2Props) {
       data.executions,
       data.events,
       data.artifacts,
+      run.state,
     );
-  }, [data, flowElements, isSuccess, layers]);
+  }, [data, flowElements, isSuccess, layers, run.state]);
 
   const onElementSelection = (event: ReactMouseEvent, element: PipelineFlowElement) => {
     setSelectedNode(element);
