@@ -259,6 +259,27 @@ func (l *LauncherV2) Execute(ctx context.Context) (err error) {
 		return err
 	}
 
+	// If a custom CA path is provided, compile the CA bundle and set environment
+	// variables BEFORE opening any object-store buckets. The S3 client reads
+	// AWS_CA_BUNDLE / SSL_CERT_FILE at creation time; setting them afterwards has
+	// no effect, which causes TLS failures on disconnected clusters with custom CAs.
+	if l.options.CaCertPath != "" {
+		var caBundleTmpPath string
+		if caBundleTmpPath, err = compileTempCABundleWithCustomCA(l.options.CaCertPath); err != nil {
+			return err
+		}
+
+		if setErr := os.Setenv("REQUESTS_CA_BUNDLE", caBundleTmpPath); setErr != nil {
+			glog.Errorf("Error setting REQUESTS_CA_BUNDLE environment variable, %s", setErr.Error())
+		}
+		if setErr := os.Setenv("AWS_CA_BUNDLE", caBundleTmpPath); setErr != nil {
+			glog.Errorf("Error setting AWS_CA_BUNDLE environment variable, %s", setErr.Error())
+		}
+		if setErr := os.Setenv("SSL_CERT_FILE", caBundleTmpPath); setErr != nil {
+			glog.Errorf("Error setting SSL_CERT_FILE environment variable, %s", setErr.Error())
+		}
+	}
+
 	openBucketConfig := &OpenBucketConfig{
 		ctx:       ctx,
 		k8sClient: l.clientManager.K8sClient(),
@@ -290,7 +311,6 @@ func (l *LauncherV2) Execute(ctx context.Context) (err error) {
 		l.options.Namespace,
 		l.clientManager.K8sClient(),
 		l.options.PublishLogs,
-		l.options.CaCertPath,
 		openBucketConfig,
 	)
 	if err != nil {
@@ -414,7 +434,6 @@ func executeV2(
 	namespace string,
 	k8sClient kubernetes.Interface,
 	publishLogs string,
-	customCAPath string,
 	openBucketConfig *OpenBucketConfig,
 ) (*pipelinespec.ExecutorOutput, []*metadata.OutputArtifact, error) {
 	qualifyExecutorLogsForRetry(ctx, executorInput, publishLogs, namespace, k8sClient)
@@ -443,7 +462,6 @@ func executeV2(
 		namespace,
 		k8sClient,
 		publishLogs,
-		customCAPath,
 	)
 	if err != nil {
 		glog.Errorf("Component failed to execute successfully: %v", err)
@@ -664,30 +682,7 @@ func execute(
 	namespace string,
 	k8sClient kubernetes.Interface,
 	publishLogs string,
-	customCAPath string,
 ) (*pipelinespec.ExecutorOutput, error) {
-	// If a custom CA path is input, append to system CA and save to a temp file for executor access.
-	if customCAPath != "" {
-		var caBundleTmpPath string
-		var err error
-		if caBundleTmpPath, err = compileTempCABundleWithCustomCA(customCAPath); err != nil {
-			return nil, err
-		}
-
-		err = os.Setenv("REQUESTS_CA_BUNDLE", caBundleTmpPath)
-		if err != nil {
-			glog.Errorf("Error setting REQUESTS_CA_BUNDLE environment variable, %s", err.Error())
-		}
-		err = os.Setenv("AWS_CA_BUNDLE", caBundleTmpPath)
-		if err != nil {
-			glog.Errorf("Error setting AWS_CA_BUNDLE environment variable, %s", err.Error())
-		}
-		err = os.Setenv("SSL_CERT_FILE", caBundleTmpPath)
-		if err != nil {
-			glog.Errorf("Error setting SSL_CERT_FILE environment variable, %s", err.Error())
-		}
-
-	}
 	if err := downloadArtifacts(ctx, executorInput, bucket, bucketConfig, namespace, k8sClient); err != nil {
 		return nil, err
 	}

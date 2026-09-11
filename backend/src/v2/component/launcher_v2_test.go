@@ -105,7 +105,6 @@ func Test_executeV2_Parameters(t *testing.T) {
 				"namespace",
 				fakeKubernetesClientset,
 				"false",
-				"",
 				&OpenBucketConfig{context.Background(), fakeKubernetesClientset, "namespace", bucketConfig},
 			)
 
@@ -270,7 +269,6 @@ func Test_executeV2_publishLogs(t *testing.T) {
 				"namespace",
 				fakeKubernetesClientset,
 				"true",
-				"",
 				&OpenBucketConfig{context.Background(), fakeKubernetesClientset, "namespace", bucketConfig},
 			)
 
@@ -332,6 +330,12 @@ func Test_executeV2_publishLogs_skipsArtifactWhenSetupFailsBeforeLogsExist(t *te
 			ParameterValues: map[string]*structpb.Value{},
 		},
 		Outputs: &pipelinespec.ExecutorInput_Outputs{
+			// Use an unwritable output parameter path to make prepareOutputFolders()
+			// fail inside execute() before the log writer is created. This triggers
+			// the same early-failure scenario that previously used a missing CA file.
+			Parameters: map[string]*pipelinespec.ExecutorInput_OutputParameter{
+				"bad-param": {OutputFile: "/proc/kfp-unwritable/nested/file"},
+			},
 			Artifacts: map[string]*pipelinespec.ArtifactList{
 				"executor-logs": {
 					Artifacts: []*pipelinespec.RuntimeArtifact{
@@ -358,7 +362,6 @@ func Test_executeV2_publishLogs_skipsArtifactWhenSetupFailsBeforeLogsExist(t *te
 		"namespace",
 		fakeKubernetesClientset,
 		"true",
-		filepath.Join(tempDir, "missing-ca.pem"),
 		&OpenBucketConfig{context.Background(), fakeKubernetesClientset, "namespace", bucketConfig},
 	)
 
@@ -421,7 +424,6 @@ EOF`, filepath.Dir(outputMetadataFile), outputMetadataFile)
 		"namespace",
 		fakeKubernetesClientset,
 		"true",
-		"",
 		&OpenBucketConfig{context.Background(), fakeKubernetesClientset, "namespace", bucketConfig},
 	)
 
@@ -921,4 +923,56 @@ func Test_retrieve_artifact_path(t *testing.T) {
 			assert.Equal(t, path, test.expectedPath)
 		})
 	}
+}
+
+func Test_compileTempCABundleWithCustomCA(t *testing.T) {
+	t.Run("appends custom CA to bundle", func(t *testing.T) {
+		tempDir := t.TempDir()
+		customCAPath := filepath.Join(tempDir, "custom-ca.crt")
+		customCAContent := "-----BEGIN CERTIFICATE-----\nCUSTOM-CA-CONTENT\n-----END CERTIFICATE-----\n"
+		err := os.WriteFile(customCAPath, []byte(customCAContent), 0644)
+		assert.NoError(t, err)
+
+		bundlePath, err := compileTempCABundleWithCustomCA(customCAPath)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, bundlePath)
+		defer os.Remove(bundlePath)
+
+		bundleContent, err := os.ReadFile(bundlePath)
+		assert.NoError(t, err)
+		assert.Contains(t, string(bundleContent), customCAContent,
+			"CA bundle should contain the custom CA certificate")
+	})
+
+	t.Run("fails when custom CA file does not exist", func(t *testing.T) {
+		_, err := compileTempCABundleWithCustomCA("/nonexistent/custom-ca.crt")
+		assert.Error(t, err, "Expected error when custom CA file does not exist")
+	})
+
+	t.Run("uses SSL_CERT_FILE when set", func(t *testing.T) {
+		tempDir := t.TempDir()
+		sslCertContent := "-----BEGIN CERTIFICATE-----\nSSL-CERT-CONTENT\n-----END CERTIFICATE-----\n"
+		sslCertPath := filepath.Join(tempDir, "ssl-cert.crt")
+		err := os.WriteFile(sslCertPath, []byte(sslCertContent), 0644)
+		assert.NoError(t, err)
+
+		customCAPath := filepath.Join(tempDir, "custom-ca.crt")
+		customCAContent := "-----BEGIN CERTIFICATE-----\nCUSTOM-CA-CONTENT\n-----END CERTIFICATE-----\n"
+		err = os.WriteFile(customCAPath, []byte(customCAContent), 0644)
+		assert.NoError(t, err)
+
+		t.Setenv("SSL_CERT_FILE", sslCertPath)
+
+		bundlePath, err := compileTempCABundleWithCustomCA(customCAPath)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, bundlePath)
+		defer os.Remove(bundlePath)
+
+		bundleContent, err := os.ReadFile(bundlePath)
+		assert.NoError(t, err)
+		assert.Contains(t, string(bundleContent), sslCertContent,
+			"CA bundle should contain the SSL_CERT_FILE content")
+		assert.Contains(t, string(bundleContent), customCAContent,
+			"CA bundle should contain the custom CA certificate")
+	})
 }
