@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
@@ -540,8 +541,7 @@ func loopItem() string {
 // Usually drivers should take very minimal amount of CPU and memory, but we
 // set a larger limit for extreme cases.
 // Note, these are empirical data.
-// No need to make this configurable, because we will instead call drivers using argo HTTP templates later.
-var driverResources = k8score.ResourceRequirements{
+var defaultDriverResources = k8score.ResourceRequirements{
 	Limits: map[k8score.ResourceName]k8sres.Quantity{
 		k8score.ResourceMemory: k8sres.MustParse("0.5Gi"),
 		k8score.ResourceCPU:    k8sres.MustParse("0.5"),
@@ -556,7 +556,7 @@ var driverResources = k8score.ResourceRequirements{
 // Note: Memory limit is set to 256Mi to prevent OOMKilled errors during binary copy.
 // The launcher binary is 123 MiB — nearly at the 128 MiB container memory limit.
 // The --copy operation alone uses ~59 MiB peak RSS.
-var launcherResources = k8score.ResourceRequirements{
+var defaultLauncherResources = k8score.ResourceRequirements{
 	Limits: map[k8score.ResourceName]k8sres.Quantity{
 		k8score.ResourceMemory: k8sres.MustParse("256Mi"),
 		k8score.ResourceCPU:    k8sres.MustParse("0.5"),
@@ -564,6 +564,78 @@ var launcherResources = k8score.ResourceRequirements{
 	Requests: map[k8score.ResourceName]k8sres.Quantity{
 		k8score.ResourceCPU: k8sres.MustParse("0.1"),
 	},
+}
+
+// buildResourcesFromEnv constructs a ResourceRequirements by reading the given
+// env vars (cpuReq, memReq, cpuLim, memLim) and falling back to defaults for
+// any that are unset or empty.
+func buildResourcesFromEnv(defaults k8score.ResourceRequirements, cpuReqEnv, memReqEnv, cpuLimEnv, memLimEnv string) k8score.ResourceRequirements {
+	result := k8score.ResourceRequirements{
+		Requests: k8score.ResourceList{},
+		Limits:   k8score.ResourceList{},
+	}
+
+	for envVar, rName := range map[string]k8score.ResourceName{
+		cpuReqEnv: k8score.ResourceCPU,
+		memReqEnv: k8score.ResourceMemory,
+	} {
+		if v := os.Getenv(envVar); v != "" {
+			q, err := k8sres.ParseQuantity(v)
+			if err != nil {
+				log.Warnf("Failed to parse env var %s=%q, using default: %v", envVar, v, err)
+			} else {
+				result.Requests[rName] = q
+				continue
+			}
+		}
+		if defaultVal, ok := defaults.Requests[rName]; ok {
+			result.Requests[rName] = defaultVal
+		}
+	}
+
+	for envVar, rName := range map[string]k8score.ResourceName{
+		cpuLimEnv: k8score.ResourceCPU,
+		memLimEnv: k8score.ResourceMemory,
+	} {
+		if v := os.Getenv(envVar); v != "" {
+			q, err := k8sres.ParseQuantity(v)
+			if err != nil {
+				log.Warnf("Failed to parse env var %s=%q, using default: %v", envVar, v, err)
+			} else {
+				result.Limits[rName] = q
+				continue
+			}
+		}
+		if defaultVal, ok := defaults.Limits[rName]; ok {
+			result.Limits[rName] = defaultVal
+		}
+	}
+
+	return result
+}
+
+// GetDriverResources returns the resource requirements for the driver container.
+// Values are read from V2_DRIVER_RESOURCE_* env vars, falling back to built-in defaults.
+func GetDriverResources() k8score.ResourceRequirements {
+	return buildResourcesFromEnv(
+		defaultDriverResources,
+		"V2_DRIVER_RESOURCE_REQUESTS_CPU",
+		"V2_DRIVER_RESOURCE_REQUESTS_MEMORY",
+		"V2_DRIVER_RESOURCE_LIMITS_CPU",
+		"V2_DRIVER_RESOURCE_LIMITS_MEMORY",
+	)
+}
+
+// GetLauncherResources returns the resource requirements for the launcher init container.
+// Values are read from V2_LAUNCHER_RESOURCE_* env vars, falling back to built-in defaults.
+func GetLauncherResources() k8score.ResourceRequirements {
+	return buildResourcesFromEnv(
+		defaultLauncherResources,
+		"V2_LAUNCHER_RESOURCE_REQUESTS_CPU",
+		"V2_LAUNCHER_RESOURCE_REQUESTS_MEMORY",
+		"V2_LAUNCHER_RESOURCE_LIMITS_CPU",
+		"V2_LAUNCHER_RESOURCE_LIMITS_MEMORY",
+	)
 }
 
 const (
