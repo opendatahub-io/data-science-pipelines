@@ -1317,3 +1317,24 @@ describe('Literal Parameter Dropdown (#12603)', () => {
     expect(screen.getByText('0')).toBeInTheDocument();
   });
 });
+
+describe('Long parameter label wrapping (#RHOAIENG-56381)', () => {
+  it('renders the label element with MuiInputLabel-root class for truncation styling', () => {
+    const props = {
+      titleMessage: 'default Title',
+      specParameters: {
+        optimization_max_rag_patterns: {
+          parameterType: ParameterType_ParameterTypeEnum.NUMBER_INTEGER,
+          defaultValue: 5,
+        },
+      },
+      clonedRuntimeConfig: {},
+    };
+    const { container } = render(<NewRunParametersV2 {...props} />);
+
+    const labelElement = container.querySelector('label.MuiInputLabel-root');
+    expect(labelElement).not.toBeNull();
+    expect(labelElement!.textContent).toContain('optimization_max_rag_patterns');
+    screen.getByDisplayValue('5');
+  });
+});
