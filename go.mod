@@ -1,6 +1,6 @@
 module github.com/kubeflow/pipelines
 
-go 1.26
+go 1.26.0
 
 godebug fips140=on
 
@@ -246,7 +246,7 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
-	golang.org/x/time v0.11.0 // indirect
+	golang.org/x/time v0.16.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240716161551-93cc26a95ae9 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
