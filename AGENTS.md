@@ -89,6 +89,9 @@
 ## Local development setup
 
 - Go modules require Go 1.27.0 and select the Go 1.27.1 toolchain.
+  CI installs this version through `.github/actions/setup-go`; Go builder images,
+  including the backend test image, use matching pinned Go 1.27.1 images.
+  Run `make check-go-version` to verify the modules, builders, and setup action.
 - Additional upstream guides are available under `docs/agents/`.
 
 - Always use a `.venv` virtual environment.

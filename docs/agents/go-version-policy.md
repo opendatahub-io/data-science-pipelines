@@ -27,11 +27,13 @@ The managed Go builder images are the single builder `FROM` instructions in:
 - `backend/Dockerfile.scheduledworkflow`
 - `backend/Dockerfile.viewercontroller`
 - `backend/api/Dockerfile`
+- `backend/test/images/Dockerfile.test`
 
 Go setup is managed through these composite actions:
 
 - `.github/actions/setup-go/action.yml`
-- `.github/actions/test-and-report/action.yml`
+
+The `test-and-report` action delegates Go installation to `setup-go`.
 
 ## Canonical forms
 
