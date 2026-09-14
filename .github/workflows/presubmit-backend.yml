@@ -15,6 +15,7 @@ on:
       - 'rhoai-*'
     paths:
       - 'backend/**'
+      - 'test/cache-deployer/**'
       - 'test/presubmit-backend-test.sh'
       - '!**/*.md'
       - '!**/OWNERS'
@@ -30,7 +31,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Set up Go
       uses: ./.github/actions/setup-go

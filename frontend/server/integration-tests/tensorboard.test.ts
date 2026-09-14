@@ -19,7 +19,8 @@ import { Server } from 'http';
 import * as path from 'path';
 import requests from 'supertest';
 import { UIServer } from '../app.js';
-import { loadConfigs } from '../configs.js';
+import { loadConfigs as loadApplicationConfigs, type ProcessEnv } from '../configs.js';
+import { createTensorboardProxyPath } from '../handlers/tensorboard-proxy.js';
 import { TEST_ONLY as K8S_TEST_EXPORT } from '../k8s-helper.js';
 import { buildQuery, commonSetup, mkTempDir } from './test-helper.js';
 
@@ -31,6 +32,12 @@ beforeEach(() => {
 
 describe('/apps/tensorboard', () => {
   let app: UIServer;
+  const tensorboardProxySigningSecret = 'tensorboard-proxy-test-secret-at-least-32-bytes';
+  const existingTensorboardProxyPath = createTensorboardProxyPath(
+    'test-ns',
+    'viewer-abcdefg',
+    tensorboardProxySigningSecret,
+  );
   afterEach(async () => {
     if (app) {
       await app.close();
@@ -39,6 +46,21 @@ describe('/apps/tensorboard', () => {
   const tagName = '1.0.0';
   const commitHash = 'abcdefg';
   const { argv } = commonSetup({ tagName, commitHash });
+
+  function loadConfigs(argv: string[], env: ProcessEnv) {
+    return loadApplicationConfigs(argv, {
+      ...env,
+      TENSORBOARD_PROXY_SIGNING_SECRET: tensorboardProxySigningSecret,
+    });
+  }
+
+  it.each([undefined, 'another-tensorboard-test-secret-at-least-32-bytes'])(
+    'keeps the fixed test signing secret when env provides %s',
+    (signingSecret) => {
+      const configs = loadConfigs(argv, { TENSORBOARD_PROXY_SIGNING_SECRET: signingSecret });
+      expect(configs.viewer.tensorboard.proxySigningSecret).toBe(tensorboardProxySigningSecret);
+    },
+  );
 
   const POD_TEMPLATE_SPEC = {
     spec: {
@@ -256,8 +278,7 @@ describe('/apps/tensorboard', () => {
         .expect(
           200,
           JSON.stringify({
-            podAddress:
-              'http://viewer-abcdefg-service.test-ns.svc.cluster.local:80/tensorboard/viewer-abcdefg/',
+            proxyPath: existingTensorboardProxyPath,
             tfVersion: '2.0.0',
             image: 'tensorflow:2.0.0',
           }),
@@ -275,8 +296,7 @@ describe('/apps/tensorboard', () => {
       `);
     });
 
-    it('gets tensorboard url with custom cluster domain (defensive normalization)', async () => {
-      // Test both with and without leading dot
+    it('gets tensorboard proxy path with custom cluster domain configured', async () => {
       app = new UIServer(loadConfigs(argv, { CLUSTER_DOMAIN: 'cluster.test' }));
       k8sGetCustomObjectSpy.mockImplementation(() =>
         Promise.resolve(
@@ -293,8 +313,7 @@ describe('/apps/tensorboard', () => {
         .expect(
           200,
           JSON.stringify({
-            podAddress:
-              'http://viewer-abcdefg-service.test-ns.cluster.test:80/tensorboard/viewer-abcdefg/',
+            proxyPath: existingTensorboardProxyPath,
             tfVersion: '2.0.0',
             image: 'tensorflow:2.0.0',
           }),
@@ -319,8 +338,7 @@ describe('/apps/tensorboard', () => {
         .expect(
           200,
           JSON.stringify({
-            podAddress:
-              'http://viewer-abcdefg-service.test-ns.svc.cluster.local:80/tensorboard/viewer-abcdefg/',
+            proxyPath: existingTensorboardProxyPath,
             tfVersion: '2.0.0',
             image: 'tensorflow:2.0.0',
           }),
@@ -376,10 +394,7 @@ describe('/apps/tensorboard', () => {
             'log-dir-1',
           )}&namespace=test-ns&tfversion=2.0.0`,
         )
-        .expect(
-          200,
-          'http://viewer-abcdefg-service.test-ns.svc.cluster.local:80/tensorboard/viewer-abcdefg/',
-        );
+        .expect(200, existingTensorboardProxyPath);
       expect(k8sGetCustomObjectSpy.mock.calls[0]).toMatchInlineSnapshot(`
         [
           {
@@ -500,10 +515,7 @@ describe('/apps/tensorboard', () => {
             'Series1:volume://tensorboard/log-dir-1,Series2:volume://tensorboard/log-dir-2',
           )}&namespace=test-ns&tfversion=2.0.0`,
         )
-        .expect(
-          200,
-          'http://viewer-abcdefg-service.test-ns.svc.cluster.local:80/tensorboard/viewer-abcdefg/',
-        );
+        .expect(200, existingTensorboardProxyPath);
       expect(k8sGetCustomObjectSpy.mock.calls[0]).toMatchInlineSnapshot(`
         [
           {
@@ -619,10 +631,7 @@ describe('/apps/tensorboard', () => {
             'Series1:volume://data/tensorboard/log-dir-1,Series2:volume://data/tensorboard/log-dir-2',
           )}&namespace=test-ns&tfversion=2.0.0`,
         )
-        .expect(
-          200,
-          'http://viewer-abcdefg-service.test-ns.svc.cluster.local:80/tensorboard/viewer-abcdefg/',
-        );
+        .expect(200, existingTensorboardProxyPath);
       expect(k8sGetCustomObjectSpy.mock.calls[0]).toMatchInlineSnapshot(`
         [
           {
@@ -806,10 +815,7 @@ describe('/apps/tensorboard', () => {
             'log-dir-1',
           )}&namespace=test-ns&tfversion=2.0.0`,
         )
-        .expect(
-          200,
-          'http://viewer-abcdefg-service.test-ns.svc.cluster.local:80/tensorboard/viewer-abcdefg/',
-        );
+        .expect(200, existingTensorboardProxyPath);
     });
   });
 

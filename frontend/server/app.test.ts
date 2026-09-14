@@ -217,6 +217,24 @@ describe('UIServer apis', () => {
     });
   });
 
+  describe('deprecated generic proxy routes', () => {
+    beforeEach(() => {
+      app = new UIServer(loadConfigs(argv, {}));
+    });
+
+    it('returns gone for the legacy v1 proxy endpoint', async () => {
+      await requests(app.app)
+        .get('/apis/v1beta1/_proxy/http%3A%2F%2Fviewer.test%2Fdata')
+        .expect(410, 'The generic /_proxy/ endpoint is deprecated and no longer supported.');
+    });
+
+    it('returns gone for the legacy base-path proxy endpoint', async () => {
+      await requests(app.app)
+        .get('/pipeline/apis/v1beta1/_proxy/http%3A%2F%2Fviewer.test%2Fdata')
+        .expect(410, 'The generic /_proxy/ endpoint is deprecated and no longer supported.');
+    });
+  });
+
   describe('/system', () => {
     describe('/cluster-name', () => {
       it('responds with cluster name data from gke metadata', async () => {
@@ -498,6 +516,71 @@ describe('UIServer apis', () => {
 
     it('asks for podname if not provided', async () => {
       await request.get('/k8s/pod/logs').expect(400, 'podname argument is required');
+    });
+  });
+
+  describe('/k8s/pod/logs streamed from the API server', () => {
+    let kfpApiServer: Server;
+
+    afterEach(async () => {
+      if (kfpApiServer) {
+        await new Promise<void>((resolve) => kfpApiServer.close(() => resolve()));
+      }
+    });
+
+    it('forces HTML log responses to download without MIME sniffing', async () => {
+      kfpApiServer = express()
+        .all('/*', (_, res) => {
+          res
+            .status(200)
+            .type('text/html')
+            .set('Content-Disposition', 'inline')
+            .send('<script>window.top.pwned = true</script>');
+        })
+        .listen(0);
+      await waitForListening(kfpApiServer);
+      const address = kfpApiServer.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected mock API server to bind to a TCP port');
+      }
+      app = new UIServer(
+        loadConfigs(argv, {
+          ML_PIPELINE_SERVICE_HOST: 'localhost',
+          ML_PIPELINE_SERVICE_PORT: `${address.port}`,
+          STREAM_LOGS_FROM_SERVER_API: 'true',
+        }),
+      );
+
+      const response = await requests(app.app)
+        .get('/k8s/pod/logs?runid=test-run&podname=test-pod')
+        .expect(200);
+
+      expect(response.headers['content-disposition']).toBe('attachment');
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
+      expect(response.headers['content-type']).toBe('text/plain; charset=utf-8');
+    });
+
+    it('hardens proxy errors produced before an upstream response exists', async () => {
+      const unavailableServer = express().listen(0);
+      await waitForListening(unavailableServer);
+      const address = unavailableServer.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected temporary API server to bind to a TCP port');
+      }
+      await new Promise<void>((resolve) => unavailableServer.close(() => resolve()));
+      app = new UIServer(
+        loadConfigs(argv, {
+          ML_PIPELINE_SERVICE_HOST: '127.0.0.1',
+          ML_PIPELINE_SERVICE_PORT: `${address.port}`,
+          STREAM_LOGS_FROM_SERVER_API: 'true',
+        }),
+      );
+
+      const response = await requests(app.app).get('/k8s/pod/logs?runid=test-run&podname=test-pod');
+
+      expect(response.status).toBeGreaterThanOrEqual(500);
+      expect(response.headers['content-disposition']).toBe('attachment');
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
     });
   });
 

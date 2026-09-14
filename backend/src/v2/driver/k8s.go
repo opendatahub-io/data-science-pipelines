@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -147,6 +148,9 @@ func extendPodSpecPatch(
 ) error {
 	kubernetesExecutorConfig := opts.KubernetesExecutorConfig
 
+	// Shared by every name resolved below, so a DAG is read once for the patch.
+	dagTasks := newDAGTaskCache()
+
 	setOnTaskConfig, setOnPod := getTaskConfigOptions(opts.Component)
 
 	// Always set setOnTaskConfig to an empty map if taskConfig is nil to avoid nil pointer dereference.
@@ -162,7 +166,7 @@ func extendPodSpecPatch(
 	// Get volume mount information
 	if kubernetesExecutorConfig.GetPvcMount() != nil {
 		volumeMounts, volumes, err := makeVolumeMountPatch(ctx, opts, kubernetesExecutorConfig.GetPvcMount(),
-			dag, pipeline, mlmd, inputParams)
+			dag, pipeline, mlmd, inputParams, dagTasks)
 		if err != nil {
 			return fmt.Errorf("failed to extract volume mount info: %w", err)
 		}
@@ -205,7 +209,7 @@ func extendPodSpecPatch(
 		skipNodeSelector := false
 		if kubernetesExecutorConfig.GetNodeSelector().GetNodeSelectorJson() != nil {
 			err := resolveK8sJsonParameter(ctx, opts, dag, pipeline, mlmd,
-				kubernetesExecutorConfig.GetNodeSelector().GetNodeSelectorJson(), inputParams, &nodeSelector)
+				kubernetesExecutorConfig.GetNodeSelector().GetNodeSelectorJson(), inputParams, &nodeSelector, dagTasks)
 			if err != nil {
 				if errors.Is(err, ErrResolvedParameterNull) {
 					skipNodeSelector = true
@@ -238,7 +242,7 @@ func extendPodSpecPatch(
 				k8sToleration := &k8score.Toleration{}
 				if toleration.TolerationJson != nil {
 					resolvedParam, err := resolveInputParameter(ctx, dag, pipeline, opts, mlmd,
-						toleration.GetTolerationJson(), inputParams)
+						toleration.GetTolerationJson(), inputParams, dagTasks)
 					if err != nil {
 						if errors.Is(err, ErrResolvedParameterNull) {
 							continue // Skip applying the patch for this null/optional parameter
@@ -315,7 +319,7 @@ func extendPodSpecPatch(
 			}
 			if claim.ResourceClaimJson != nil {
 				resolvedParam, err := resolveInputParameter(ctx, dag, pipeline, opts, mlmd,
-					claim.GetResourceClaimJson(), inputParams)
+					claim.GetResourceClaimJson(), inputParams, dagTasks)
 				if err != nil {
 					if errors.Is(err, ErrResolvedParameterNull) {
 						continue
@@ -416,7 +420,7 @@ func extendPodSpecPatch(
 		var secretName string
 		if secretAsVolume.SecretNameParameter != nil {
 			resolvedSecretName, err := resolveInputParameterStr(ctx, dag, pipeline, opts, mlmd,
-				secretAsVolume.SecretNameParameter, inputParams)
+				secretAsVolume.SecretNameParameter, inputParams, dagTasks)
 			if err != nil {
 				if errors.Is(err, ErrResolvedParameterNull) {
 					continue
@@ -478,7 +482,7 @@ func extendPodSpecPatch(
 			var secretName string
 			if secretAsEnv.SecretNameParameter != nil {
 				resolvedSecretName, err := resolveInputParameterStr(ctx, dag, pipeline, opts, mlmd,
-					secretAsEnv.SecretNameParameter, inputParams)
+					secretAsEnv.SecretNameParameter, inputParams, dagTasks)
 				if err != nil {
 					if errors.Is(err, ErrResolvedParameterNull) {
 						continue
@@ -510,7 +514,7 @@ func extendPodSpecPatch(
 		var configMapName string
 		if configMapAsVolume.ConfigMapNameParameter != nil {
 			resolvedConfigMapName, err := resolveInputParameterStr(ctx, dag, pipeline, opts, mlmd,
-				configMapAsVolume.ConfigMapNameParameter, inputParams)
+				configMapAsVolume.ConfigMapNameParameter, inputParams, dagTasks)
 			if err != nil {
 				if errors.Is(err, ErrResolvedParameterNull) {
 					continue
@@ -574,7 +578,7 @@ func extendPodSpecPatch(
 			var configMapName string
 			if configMapAsEnv.ConfigMapNameParameter != nil {
 				resolvedConfigMapName, err := resolveInputParameterStr(ctx, dag, pipeline, opts, mlmd,
-					configMapAsEnv.ConfigMapNameParameter, inputParams)
+					configMapAsEnv.ConfigMapNameParameter, inputParams, dagTasks)
 				if err != nil {
 					if errors.Is(err, ErrResolvedParameterNull) {
 						continue
@@ -606,7 +610,7 @@ func extendPodSpecPatch(
 		var secretName string
 		if imagePullSecret.SecretNameParameter != nil {
 			resolvedSecretName, err := resolveInputParameterStr(ctx, dag, pipeline, opts, mlmd,
-				imagePullSecret.SecretNameParameter, inputParams)
+				imagePullSecret.SecretNameParameter, inputParams, dagTasks)
 			if err != nil {
 				if errors.Is(err, ErrResolvedParameterNull) {
 					continue
@@ -667,6 +671,10 @@ func extendPodSpecPatch(
 			_storageClassName := ephemeralVolumeSpec.GetStorageClassName()
 			storageClassName = &_storageClassName
 		}
+		sizeQuantity, err := k8sres.ParseQuantity(ephemeralVolumeSpec.GetSize())
+		if err != nil {
+			return fmt.Errorf("failed to parse generic ephemeral volume size %q for volume %q: %w", ephemeralVolumeSpec.GetSize(), ephemeralVolumeSpec.GetVolumeName(), err)
+		}
 		ephemeralVolume := k8score.Volume{
 			Name: ephemeralVolumeSpec.GetVolumeName(),
 			VolumeSource: k8score.VolumeSource{
@@ -680,7 +688,7 @@ func extendPodSpecPatch(
 							AccessModes: accessModes,
 							Resources: k8score.VolumeResourceRequirements{
 								Requests: k8score.ResourceList{
-									k8score.ResourceStorage: k8sres.MustParse(ephemeralVolumeSpec.GetSize()),
+									k8score.ResourceStorage: sizeQuantity,
 								},
 							},
 							StorageClassName: storageClassName,
@@ -703,7 +711,10 @@ func extendPodSpecPatch(
 	for _, emptyDirVolumeSpec := range kubernetesExecutorConfig.GetEmptyDirMounts() {
 		var sizeLimitResource *k8sres.Quantity
 		if emptyDirVolumeSpec.GetSizeLimit() != "" {
-			r := k8sres.MustParse(emptyDirVolumeSpec.GetSizeLimit())
+			r, err := k8sres.ParseQuantity(emptyDirVolumeSpec.GetSizeLimit())
+			if err != nil {
+				return fmt.Errorf("failed to parse size limit %q for emptyDir volume %q: %w", emptyDirVolumeSpec.GetSizeLimit(), emptyDirVolumeSpec.GetVolumeName(), err)
+			}
 			sizeLimitResource = &r
 		}
 
@@ -741,7 +752,7 @@ func extendPodSpecPatch(
 			if nodeAffinityTerm.GetNodeAffinityJson() != nil {
 				var k8sNodeAffinity json.RawMessage
 				err := resolveK8sJsonParameter(ctx, opts, dag, pipeline, mlmd,
-					nodeAffinityTerm.GetNodeAffinityJson(), inputParams, &k8sNodeAffinity)
+					nodeAffinityTerm.GetNodeAffinityJson(), inputParams, &k8sNodeAffinity, dagTasks)
 				if err != nil {
 					if errors.Is(err, ErrResolvedParameterNull) {
 						continue
@@ -843,6 +854,17 @@ func extendPodSpecPatch(
 		}
 	}
 
+	// Pre-populate the administrator-configured hostUsers default at the pod level
+	// only when no value is already present. Setting hostUsers to false places the
+	// pod in a dedicated Linux user namespace: UID 0 inside the pod maps to an
+	// unprivileged host UID, so root processes in the container are not root on
+	// the host. We set only when nil so that the post-processing guard below can
+	// detect and warn about user-supplied overrides.
+	if opts.DefaultHostUsers != nil && podSpec.HostUsers == nil {
+		v := *opts.DefaultHostUsers
+		podSpec.HostUsers = &v
+	}
+
 	// Apply container security context (PSS baseline compliant).
 	// User-specified identity fields (runAsUser, runAsGroup) are only applied
 	// when they are not already set by the platform/admin. If the compiler or
@@ -884,6 +906,128 @@ func extendPodSpecPatch(
 		podSpec.Containers[0].SecurityContext.Capabilities = &k8score.Capabilities{
 			Drop: []k8score.Capability{"ALL"},
 		}
+	}
+
+	// Seed name set from existing containers to prevent collisions.
+	initContainerNames := make(map[string]bool)
+	for _, c := range podSpec.Containers {
+		initContainerNames[c.Name] = true
+	}
+	for _, c := range podSpec.InitContainers {
+		initContainerNames[c.Name] = true
+	}
+	for _, initContainer := range kubernetesExecutorConfig.GetInitContainers() {
+		if initContainer.GetName() == "" {
+			return fmt.Errorf("init container name must not be empty")
+		}
+		if initContainerNames[initContainer.GetName()] {
+			return fmt.Errorf("init container name %q conflicts with an existing container in the pod", initContainer.GetName())
+		}
+		initContainerNames[initContainer.GetName()] = true
+		if initContainer.GetImage() == "" {
+			return fmt.Errorf("init container %q must specify an image", initContainer.GetName())
+		}
+
+		// Apply the same PSS hardening as the compiler gives user containers.
+		allowPrivilegeEscalation := false
+		k8sInitContainer := k8score.Container{
+			Name:    initContainer.GetName(),
+			Image:   initContainer.GetImage(),
+			Command: initContainer.GetCommand(),
+			Args:    initContainer.GetArgs(),
+			SecurityContext: &k8score.SecurityContext{
+				AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+				Capabilities: &k8score.Capabilities{
+					Drop: []k8score.Capability{"ALL"},
+				},
+				SeccompProfile: &k8score.SeccompProfile{
+					Type: k8score.SeccompProfileTypeRuntimeDefault,
+				},
+			},
+		}
+		// Apply administrator identity defaults.
+		if opts.DefaultRunAsUser != nil {
+			v := *opts.DefaultRunAsUser
+			k8sInitContainer.SecurityContext.RunAsUser = &v
+		}
+		if opts.DefaultRunAsGroup != nil {
+			v := *opts.DefaultRunAsGroup
+			k8sInitContainer.SecurityContext.RunAsGroup = &v
+		}
+		if opts.DefaultRunAsNonRoot != nil {
+			v := *opts.DefaultRunAsNonRoot
+			k8sInitContainer.SecurityContext.RunAsNonRoot = &v
+		}
+		// "Always" converts to a native sidecar (the only valid value).
+		if initContainer.GetRestartPolicy() != "" {
+			if initContainer.GetRestartPolicy() != string(k8score.ContainerRestartPolicyAlways) {
+				return fmt.Errorf("init container %q restart policy must be %q, got %q",
+					initContainer.GetName(), k8score.ContainerRestartPolicyAlways, initContainer.GetRestartPolicy())
+			}
+			restartPolicy := k8score.ContainerRestartPolicyAlways
+			k8sInitContainer.RestartPolicy = &restartPolicy
+		}
+		if resources := initContainer.GetResources(); resources != nil {
+			parseResourceList := func(kind string, quantities map[string]string) (k8score.ResourceList, error) {
+				if len(quantities) == 0 {
+					return nil, nil
+				}
+				resourceList := k8score.ResourceList{}
+				for resourceName, quantityValue := range quantities {
+					quantity, err := k8sres.ParseQuantity(quantityValue)
+					if err != nil {
+						return nil, fmt.Errorf("init container %q has an invalid resource %s %s=%q: %w",
+							initContainer.GetName(), kind, resourceName, quantityValue, err)
+					}
+					resourceList[k8score.ResourceName(resourceName)] = quantity
+				}
+				return resourceList, nil
+			}
+			requests, err := parseResourceList("request", resources.GetRequests())
+			if err != nil {
+				return err
+			}
+			limits, err := parseResourceList("limit", resources.GetLimits())
+			if err != nil {
+				return err
+			}
+			k8sInitContainer.Resources = k8score.ResourceRequirements{
+				Requests: requests,
+				Limits:   limits,
+			}
+		}
+		for _, envVar := range initContainer.GetEnv() {
+			if envVar.GetName() == "" {
+				return fmt.Errorf("init container %q has an environment variable with an empty name", initContainer.GetName())
+			}
+			k8sInitContainer.Env = append(k8sInitContainer.Env, k8score.EnvVar{
+				Name:  envVar.GetName(),
+				Value: envVar.GetValue(),
+			})
+		}
+		for _, volumeMount := range initContainer.GetVolumeMounts() {
+			if volumeMount.GetVolumeName() == "" {
+				return fmt.Errorf("init container %q has a volume mount with an empty volume name", initContainer.GetName())
+			}
+			if !strings.HasPrefix(volumeMount.GetMountPath(), "/") {
+				return fmt.Errorf("init container %q volume mount %q must use an absolute mount path", initContainer.GetName(), volumeMount.GetVolumeName())
+			}
+			k8sInitContainer.VolumeMounts = append(k8sInitContainer.VolumeMounts, k8score.VolumeMount{
+				Name:      volumeMount.GetVolumeName(),
+				MountPath: volumeMount.GetMountPath(),
+			})
+		}
+		podSpec.InitContainers = append(podSpec.InitContainers, k8sInitContainer)
+	}
+
+	// Enforce administrator hostUsers default regardless of user override.
+	if opts.DefaultHostUsers != nil {
+		if podSpec.HostUsers != nil && *podSpec.HostUsers != *opts.DefaultHostUsers {
+			glog.Warningf("Ignoring user-specified hostUsers=%t: administrator default hostUsers=%t takes precedence",
+				*podSpec.HostUsers, *opts.DefaultHostUsers)
+		}
+		v := *opts.DefaultHostUsers
+		podSpec.HostUsers = &v
 	}
 
 	return nil
@@ -1033,6 +1177,10 @@ func createPVC(
 	}
 
 	// Create a PersistentVolumeClaim object
+	pvcStorageQuantity, err := k8sres.ParseQuantity(volumeSizeInput.GetStringValue())
+	if err != nil {
+		return "", createdExecution, pb.Execution_FAILED, fmt.Errorf("failed to parse pvc size %q: %w", volumeSizeInput.GetStringValue(), err)
+	}
 	pvc := &k8score.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        pvcName,
@@ -1042,7 +1190,7 @@ func createPVC(
 			AccessModes: accessModes,
 			Resources: k8score.VolumeResourceRequirements{
 				Requests: k8score.ResourceList{
-					k8score.ResourceStorage: k8sres.MustParse(volumeSizeInput.GetStringValue()),
+					k8score.ResourceStorage: pvcStorageQuantity,
 				},
 			},
 			StorageClassName: &storageClassName,
@@ -1052,7 +1200,7 @@ func createPVC(
 	}
 
 	// Create the PVC in the cluster
-	createdPVC, err := k8sClient.CoreV1().PersistentVolumeClaims(opts.Namespace).Create(context.Background(), pvc, metav1.CreateOptions{})
+	createdPVC, err := k8sClient.CoreV1().PersistentVolumeClaims(opts.Namespace).Create(ctx, pvc, metav1.CreateOptions{})
 	if err != nil {
 		return "", createdExecution, pb.Execution_FAILED, fmt.Errorf("failed to create pvc: %w", err)
 	}
@@ -1172,13 +1320,13 @@ func deletePVC(
 	}
 
 	// Get the PVC you want to delete, verify that it exists.
-	_, err = k8sClient.CoreV1().PersistentVolumeClaims(opts.Namespace).Get(context.TODO(), pvcName, metav1.GetOptions{})
+	_, err = k8sClient.CoreV1().PersistentVolumeClaims(opts.Namespace).Get(ctx, pvcName, metav1.GetOptions{})
 	if err != nil {
 		return createdExecution, pb.Execution_FAILED, fmt.Errorf("failed to delete pvc %s: cannot find pvc: %v", pvcName, err)
 	}
 
 	// Delete the PVC.
-	err = k8sClient.CoreV1().PersistentVolumeClaims(opts.Namespace).Delete(context.TODO(), pvcName, metav1.DeleteOptions{})
+	err = k8sClient.CoreV1().PersistentVolumeClaims(opts.Namespace).Delete(ctx, pvcName, metav1.DeleteOptions{})
 	if err != nil {
 		return createdExecution, pb.Execution_FAILED, fmt.Errorf("failed to delete pvc %s: %v", pvcName, err)
 	}
@@ -1204,6 +1352,7 @@ func makeVolumeMountPatch(
 	pipeline *metadata.Pipeline,
 	mlmd *metadata.Client,
 	inputParams map[string]*structpb.Value,
+	dagTasks *dagTaskCache,
 ) ([]k8score.VolumeMount, []k8score.Volume, error) {
 	if pvcMounts == nil {
 		return nil, nil, nil
@@ -1230,7 +1379,7 @@ func makeVolumeMountPatch(
 		}
 
 		resolvedPvcName, err := resolveInputParameterStr(ctx, dag, pipeline, opts, mlmd,
-			pvcNameParameter, inputParams)
+			pvcNameParameter, inputParams, dagTasks)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to resolve pvc name: %w", err)
 		}
@@ -1283,7 +1432,7 @@ func publishDriverExecution(
 		return fmt.Errorf("error getting pod name: %w", err)
 	}
 
-	pod, err := k8sClient.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
+	pod, err := k8sClient.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("error retrieving info for pod %s: %w", podName, err)
 	}
