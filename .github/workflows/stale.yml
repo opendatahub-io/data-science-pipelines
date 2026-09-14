@@ -18,11 +18,11 @@ jobs:
       pull-requests: write
 
     steps:
-    - uses: actions/stale@v10
+    - uses: actions/stale@v11
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-        days-before-stale: 365
-        days-before-close: 183 # half a year
+        days-before-stale: 120
+        days-before-close: 60
         stale-issue-message: >
           This issue has been automatically marked as stale because it has not had
           recent activity. It will be closed if no further activity occurs. Thank you
