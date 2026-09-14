@@ -12,46 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Build arguments
-ARG SOURCE_CODE=.
-ARG CI_CONTAINER_VERSION="unknown"
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
-ARG BUILDER_ARCH=multiarch
+FROM golang:1.27.1-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:45bd06d392349dfdb09073514cfebcc5082db33301347b51dcae8e5516a89126 AS go-toolset-multiarch
-FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:3880436381044c6d89c2311f2a7dc8d64224668bf84b43810982b5a9ddd851d0 AS go-toolset-arm64
-FROM go-toolset-${BUILDER_ARCH} AS builder
+WORKDIR /go/src/github.com/kubeflow/pipelines
 
-## Build args to be used at this step
-ARG SOURCE_CODE
-ARG TARGETOS
-ARG TARGETARCH
+COPY ./go.mod ./
+COPY ./go.sum ./
+COPY ./kubernetes_platform/go.mod ./kubernetes_platform/go.mod
+COPY ./api/go.mod ./api/go.mod
 
-USER root
+# git is required by the GOPROXY direct fallback below to fetch modules
+# from source when the module proxy errors.
+RUN apk add --no-cache git
 
-RUN dnf install -y bash
+# Fall back to fetching modules directly from source on any module proxy
+# error (the default comma separator only falls back on 404/410), so a
+# transient proxy.golang.org failure cannot fail the build.
+ENV GOPROXY=https://proxy.golang.org|direct
+RUN GO111MODULE=on go mod download
 
-COPY ${SOURCE_CODE}/go.mod ./
-COPY ${SOURCE_CODE}/go.sum ./
-COPY ${SOURCE_CODE}/kubernetes_platform/go.mod ./kubernetes_platform/go.mod
-COPY ${SOURCE_CODE}/api/go.mod ./api/go.mod
+COPY . .
 
-RUN GOTOOLCHAIN=local GO111MODULE=on go mod download
+RUN GO111MODULE=on go build -o /bin/persistence_agent backend/src/agent/persistence/*.go
 
-# Copy the source
-COPY ${SOURCE_CODE}/ ./
+FROM alpine:3.21
 
-RUN GOTOOLCHAIN=local GO111MODULE=on CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-      GOFIPS140=v1.0.0 \
-      go build -tags no_openssl -o /bin/persistence_agent backend/src/agent/persistence/*.go
-
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
+RUN adduser -S appuser
+USER appuser
 
 WORKDIR /bin
 
 COPY --from=builder /bin/persistence_agent /bin/persistence_agent
-
 ENV NAMESPACE=""
 
 # Set Workflow TTL to 1 day. The way to use a different value for a particular Kubeflow Pipelines deployment is demonstrated in manifests/kustomize/base/pipeline/ml-pipeline-persistenceagent-deployment.yaml
@@ -62,5 +53,4 @@ ENV NUM_WORKERS=2
 ENV LOG_LEVEL=info
 
 ENV EXECUTIONTYPE=Workflow
-
 CMD ["/bin/sh", "-c", "persistence_agent --logtostderr=true --namespace=${NAMESPACE} --ttlSecondsAfterWorkflowFinish=${TTL_SECONDS_AFTER_WORKFLOW_FINISH} --numWorker ${NUM_WORKERS} --executionType ${EXECUTIONTYPE} --logLevel=${LOG_LEVEL}"]

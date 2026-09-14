@@ -35,9 +35,22 @@ import { getClusterNameHandler, getProjectIdHandler } from './handlers/gke-metad
 import { getAllowCustomVisualizationsHandler } from './handlers/vis.js';
 import { getIndexHTMLHandler } from './handlers/index-html.js';
 
-import proxyMiddleware from './proxy-middleware.js';
-import { Server } from 'http';
+import { IncomingMessage, Server } from 'http';
 import { HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS } from './consts.js';
+import registerTensorboardProxy from './handlers/tensorboard-proxy.js';
+
+function hardenPodLogsProxyResponse(proxyRes: IncomingMessage): void {
+  proxyRes.headers['x-content-type-options'] = 'nosniff';
+  proxyRes.headers['content-disposition'] = 'attachment';
+  proxyRes.headers['content-type'] = 'text/plain; charset=utf-8';
+}
+
+const hardenPodLogsProxyRequest: express.Handler = (_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Disposition', 'attachment');
+  res.type('text/plain');
+  next();
+};
 
 function getRegisterHandler(app: Application, basePath: string) {
   return (
@@ -168,6 +181,7 @@ function createUIServer(options: UIConfigs) {
     authorizeFn,
     options.auth.enabled,
     options.auth.kubeflowUserIdHeader,
+    envoyServiceAddress,
   );
 
   /** Artifact */
@@ -245,15 +259,20 @@ function createUIServer(options: UIConfigs) {
   registerHandler(app.get, '/apps/tensorboard', tensorboardGetHandler);
   registerHandler(app.delete, '/apps/tensorboard', tensorboardDeleteHandler);
   registerHandler(app.post, '/apps/tensorboard', tensorboardCreateHandler);
+  registerTensorboardProxy(app, basePath, options.viewer.tensorboard, authorizeFn);
 
   /** Pod logs - conditionally stream through API server, otherwise directly from k8s and archive */
   if (options.artifacts.streamLogsFromServerApi) {
     app.all(
       '/k8s/pod/logs',
+      hardenPodLogsProxyRequest,
       createProxyMiddleware({
         changeOrigin: true,
-        onProxyReq: (proxyReq) => {
-          console.log('Proxied log request: ', proxyReq.path);
+        on: {
+          proxyReq: (proxyReq) => {
+            console.log('Proxied log request: ', proxyReq.path);
+          },
+          proxyRes: hardenPodLogsProxyResponse,
         },
         headers: HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS,
         pathRewrite: (pathStr: string, req: any) => {
@@ -282,10 +301,14 @@ function createUIServer(options: UIConfigs) {
   if (options.artifacts.streamLogsFromServerApi) {
     app.all(
       '/k8s/pod/logs',
+      hardenPodLogsProxyRequest,
       createProxyMiddleware({
         changeOrigin: true,
-        onProxyReq: (proxyReq) => {
-          console.log('Proxied log request: ', proxyReq.path);
+        on: {
+          proxyReq: (proxyReq) => {
+            console.log('Proxied log request: ', proxyReq.path);
+          },
+          proxyRes: hardenPodLogsProxyResponse,
         },
         headers: HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS,
         pathRewrite: (pathStr: string, req: any) => {
@@ -332,8 +355,10 @@ function createUIServer(options: UIConfigs) {
     '/ml_metadata.*',
     createProxyMiddleware({
       changeOrigin: true,
-      onProxyReq: (proxyReq) => {
-        console.log('Metadata proxied request: ', (proxyReq as any).path);
+      on: {
+        proxyReq: (proxyReq) => {
+          console.log('Metadata proxied request: ', (proxyReq as any).path);
+        },
       },
       headers: HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS,
       target: envoyServiceAddress,
@@ -355,20 +380,26 @@ function createUIServer(options: UIConfigs) {
     },
   );
 
-  // Order matters here, since both handlers can match any proxied request with a referer,
-  // and we prioritize the basepath-friendly handler
-  proxyMiddleware(app, `${basePath}/${apiVersion1Prefix}`);
-  proxyMiddleware(app, `${basePath}/${apiVersion2Prefix}`);
-  proxyMiddleware(app, `/${apiVersion1Prefix}`);
-  proxyMiddleware(app, `/${apiVersion2Prefix}`);
+  const deprecatedProxyRoutes = [
+    `/${apiVersion1Prefix}/_proxy/*`,
+    `/${apiVersion2Prefix}/_proxy/*`,
+    `${basePath}/${apiVersion1Prefix}/_proxy/*`,
+    `${basePath}/${apiVersion2Prefix}/_proxy/*`,
+  ];
+
+  app.all(deprecatedProxyRoutes, (_req, res) => {
+    res.status(410).send('The generic /_proxy/ endpoint is deprecated and no longer supported.');
+  });
 
   /** Proxy to ml-pipeline api server */
   app.all(
     `/${apiVersion1Prefix}/*`,
     createProxyMiddleware({
       changeOrigin: true,
-      onProxyReq: (proxyReq) => {
-        console.log('Proxied request: ', proxyReq.path);
+      on: {
+        proxyReq: (proxyReq) => {
+          console.log('Proxied request: ', proxyReq.path);
+        },
       },
       headers: HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS,
       target: apiServerAddress,
@@ -378,8 +409,10 @@ function createUIServer(options: UIConfigs) {
     `/${apiVersion2Prefix}/*`,
     createProxyMiddleware({
       changeOrigin: true,
-      onProxyReq: (proxyReq) => {
-        console.log('Proxied request: ', proxyReq.path);
+      on: {
+        proxyReq: (proxyReq) => {
+          console.log('Proxied request: ', proxyReq.path);
+        },
       },
       headers: HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS,
       target: apiServerAddress,
@@ -390,8 +423,10 @@ function createUIServer(options: UIConfigs) {
     `${basePath}/${apiVersion1Prefix}/*`,
     createProxyMiddleware({
       changeOrigin: true,
-      onProxyReq: (proxyReq) => {
-        console.log('Proxied request: ', proxyReq.path);
+      on: {
+        proxyReq: (proxyReq) => {
+          console.log('Proxied request: ', proxyReq.path);
+        },
       },
       headers: HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS,
       pathRewrite: (pathStr) =>
@@ -403,8 +438,10 @@ function createUIServer(options: UIConfigs) {
     `${basePath}/${apiVersion2Prefix}/*`,
     createProxyMiddleware({
       changeOrigin: true,
-      onProxyReq: (proxyReq) => {
-        console.log('Proxied request: ', proxyReq.path);
+      on: {
+        proxyReq: (proxyReq) => {
+          console.log('Proxied request: ', proxyReq.path);
+        },
       },
       headers: HACK_FIX_HPM_PARTIAL_RESPONSE_HEADERS,
       pathRewrite: (pathStr) =>
