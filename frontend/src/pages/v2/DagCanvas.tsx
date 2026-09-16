@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { MouseEvent as ReactMouseEvent, useCallback, useMemo } from 'react';
+import { MouseEvent as ReactMouseEvent, useCallback, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -23,6 +23,7 @@ import {
   Edge,
   MiniMap,
   Node,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import { FlowElementDataBase } from 'src/components/graph/Constants';
 import SubDagLayer from 'src/components/graph/SubDagLayer';
@@ -54,6 +55,18 @@ export default function DagCanvas({
   onElementClick,
   nodesDraggable = true,
 }: DagCanvasProps) {
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
+  const lastFitLayersKey = useRef<string | null>(null);
+
+  const handleInit = useCallback((instance: ReactFlowInstance) => {
+    const currentKey = layersRef.current.join('/');
+    if (lastFitLayersKey.current !== currentKey) {
+      instance.fitView();
+      lastFitLayersKey.current = currentKey;
+    }
+  }, []);
+
   const subDagExpand = useCallback(
     (nodeKey: string) => {
       const newLayers = [...layers, getTaskKeyFromNodeKey(nodeKey)];
@@ -109,7 +122,7 @@ export default function DagCanvas({
             edges={edges}
             snapToGrid={true}
             nodesDraggable={nodesDraggable}
-            onInit={(instance) => instance.fitView()}
+            onInit={handleInit}
             nodeTypes={NODE_TYPES}
             edgeTypes={{}}
             onNodeClick={handleNodeClick}
