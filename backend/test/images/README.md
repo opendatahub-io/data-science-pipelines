@@ -149,7 +149,7 @@ Based on the default configuration:
 - `Tier2` - Medium- and low-priority positive tests
 - `Tier3` - Negative and destructive tests
 - `E2ECritical` - Legacy folder label (now also tagged Tier2)
-- `integration` - Cross-component integration (also tagged Tier1)
+- `integration` - Cross-component integration (also tagged Tier1; Kind CI runs `Tier1 && !integration`)
 - `gpu` - Accelerator-required E2E (also tagged Tier2)
 
 ## Test Execution Flow

@@ -7,7 +7,7 @@
 
 ### Document metadata
 
-- Last updated: 2026-09-14
+- Last updated: 2026-09-15
 - Scope: KFP master branch (v2 engine), backend (Go), SDK (Python), frontend (React 19)
 
 ### Maintenance (agents and contributors)
@@ -246,7 +246,7 @@ ginkgo -v --label-filter="Tier3" ./backend/test/v2/api
 ginkgo -v ./backend/test/end2end -- -namespace=kubeflow -isDebugMode=true
 ```
 
-Without `--label-filter`, `gpu`-labeled E2E tests run as well (they request accelerators) and may pend or fail on CPU-only clusters; pass `--label-filter` to limit what runs (for example `smoke`, `Tier1`, or `gpu` on GPU-capable clusters). NVIDIA vs AMD fixtures: pass `-gpuVendor` flag to `nvidia` (default), `amd`, or `both` so only matching IRs run (`pytorch_nvidia_gpu_availability.yaml` / `pytorch_amd_gpu_availability.yaml`). Any value other than `amd`/`both`/`all` falls back to `nvidia`.
+Without `--label-filter`, `gpu`-labeled E2E tests run as well (they request accelerators) and may pend or fail on CPU-only clusters; pass `--label-filter` to limit what runs (for example `smoke`, `Tier1`, or `gpu` on GPU-capable clusters). GitHub Kind E2E uses `--label-filter='Tier1 && !integration'` because that cluster has no Ray CRD; DSPO/RHOAI should keep `--label-filter=Tier1` so Ray still runs as Tier1. NVIDIA vs AMD fixtures: pass `-gpuVendor` flag to `nvidia` (default), `amd`, or `both` so only matching IRs run (`pytorch_nvidia_gpu_availability.yaml` / `pytorch_amd_gpu_availability.yaml`). Any value other than `amd`/`both`/`all` falls back to `nvidia`.
 
 Test data is centralized under:
 

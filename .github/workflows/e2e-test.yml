@@ -233,16 +233,22 @@ jobs:
         if: ${{ steps.deploy.outcome == 'success' && steps.install-dra-driver.outcome != 'failure' }}
         run: |
           NUMBER_OF_NODES=${{ env.NUMBER_OF_PARALLEL_NODES }}
-          TEST_LABEL=${{ matrix.test_label }}
+          TEST_LABEL="${{ matrix.test_label }}"
           NAMESPACE=${{ env.NAMESPACE }}
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             NUMBER_OF_NODES=${{ inputs.number_of_parallel_tests }}
-            TEST_LABEL=${{ inputs.test_label }}
+            TEST_LABEL="${{ inputs.test_label }}"
             NAMESPACE=${{ inputs.namespace }}
           fi
 
           if [ "$TEST_LABEL" == "E2EParallelNested" ]; then
             NUMBER_OF_NODES=3
+          fi
+
+          # Kind does not install the Ray CRD. Keep the Ginkgo Tier1 label on
+          # integration specs for DSPO, but do not run them in this lane.
+          if [ "$TEST_LABEL" == "Tier1" ]; then
+            TEST_LABEL='Tier1 && !integration'
           fi
 
           {
