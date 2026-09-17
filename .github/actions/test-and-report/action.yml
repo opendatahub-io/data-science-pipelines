@@ -104,19 +104,34 @@ inputs:
     description: "Whether MLflow is deployed and available for integration tests"
     required: false
     default: 'false'
+  storage_backend:
+    description: "Object storage backend deployed in the cluster (minio or seaweedfs)"
+    required: false
+    default: 'seaweedfs'
 
 
 runs:
   using: "composite"
   steps:
-    - name: Port-forward SeaweedFS service for archived workflow logs
-      id: port-forward-seaweedfs
+    - name: Port-forward object storage service for archived workflow logs
+      id: port-forward-object-storage
       if: (!cancelled())
       shell: bash
       run: |
         NAMESPACE="${{ inputs.default_namespace }}"
-        pkill -f "kubectl port-forward.*seaweedfs" || true
-        kubectl port-forward -n "$NAMESPACE" service/seaweedfs 9000:9000 > /dev/null 2>&1 &
+        STORAGE_BACKEND="${{ inputs.storage_backend }}"
+        if [ -z "$STORAGE_BACKEND" ]; then
+          STORAGE_BACKEND="seaweedfs"
+        fi
+        if [ "$STORAGE_BACKEND" = "minio" ]; then
+          OBJECT_STORAGE_SERVICE="service/minio-service"
+          OBJECT_STORAGE_PATTERN="minio-service"
+        else
+          OBJECT_STORAGE_SERVICE="service/seaweedfs"
+          OBJECT_STORAGE_PATTERN="seaweedfs"
+        fi
+        pkill -f "kubectl port-forward.*${OBJECT_STORAGE_PATTERN}" || true
+        kubectl port-forward -n "$NAMESPACE" "$OBJECT_STORAGE_SERVICE" 9000:9000 > /dev/null 2>&1 &
         sleep 5
       continue-on-error: true
 
@@ -349,10 +364,22 @@ runs:
           return 1
         }
 
+        STORAGE_BACKEND="${{ inputs.storage_backend }}"
+        if [ -z "$STORAGE_BACKEND" ]; then
+          STORAGE_BACKEND="seaweedfs"
+        fi
+        if [ "$STORAGE_BACKEND" = "minio" ]; then
+          OBJECT_STORAGE_RESOURCE="service/minio-service"
+          OBJECT_STORAGE_NAME="minio"
+        else
+          OBJECT_STORAGE_RESOURCE="service/seaweedfs"
+          OBJECT_STORAGE_NAME="seaweedfs"
+        fi
+
         if [ "${{ inputs.skip_api_config }}" != "true" ]; then
           trap cleanup_port_forwards EXIT
 
-          start_port_forward_supervisor "seaweedfs" "${INPUT_DEFAULT_NAMESPACE}" "service/seaweedfs" "9000" "9000"
+          start_port_forward_supervisor "$OBJECT_STORAGE_NAME" "${INPUT_DEFAULT_NAMESPACE}" "$OBJECT_STORAGE_RESOURCE" "9000" "9000"
           wait_for_local_port 9000
 
           if [ -n "${MLFLOW_PORT_FORWARD_NS:-}" ] && [ -n "${MLFLOW_PORT_FORWARD_SVC:-}" ]; then
