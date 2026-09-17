@@ -95,12 +95,12 @@ RUN set -e; \
     done
 
 # 3. Install runtime dependencies for the target architecture
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:865c6a875328a1174ff7f17599574412edd327aa47812951b9bead902806dc53 AS ubi-minimal-amd64
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:da229086eb7881bb653e99ace537fc03512bbbfcf14024e7e447b48015d7cc8c AS ubi-minimal-arm64
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8-1789546276@sha256:f5984079c023c18ed877db08f82bf2069742dc2de1e48d1368f6a46836963f75 AS ubi-minimal-amd64
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8-1789546276@sha256:16bf17f84cf486a3d3710d525d89c75f1ada50818692abfacfc7531b04f6b445 AS ubi-minimal-arm64
 FROM ubi-minimal-${TARGETARCH} AS runtime-deps
 RUN microdnf install -y ca-certificates wget && microdnf clean all
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8-1789546276
 
 WORKDIR /bin
 
