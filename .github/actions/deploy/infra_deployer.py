@@ -28,6 +28,38 @@ class InfraDeployer:
         self.operator_namespace = operator_namespace
         self.temp_dir = temp_dir
 
+    @staticmethod
+    def _set_kustomize_namespace(overlay_path: str, namespace: str) -> None:
+        """Rewrite a kustomize overlay namespace to match CI.
+
+        DSPO overlays hardcode `opendatahub`. RHDS Kind CI deploys into
+        `rhods`, and `kubectl -n rhods apply -k` rejects the mismatch.
+        """
+        for filename in ('kustomization.yaml', 'kustomization.yml'):
+            kustomization_path = os.path.join(overlay_path, filename)
+            if os.path.exists(kustomization_path):
+                break
+        else:
+            return
+
+        with open(kustomization_path, encoding='utf-8') as kustomization_file:
+            kustomization = yaml.safe_load(kustomization_file) or {}
+
+        if kustomization.get('namespace') == namespace:
+            return
+
+        kustomization['namespace'] = namespace
+        with open(kustomization_path, 'w', encoding='utf-8') as kustomization_file:
+            yaml.safe_dump(
+                kustomization,
+                kustomization_file,
+                default_flow_style=False,
+                sort_keys=False,
+            )
+        print(
+            f'🔧 Set {os.path.basename(overlay_path)} kustomize namespace to '
+            f'{namespace}')
+
     def deploy_cert_manager(self):
         """Deploy cert-manager for certificate management."""
         if self.args.pipeline_store != 'kubernetes' and not self.args.pod_to_pod_tls_enabled:
@@ -96,6 +128,8 @@ class InfraDeployer:
                                           'resources', 'webhook')
 
         if os.path.exists(webhook_certs_path):
+            self._set_kustomize_namespace(webhook_certs_path,
+                                          self.operator_namespace)
             self.deployment_manager.apply_resource(
                 manifest_path=webhook_certs_path,
                 namespace=self.operator_namespace,
@@ -122,6 +156,7 @@ class InfraDeployer:
             raise ValueError(
                 f'Argo Lite resources directory not found: {argo_lite_path}')
 
+        self._set_kustomize_namespace(argo_lite_path, self.operator_namespace)
         self.deployment_manager.apply_resource(
             manifest_path=argo_lite_path,
             namespace=self.operator_namespace,

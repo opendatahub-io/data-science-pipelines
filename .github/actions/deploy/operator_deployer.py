@@ -28,9 +28,14 @@ class OperatorDeployer:
         self.operator_image = None
 
     @staticmethod
-    def _operator_branch(target_branch: str) -> str:
+    def _operator_branch(target_branch: str, repo_owner: str) -> str:
         """Map a DSP branch to its DSPO branch."""
-        return 'main' if target_branch == 'master' else target_branch
+        if target_branch == 'master':
+            return 'main'
+        # ODH DSPO has a `stable` branch; RHDS DSPO does not.
+        if repo_owner == 'red-hat-data-services' and target_branch == 'stable':
+            return 'main'
+        return target_branch
 
     def _clone_from_branch(self, owner: str, branch: str,
                            operator_path: str) -> bool:
@@ -55,7 +60,8 @@ class OperatorDeployer:
         """Clone data-science-pipelines-operator repository."""
         operator_path = os.path.join(self.temp_dir,
                                      'data-science-pipelines-operator')
-        operator_branch = self._operator_branch(self.target_branch)
+        operator_branch = self._operator_branch(self.target_branch,
+                                                self.repo_owner)
         preferred_owner = getattr(self.args, 'operator_repo_owner', None)
         upstream_owner = getattr(
             self.args, 'operator_upstream_owner', None) or self.repo_owner
