@@ -143,7 +143,7 @@ func (c *workflowCompiler) addImporterTemplate(downloadToWorkspace bool) string 
 			Args:         args,
 			EnvFrom:      []k8score.EnvFromSource{metadataEnvFrom},
 			Env:          commonEnvs,
-			Resources:    driverResources,
+			Resources:    GetDriverResources(),
 			VolumeMounts: volumeMounts,
 		},
 		Volumes: volumes,
