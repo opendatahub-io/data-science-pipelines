@@ -13,9 +13,21 @@
 // limitations under the License.
 import { PassThrough, Stream } from 'stream';
 import { ClientOptions as MinioClientOptions } from 'minio';
-import { getK8sSecret, getArgoWorkflow, getPodLogs, getConfigMap } from './k8s-helper.js';
-import { createMinioClient, MinioRequestConfig, getObjectStream } from './minio-helper.js';
-import * as JsYaml from 'js-yaml';
+import {
+  getK8sSecret,
+  getArgoWorkflow,
+  getPodLogs,
+  getConfigMap,
+  getServerNamespace,
+} from './k8s-helper.js';
+import {
+  createMinioClient,
+  MinioRequestConfig,
+  getObjectStream,
+  parseArtifactStoreEndpoint,
+} from './minio-helper.js';
+import { isTrustedArtifactEndpoint } from './handlers/domain-checker.js';
+import { CORE_SCHEMA, load as jsYamlLoad, mergeTag } from 'js-yaml';
 
 export interface PartialArgoWorkflow {
   status: {
@@ -112,15 +124,16 @@ export async function getPodLogsStreamFromK8s(
 }
 
 /**
- * Returns a stream containing the pod logs using the information provided in the
+ * Creates a pod-log stream handler using the information provided in the
  * workflow status (uses k8s api to retrieve the workflow and secrets).
- * @param podName name of the pod.
- * @param createdAt YYYY-MM-DD run was created. Not used.
- * @param namespace namespace of the pod (uses the same namespace as the server if not provided).
+ * @param trustedEndpoints object-store origins configured by the server operator.
  */
-export const getPodLogsStreamFromWorkflow = toGetPodLogsStream(
-  getPodLogsMinioRequestConfigfromWorkflow,
-);
+export function createPodLogsStreamFromWorkflow(trustedEndpoints: string[]) {
+  const configuredEndpoints = [...trustedEndpoints];
+  return toGetPodLogsStream((podName, createdAt, namespace) =>
+    getPodLogsMinioRequestConfigfromWorkflow(podName, createdAt, namespace, configuredEndpoints),
+  );
+}
 
 /**
  * Returns a function that retrieves the pod log streams using the provided
@@ -181,9 +194,12 @@ export async function getKeyFormatFromArtifactRepositories(
         `artifact-repositories configmap in ${namespace} namespace is missing an artifact-repositories field.`,
       );
     }
-    const artifactRepositoriesValue = JsYaml.load(
-      artifactRepositories,
-    ) as PartialArtifactRepositoriesValue;
+    // js-yaml 5 resolves merge keys only when mergeTag is in the schema. The
+    // configmap is user supplied and commonly shares fields between providers
+    // through anchors, so without this an inherited keyFormat is lost.
+    const artifactRepositoriesValue = jsYamlLoad(artifactRepositories, {
+      schema: CORE_SCHEMA.withTags(mergeTag),
+    }) as PartialArtifactRepositoriesValue;
     if ('s3' in artifactRepositoriesValue) {
       return artifactRepositoriesValue.s3?.keyFormat;
     } else if ('gcs' in artifactRepositoriesValue) {
@@ -282,18 +298,22 @@ export function createPodLogsMinioRequestConfig(
  * minio client need to retrieve them) from the corresponding argo workflow status.
  *
  * @param podName name of the pod to retrieve the logs.
+ * @param trustedEndpoints object-store origins configured by the server operator.
  */
 export async function getPodLogsMinioRequestConfigfromWorkflow(
   podName: string,
+  _createdAt?: string,
+  namespace?: string,
+  trustedEndpoints: string[] = [],
 ): Promise<MinioRequestConfig> {
   let workflow: PartialArgoWorkflow;
   // We should probably parameterize this replace statement. It's brittle to
   // changes in implementation. But brittle is better than completely broken.
   let workflowName = podName.replace(/-system-container-impl-.*/, '');
   try {
-    workflow = await getArgoWorkflow(workflowName);
+    workflow = await getArgoWorkflow(workflowName, namespace);
   } catch (err) {
-    throw new Error(`Unable to retrieve workflow status: ${err}.`);
+    throw new Error(`Unable to retrieve workflow status: ${err}.`, { cause: err });
   }
 
   // archiveLogs can be set globally for the workflow as a whole and / or for
@@ -325,20 +345,72 @@ export async function getPodLogsMinioRequestConfigfromWorkflow(
     throw new Error('Unable to find artifact repository information from workflow status.');
   }
 
-  const { host, port } = urlSplit(s3Artifact.endpoint, s3Artifact.insecure);
-  const { accessKey, secretKey } = await getMinioClientSecrets(s3Artifact);
+  if (
+    typeof s3Artifact.endpoint !== 'string' ||
+    (s3Artifact.insecure !== undefined && typeof s3Artifact.insecure !== 'boolean')
+  ) {
+    throw new Error(
+      'Artifact store endpoint must be a valid HTTP(S) origin consistent with insecure',
+    );
+  }
+  const endpoint = parseArtifactStoreEndpoint(s3Artifact.endpoint, s3Artifact.insecure === true);
+  if (!endpoint) {
+    throw new Error(
+      'Artifact store endpoint must be a valid HTTP(S) origin consistent with insecure',
+    );
+  }
+  if (!isTrustedArtifactEndpoint(endpoint.origin, trustedEndpoints)) {
+    throw new Error(
+      'Artifact store endpoint is not allowed; add its exact origin to ALLOWED_ARTIFACT_ENDPOINTS',
+    );
+  }
+  // Security: Only read the object-store credential Secret from the server's own
+  // namespace. In multi-user deployments the run namespace is a customer/user
+  // namespace, and the ml-pipeline-ui service account may not read Secrets there;
+  // for those runs we instead use the frontend server's own configured
+  // object-store credentials (MINIO_ACCESS_KEY / MINIO_SECRET_KEY, with the same
+  // defaults as configs.ts). Those credentials own the shared bucket (SeaweedFS
+  // in the kubeflow namespace), so the workflow-status log path works for user
+  // namespaces against the shared store instead of building a doomed anonymous
+  // client. See: https://github.com/kubeflow/pipelines/pull/12860
+  //
+  // Multi-user mode always supplies an explicit namespace (the pod-logs handler
+  // rejects requests without one), so an omitted namespace only occurs in
+  // standalone mode, where the run is effectively in the server namespace. We
+  // therefore treat a missing namespace as the server namespace and read the
+  // workflow-referenced Secret so custom object-store credentials are honored,
+  // while still refusing to read Secrets from any user namespace.
+  const serverNamespace = getServerNamespace();
+  let accessKey: string | undefined;
+  let secretKey: string | undefined;
+  if (namespace && namespace === serverNamespace) {
+    // Explicit server-namespace run (including multi-user runs whose namespace is
+    // the server namespace): read the Secret and use whatever it yields, exactly
+    // as before.
+    ({ accessKey, secretKey } = await getMinioClientSecrets(s3Artifact, namespace));
+  } else if (!namespace && serverNamespace) {
+    // Standalone run with an omitted namespace: read the workflow-referenced
+    // Secret from the server namespace, falling back to the frontend's configured
+    // env credentials only when the artifact repository does not reference a
+    // Secret (getMinioClientSecrets returns no credentials).
+    const { accessKey: readAccessKey = undefined, secretKey: readSecretKey = undefined } =
+      await getMinioClientSecrets(s3Artifact, serverNamespace);
+    accessKey = readAccessKey || process.env.MINIO_ACCESS_KEY || 'minio';
+    secretKey = readSecretKey || process.env.MINIO_SECRET_KEY || 'minio123';
+  } else {
+    // Cross-namespace (user-namespace) run, or an unknown server namespace: never
+    // read a user-namespace Secret; use the frontend's own configured credentials.
+    accessKey = process.env.MINIO_ACCESS_KEY || 'minio';
+    secretKey = process.env.MINIO_SECRET_KEY || 'minio123';
+  }
 
   const client = await createMinioClient(
     {
       accessKey,
-      // TODO: endPoint needs to be set to 'localhost' for local development.
-      // start-proxy-and-server.sh sets MINIO_HOST=localhost, but it doesn't
-      // seem to be respected when running the server in development mode.
-      // Investigate and fix this.
-      endPoint: host,
-      port,
+      endPoint: endpoint.endPoint,
+      port: endpoint.port ?? (endpoint.useSSL ? 443 : 80),
       secretKey,
-      useSSL: !s3Artifact.insecure,
+      useSSL: endpoint.useSSL,
     },
     's3',
   );
@@ -353,25 +425,14 @@ export async function getPodLogsMinioRequestConfigfromWorkflow(
  * Returns the k8s access key and secret used to connect to the s3 artifactory.
  * @param s3artifact s3artifact object describing the s3 artifactory config for argo workflow.
  */
-async function getMinioClientSecrets({ accessKeySecret, secretKeySecret }: S3Artifact) {
+async function getMinioClientSecrets(
+  { accessKeySecret, secretKeySecret }: S3Artifact,
+  namespace?: string,
+) {
   if (!accessKeySecret || !secretKeySecret) {
     return {};
   }
-  const accessKey = await getK8sSecret(accessKeySecret.name, accessKeySecret.key);
-  const secretKey = await getK8sSecret(secretKeySecret.name, secretKeySecret.key);
+  const accessKey = await getK8sSecret(accessKeySecret.name, accessKeySecret.key, namespace);
+  const secretKey = await getK8sSecret(secretKeySecret.name, secretKeySecret.key, namespace);
   return { accessKey, secretKey };
-}
-
-/**
- * Split an uri into host and port.
- * @param uri uri to split
- * @param insecure if port is not provided in uri, return port depending on whether ssl is enabled.
- */
-
-function urlSplit(uri: string, insecure: boolean) {
-  const chunks = uri.split(':');
-  if (chunks.length === 1) {
-    return { host: chunks[0], port: insecure ? 80 : 443 };
-  }
-  return { host: chunks[0], port: parseInt(chunks[1], 10) };
 }

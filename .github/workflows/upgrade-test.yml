@@ -21,6 +21,7 @@ on:
       - '.github/workflows/image-builds.yml'
       - '.github/actions/create-cluster/**'
       - '.github/actions/deploy/**'
+      - '.github/actions/test-and-report/**'
       - '.github/resources/**'
       - 'backend/api/v2beta1/**'
       - 'backend/src/**'
@@ -43,21 +44,24 @@ jobs:
   upgrade-test:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     strategy:
       matrix:
-        k8s_version: [ "v1.35.0" ]
+        k8s_version: [ "v1.36.1" ]
         tls_enabled : [ "true" ]
     name: KFP upgrade tests - K8s ${{ matrix.k8s_version }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Go
         uses: ./.github/actions/setup-go
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: 3.9
 
