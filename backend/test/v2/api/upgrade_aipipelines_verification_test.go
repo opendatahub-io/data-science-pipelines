@@ -16,13 +16,13 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/kubeflow/pipelines/backend/src/common/util"
 	"github.com/kubeflow/pipelines/backend/test/config"
 	"github.com/kubeflow/pipelines/backend/test/constants"
-	"github.com/kubeflow/pipelines/backend/test/logger"
 	"github.com/kubeflow/pipelines/backend/test/testutil"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -39,6 +39,8 @@ var _ = Describe("Upgrade Test Verification >", Label(constants.UpgradeVerificat
 	Context("Verify modular AIPipelines after platform upgrade >", func() {
 		It("verifies the default AIPipelines module is reconciled and reports the upgraded platform release", func() {
 			ctx := context.Background()
+			expectedVersion := resolveExpectedPlatformReleaseVersion()
+
 			restConfig, err := util.GetKubernetesConfig()
 			Expect(err).NotTo(HaveOccurred(), "failed to build Kubernetes REST config")
 			dynamicClient, err := dynamic.NewForConfig(restConfig)
@@ -47,26 +49,25 @@ var _ = Describe("Upgrade Test Verification >", Label(constants.UpgradeVerificat
 			crdExists, err := testutil.AIPipelinesCRDExists(ctx, dynamicClient)
 			Expect(err).NotTo(HaveOccurred(), "failed to look up AIPipelines CRD")
 			if !crdExists {
+				if expectedVersion != "" {
+					Fail(fmt.Sprintf(
+						"AIPipelines CRD %s is not installed after upgrade (expected platform release %q)",
+						testutil.AIPipelinesCRDName, expectedVersion))
+				}
 				Skip("AIPipelines CRD is not installed; skipping modular upgrade verification")
-			}
-
-			crd, err := testutil.GetAIPipelinesCRD(ctx, dynamicClient)
-			Expect(err).NotTo(HaveOccurred(), "failed to get AIPipelines CRD")
-			Expect(testutil.VerifyAIPipelinesCRDEstablished(crd)).To(Succeed(), "AIPipelines CRD should be Established")
-
-			expectedVersion := resolveExpectedPlatformReleaseVersion()
-			requireVersionMatch := expectedVersion != ""
-			if !requireVersionMatch {
-				logger.Log(
-					"EXPECTED_PLATFORM_RELEASE_VERSION is unset; verifying platform release presence without version equality")
 			}
 
 			expectations := testutil.AIPipelinesUpgradeExpectations{
 				ExpectedPlatformReleaseVersion: expectedVersion,
-				RequireReleaseVersionMatch:       requireVersionMatch,
+				RequireReleaseVersionMatch:       expectedVersion != "",
 			}
 
 			Eventually(func(g Gomega) {
+				crd, getCRDErr := testutil.GetAIPipelinesCRD(ctx, dynamicClient)
+				g.Expect(getCRDErr).NotTo(HaveOccurred(), "failed to get AIPipelines CRD")
+				g.Expect(testutil.VerifyAIPipelinesCRDEstablished(crd)).To(Succeed(),
+					"AIPipelines CRD should be Established")
+
 				module, getErr := testutil.GetAIPipelinesModule(ctx, dynamicClient)
 				g.Expect(getErr).NotTo(HaveOccurred(), "failed to get cluster-scoped AIPipelines %s",
 					testutil.AIPipelinesInstanceName)
