@@ -293,4 +293,5 @@ go run github.com/onsi/ginkgo/v2/ginkgo -r -v -p \
   -serviceAccountName=pipeline-runner-"$DSPA_NAME" \
   -baseImage="registry.redhat.io/ubi9/python-312@sha256:e80ff3673c95b91f0dafdbe97afb261eab8244d7fd8b47e20ffcbcfee27fb168" \
   -disconnectedCluster="${DISCONNECTED_CLUSTER:-false}" \
-  -reportOutputDir="$REPORT_OUTPUT_DIR"
+  -reportOutputDir="$REPORT_OUTPUT_DIR" \
+  ${EXPECTED_PLATFORM_RELEASE_VERSION:+-expectedPlatformReleaseVersion="$EXPECTED_PLATFORM_RELEASE_VERSION"}
