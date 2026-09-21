@@ -151,22 +151,23 @@ and `upgrade_aipipelines_verification_test.go`). GitHub Actions runs the same la
 
 ### Modular AIPipelines acceptance criteria (post-upgrade)
 
-After a platform upgrade, `UpgradeVerification` also checks the cluster-scoped modular **AIPipelines** operand when
-the CRD `aipipelines.components.platform.opendatahub.io` is present (skipped on clusters without the modular
-module, for example plain Kind KFP upgrade CI):
+After a platform upgrade, `UpgradeVerification` checks the cluster-scoped modular **AIPipelines** operand when
+the CRD `aipipelines.components.platform.opendatahub.io` is present. If the CRD is absent and
+`EXPECTED_PLATFORM_RELEASE_VERSION` is set (required on RHOAI/ODH product upgrade jobs), the test **fails**. If
+both the CRD and that variable are unset, the spec is **skipped** (for example Kind KFP upgrade CI without the
+modular module):
 
 1. CRD exists and is Established
 2. Cluster-scoped `default-aipipelines` exists and is reconciled (`status.observedGeneration == metadata.generation`)
 3. `status.phase == Ready`
 4. Conditions `Ready`, `ProvisioningSucceeded`, `DSPOReady`, and `ArgoWorkflowsControllersReady` are True with
    matching `observedGeneration`
-5. `status.releases[name=platform].version` matches the target build when configured
+5. `status.releases[name=platform].version` matches `EXPECTED_PLATFORM_RELEASE_VERSION`
 
-These checks mirror DSPO modular lifecycle assertions (`tests/aipipelines/fixture_test.go` `waitModule()` in
-[data-science-pipelines-operator PR #1112](https://github.com/opendatahub-io/data-science-pipelines-operator/pull/1112)).
 Full DSPA lifecycle and module deletion scenarios remain in DSPO integration and `aipipelines-e2e-test`.
 
-Set the expected platform release for Jenkins / `rhoai-test-flow` upgrade stages:
+**Required on Jenkins / `rhoai-test-flow` `UpgradeVerification`:** set the target platform release so missing
+CRD or a stale handshake fails closed:
 
 ```bash
 export EXPECTED_PLATFORM_RELEASE_VERSION="<target platform version>"
