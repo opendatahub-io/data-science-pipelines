@@ -70,3 +70,11 @@ var (
 )
 
 var ReportOutputDir = flag.String("reportOutputDir", "reports", "Directory for JUnit and JSON test reports")
+
+// ExpectedPlatformReleaseVersion is the upgraded ODH/RHOAI platform release reported on the
+// cluster-scoped AIPipelines CR (status.releases[name=platform].version). Jenkins upgrade jobs
+// should set EXPECTED_PLATFORM_RELEASE_VERSION or pass -expectedPlatformReleaseVersion.
+var ExpectedPlatformReleaseVersion = flag.String(
+	"expectedPlatformReleaseVersion",
+	"",
+	"Expected platform release version on the default AIPipelines module after upgrade")
