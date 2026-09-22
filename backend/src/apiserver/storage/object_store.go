@@ -16,8 +16,10 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"time"
 
 	minio "github.com/minio/minio-go/v7"
@@ -50,8 +52,20 @@ func buildClientFromConfig(bucketConfig *objectstore.Config, secret *v1.Secret) 
 		return nil, err
 	}
 
-	accessKey := string(secret.Data[params.AccessKeyKey])
-	secretKey := string(secret.Data[params.SecretKeyKey])
+	var credentialProvider *credentials.Credentials
+	if params.FromEnv {
+		credentialProvider, err = credentialsFromEnvironment()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if secret == nil {
+			return nil, fmt.Errorf("object store credentials secret is required when fromEnv is false")
+		}
+		accessKey := string(secret.Data[params.AccessKeyKey])
+		secretKey := string(secret.Data[params.SecretKeyKey])
+		credentialProvider = credentials.NewStaticV4(accessKey, secretKey, "")
+	}
 	parsedUrl, err := url.Parse(params.Endpoint)
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to parse object store endpoint.")
@@ -66,11 +80,24 @@ func buildClientFromConfig(bucketConfig *objectstore.Config, secret *v1.Secret) 
 	}
 	s3Client, err := minio.New(
 		parsedUrl.Host, &minio.Options{
-			Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+			Creds:  credentialProvider,
 			Secure: secure,
+			Region: params.Region,
 		})
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to create s3 client.")
 	}
 	return s3Client, nil
+}
+
+func credentialsFromEnvironment() (*credentials.Credentials, error) {
+	hasAccessKey := os.Getenv("AWS_ACCESS_KEY_ID") != "" || os.Getenv("AWS_ACCESS_KEY") != ""
+	hasSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY") != "" || os.Getenv("AWS_SECRET_KEY") != ""
+	if hasAccessKey != hasSecretKey {
+		return nil, fmt.Errorf("incomplete AWS static credentials: both access key and secret key are required")
+	}
+	if hasAccessKey {
+		return credentials.NewEnvAWS(), nil
+	}
+	return credentials.NewIAM(""), nil
 }
