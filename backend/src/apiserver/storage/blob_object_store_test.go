@@ -21,9 +21,85 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	"github.com/stretchr/testify/require"
 	"gocloud.dev/blob/memblob"
 )
+
+func TestBuildClientFromConfig_FromEnvDoesNotRequireSecret(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "environment-access-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "environment-secret-key")
+
+	bucketConfig := &objectstore.Config{
+		SessionInfo: &objectstore.SessionInfo{
+			Provider: "s3",
+			Params: map[string]string{
+				"fromEnv":  "true",
+				"endpoint": "https://s3.ap-southeast-1.amazonaws.com",
+				"region":   "ap-southeast-1",
+			},
+		},
+	}
+
+	client, err := buildClientFromConfig(bucketConfig, nil)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+}
+
+func TestCredentialsFromEnvironment_StaticCredentials(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "environment-access-key")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "environment-secret-key")
+	t.Setenv("AWS_SESSION_TOKEN", "environment-session-token")
+
+	credentialProvider, err := credentialsFromEnvironment()
+	require.NoError(t, err)
+	credentialValue, err := credentialProvider.Get()
+	require.NoError(t, err)
+	require.Equal(t, "environment-access-key", credentialValue.AccessKeyID)
+	require.Equal(t, "environment-secret-key", credentialValue.SecretAccessKey)
+	require.Equal(t, "environment-session-token", credentialValue.SessionToken)
+}
+
+func TestCredentialsFromEnvironment_IncompleteStaticCredentials(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "access key only", key: "AWS_ACCESS_KEY_ID", value: "environment-access-key"},
+		{name: "secret key only", key: "AWS_SECRET_ACCESS_KEY", value: "environment-secret-key"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			for _, key := range []string{"AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY", "AWS_SECRET_KEY"} {
+				t.Setenv(key, "")
+			}
+			t.Setenv(test.key, test.value)
+
+			credentialProvider, err := credentialsFromEnvironment()
+			require.EqualError(t, err, "incomplete AWS static credentials: both access key and secret key are required")
+			require.Nil(t, credentialProvider)
+		})
+	}
+}
+
+func TestBuildClientFromConfig_SecretRequiredWhenNotFromEnv(t *testing.T) {
+	bucketConfig := &objectstore.Config{
+		SessionInfo: &objectstore.SessionInfo{
+			Provider: "s3",
+			Params: map[string]string{
+				"fromEnv":  "false",
+				"endpoint": "https://s3.us-east-1.amazonaws.com",
+				"region":   "us-east-1",
+			},
+		},
+	}
+
+	client, err := buildClientFromConfig(bucketConfig, nil)
+	require.EqualError(t, err, "object store credentials secret is required when fromEnv is false")
+	require.Nil(t, client)
+}
 
 func TestBlobObjectStore_AddFile(t *testing.T) {
 	bucket := memblob.OpenBucket(nil)

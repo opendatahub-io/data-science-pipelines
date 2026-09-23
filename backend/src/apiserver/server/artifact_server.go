@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -214,9 +215,12 @@ func (s *ArtifactServer) generateResponseArtifact(
 		return nil, err
 	}
 
-	secret, err := s.resourceManager.GetSecret(ctx, namespace, params.SecretName)
-	if err != nil {
-		return nil, err
+	var secret *corev1.Secret
+	if !params.FromEnv {
+		secret, err = s.resourceManager.GetSecret(ctx, namespace, params.SecretName)
+		if err != nil {
+			return nil, err
+		}
 	}
 	key, err := objectstore.ArtifactKeyFromURI(*artifact.Uri)
 	if err != nil {

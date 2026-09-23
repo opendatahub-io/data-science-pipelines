@@ -21,9 +21,48 @@ import (
 	"time"
 
 	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
+	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
+	"github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestGenerateResponseArtifact_FromEnvDoesNotRequireSecret(t *testing.T) {
+	clients, manager, _ := initWithExperiment(t)
+	defer clients.Close()
+	server := NewArtifactServer(manager, &ArtifactServerOptions{CollectMetrics: false})
+
+	artifactID := int64(1)
+	artifactType := "system.Artifact"
+	artifactURI := "s3://test-bucket/pipeline/run/task/output"
+	createTime := int64(1000)
+	updateTime := int64(2000)
+	artifact := &ml_metadata.Artifact{
+		Id:                       &artifactID,
+		Type:                     &artifactType,
+		Uri:                      &artifactURI,
+		CreateTimeSinceEpoch:     &createTime,
+		LastUpdateTimeSinceEpoch: &updateTime,
+	}
+	bucketConfig := &objectstore.Config{
+		Scheme:     "s3://",
+		BucketName: "test-bucket",
+		SessionInfo: &objectstore.SessionInfo{
+			Provider: "s3",
+			Params: map[string]string{
+				"fromEnv":  "true",
+				"endpoint": "https://s3.ap-southeast-1.amazonaws.com",
+				"region":   "ap-southeast-1",
+			},
+		},
+	}
+
+	response, err := server.generateResponseArtifact(
+		context.Background(), artifact, bucketConfig, "test-namespace", apiv2beta1.GetArtifactRequest_BASIC,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(123), response.ArtifactSize)
+}
 
 func TestGetArtifacts(t *testing.T) {
 	clients, manager, _ := initWithExperiment(t)
