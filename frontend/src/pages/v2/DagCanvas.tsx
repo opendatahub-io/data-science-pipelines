@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { MouseEvent as ReactMouseEvent, useCallback, useMemo } from 'react';
+import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -23,6 +23,7 @@ import {
   Edge,
   MiniMap,
   Node,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import { FlowElementDataBase } from 'src/components/graph/Constants';
 import SubDagLayer from 'src/components/graph/SubDagLayer';
@@ -54,6 +55,30 @@ export default function DagCanvas({
   onElementClick,
   nodesDraggable = true,
 }: DagCanvasProps) {
+  const flowInstanceRef = useRef<ReactFlowInstance<PipelineNode, Edge> | null>(null);
+  const lastFitLayersKey = useRef<string | null>(null);
+
+  const layersKey = useMemo(() => layers.join('/'), [layers]);
+
+  const fitLayer = useCallback(() => {
+    if (lastFitLayersKey.current !== layersKey && flowInstanceRef.current) {
+      flowInstanceRef.current.fitView();
+      lastFitLayersKey.current = layersKey;
+    }
+  }, [layersKey]);
+
+  const handleInit = useCallback(
+    (instance: ReactFlowInstance<PipelineNode, Edge>) => {
+      flowInstanceRef.current = instance;
+      fitLayer();
+    },
+    [fitLayer],
+  );
+
+  useEffect(() => {
+    fitLayer();
+  }, [fitLayer]);
+
   const subDagExpand = useCallback(
     (nodeKey: string) => {
       const newLayers = [...layers, getTaskKeyFromNodeKey(nodeKey)];
@@ -109,7 +134,7 @@ export default function DagCanvas({
             edges={edges}
             snapToGrid={true}
             nodesDraggable={nodesDraggable}
-            onInit={(instance) => instance.fitView()}
+            onInit={handleInit}
             nodeTypes={NODE_TYPES}
             edgeTypes={{}}
             onNodeClick={handleNodeClick}
