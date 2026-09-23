@@ -32,7 +32,7 @@ var workflowsDir = filepath.Join(projectDataDir, "compiled-workflows")
 
 // ################## POSITIVE TESTS ##################
 
-var _ = PDescribe("Create Workflow API Tests >", Label(constants.POSITIVE, constants.ReportTests, constants.APIServerTests, constants.FullRegression), func() {
+var _ = PDescribe("Create Workflow API Tests >", Label(constants.POSITIVE, constants.ReportTests, constants.APIServerTests, constants.FullRegression, constants.Tier2), func() {
 	workflowFiles := testutil.GetListOfFilesInADir(workflowsDir)
 	Context("Create Workflow >", func() {
 		for _, workflowFile := range workflowFiles {
@@ -46,7 +46,7 @@ var _ = PDescribe("Create Workflow API Tests >", Label(constants.POSITIVE, const
 
 // ################## NEGATIVE TESTS ##################
 
-var _ = PDescribe("Create Workflow Negative Tests >", Label(constants.NEGATIVE, constants.ReportTests, constants.APIServerTests, constants.FullRegression), func() {
+var _ = PDescribe("Create Workflow Negative Tests >", Label(constants.NEGATIVE, constants.ReportTests, constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
 
 	Context("Create workflow >", func() {
 		It("With invalid workflow schema", func() {
