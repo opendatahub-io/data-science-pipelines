@@ -418,7 +418,7 @@ jobs:
         if: ${{ steps.create-cluster.outcome == 'success' && matrix.mlflow_auth_type == 'kubernetes' }}
         with:
           namespace: 'opendatahub'
-          mlflow_image: quay.io/${{ github.repository_owner == 'red-hat-data-services' && 'rhoai' || 'opendatahub' }}/mlflow:odh-stable-490cd77b5b697a8ad0c5a84272983f668b961524
+          mlflow_image: quay.io/${{ github.repository_owner == 'red-hat-data-services' && 'rhoai' || 'opendatahub' }}/mlflow:odh-stable
           mlflow_operator_image: quay.io/${{ github.repository_owner == 'red-hat-data-services' && 'rhoai' || 'opendatahub' }}/mlflow-operator:19702f7b06f80c86b83b359102bc7151776a92cf
           backend_store: ${{ matrix.backend_store }}
           artifact_storage: ${{ matrix.artifact_storage }}
