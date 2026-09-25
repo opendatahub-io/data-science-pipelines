@@ -41,6 +41,21 @@ WORKFLOW_JOBS = {
     '.github/workflows/upgrade-test.yml': ('upgrade-test',),
 }
 
+# These downstream jobs consume the reusable build workflow's image outputs.
+# Keep their dependency even though other jobs can start cluster setup while
+# builds run and wait for artifacts in the deploy action.
+BUILD_OUTPUT_JOBS = {
+    'api-test-standalone',
+    'api-test-k8s-native',
+    'end-to-end-scenario-tests',
+    'initialization-integration-tests-v1',
+    'sdk-client-tests',
+    'upgrade-test',
+}
+# The downstream frontend TLS workflow also retains its build dependency, but
+# uses the deterministic artifact name and image coordinates.
+BUILD_DEPENDENT_JOBS = BUILD_OUTPUT_JOBS | {'frontend-integration-test'}
+
 
 def _job_block(workflow: str, job_name: str) -> str:
     marker = f'  {job_name}:\n'
@@ -54,7 +69,7 @@ def _job_block(workflow: str, job_name: str) -> str:
 
 class LoadedWorkflowOverlapTest(unittest.TestCase):
 
-    def test_all_deploy_callers_overlap_cluster_setup_with_image_builds(self):
+    def test_deploy_callers_preserve_image_dependencies(self):
         deploy_callers = set()
         for workflow_path in (ROOT / '.github/workflows').glob('*.y*ml'):
             workflow = workflow_path.read_text(encoding='utf-8')
@@ -65,18 +80,32 @@ class LoadedWorkflowOverlapTest(unittest.TestCase):
 
         for relative_path, job_names in WORKFLOW_JOBS.items():
             workflow = (ROOT / relative_path).read_text(encoding='utf-8')
-            self.assertNotIn('needs.build.outputs', workflow, relative_path)
             for job_name in job_names:
                 with self.subTest(workflow=relative_path, job=job_name):
                     job = _job_block(workflow, job_name)
-                    self.assertNotIn('needs: build', job)
+                    if job_name in BUILD_DEPENDENT_JOBS:
+                        self.assertIn('needs: build', job)
+                    else:
+                        self.assertNotIn('needs: build', job)
                     self.assertIn(
                         'permissions:\n      actions: read\n'
                         '      contents: read', job)
-                    self.assertIn('image_path: images_${{ github.run_id }}',
-                                  job)
-                    self.assertIn('image_tag: latest', job)
-                    self.assertIn('image_registry: kind-registry:5000', job)
+                    if job_name in BUILD_OUTPUT_JOBS:
+                        self.assertIn(
+                            'image_path: ${{ needs.build.outputs.IMAGE_PATH }}',
+                            job)
+                        self.assertIn(
+                            'image_tag: ${{ needs.build.outputs.IMAGE_TAG }}',
+                            job)
+                        self.assertIn(
+                            'image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}',
+                            job)
+                    else:
+                        self.assertNotIn('needs.build.outputs', job)
+                        self.assertIn('image_path: images_${{ github.run_id }}',
+                                      job)
+                        self.assertIn('image_tag: latest', job)
+                        self.assertIn('image_registry: kind-registry:5000', job)
 
     def test_deploy_waits_before_downloading_images(self):
         deploy_action = (ROOT / '.github/actions/deploy/action.yml').read_text(
