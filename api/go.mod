@@ -1,15 +1,13 @@
 module github.com/kubeflow/pipelines/api
 
-go 1.26
+go 1.26.0
 
 toolchain go1.26.3
 
 require (
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250715232539-7130f93afb79
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260921155816-b14227669459
+	google.golang.org/protobuf v1.36.12
 )
-
-require github.com/google/go-cmp v0.6.0 // indirect
 
 replace (
 	github.com/mattn/go-sqlite3 => github.com/mattn/go-sqlite3 v1.14.18
