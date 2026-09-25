@@ -16,6 +16,7 @@ package resource
 
 import (
 	"context"
+	"database/sql"
 	"net/url"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/archive"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/auth"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/client"
+	"github.com/kubeflow/pipelines/backend/src/apiserver/common/sql/dialect"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/storage"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
 	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
@@ -31,8 +33,11 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+var testDialect = dialect.NewDBDialect("sqlite")
+
 type FakeClientManager struct {
-	db                            *storage.DB
+	db *sql.DB
+	// dbDialect                     dialect.DBDialect
 	experimentStore               storage.ExperimentStoreInterface
 	pipelineStore                 storage.PipelineStoreInterface
 	jobStore                      storage.JobStoreInterface
@@ -44,7 +49,7 @@ type FakeClientManager struct {
 	objectStore                   storage.ObjectStore
 	ExecClientFake                *client.FakeExecClient
 	swfClientFake                 *client.FakeSwfClient
-	k8sCoreClientFake             *client.FakeKuberneteCoreClient
+	KubernetesCoreClientFake      client.KubernetesCoreInterface
 	SubjectAccessReviewClientFake client.SubjectAccessReviewInterface
 	tokenReviewClientFake         client.TokenReviewInterface
 	metadataClient                metadata.ClientInterface
@@ -66,7 +71,22 @@ func NewFakeClientManager(time util.TimeInterface, uuid util.UUIDGeneratorInterf
 	}
 
 	// Initialize GORM
-	db, err := storage.NewFakeDB()
+	db, _, err := storage.NewFakeDB()
+	if err != nil {
+		return nil, err
+	}
+
+	dBStatusStore, err := storage.NewDBStatusStore(db, testDialect)
+	if err != nil {
+		return nil, err
+	}
+
+	experimentStore, err := storage.NewExperimentStore(db, time, uuid, testDialect)
+	if err != nil {
+		return nil, err
+	}
+
+	defaultExperimentStore, err := storage.NewDefaultExperimentStore(db, testDialect)
 	if err != nil {
 		return nil, err
 	}
@@ -74,18 +94,18 @@ func NewFakeClientManager(time util.TimeInterface, uuid util.UUIDGeneratorInterf
 	// TODO(neuromage): Pass in metadata.Store instance for tests as well.
 	return &FakeClientManager{
 		db:                            db,
-		experimentStore:               storage.NewExperimentStore(db, time, uuid),
-		pipelineStore:                 storage.NewPipelineStore(db, time, uuid),
-		jobStore:                      storage.NewJobStore(db, time, nil),
-		runStore:                      storage.NewRunStore(db, time),
-		taskStore:                     storage.NewTaskStore(db, time, uuid),
+		experimentStore:               experimentStore,
+		pipelineStore:                 storage.NewPipelineStore(db, time, uuid, testDialect),
+		jobStore:                      storage.NewJobStore(db, time, nil, testDialect),
+		runStore:                      storage.NewRunStore(db, time, testDialect),
+		taskStore:                     storage.NewTaskStore(db, time, uuid, testDialect),
 		ExecClientFake:                client.NewFakeExecClient(),
-		resourceReferenceStore:        storage.NewResourceReferenceStore(db, nil),
-		dBStatusStore:                 storage.NewDBStatusStore(db),
-		defaultExperimentStore:        storage.NewDefaultExperimentStore(db),
+		resourceReferenceStore:        storage.NewResourceReferenceStore(db, nil, testDialect),
+		dBStatusStore:                 dBStatusStore,
+		defaultExperimentStore:        defaultExperimentStore,
 		objectStore:                   newFakeObjectStore(),
 		swfClientFake:                 client.NewFakeSwfClient(),
-		k8sCoreClientFake:             client.NewFakeKuberneteCoresClient(),
+		KubernetesCoreClientFake:      client.NewFakeKuberneteCoresClient(),
 		SubjectAccessReviewClientFake: client.NewFakeSubjectAccessReviewClient(),
 		tokenReviewClientFake:         client.NewFakeTokenReviewClient(),
 		logArchive:                    archive.NewLogArchive("/logs", "main.log"),
@@ -143,7 +163,7 @@ func (f *FakeClientManager) UUID() util.UUIDGeneratorInterface {
 	return f.uuid
 }
 
-func (f *FakeClientManager) DB() *storage.DB {
+func (f *FakeClientManager) DB() *sql.DB {
 	return f.db
 }
 
@@ -180,7 +200,7 @@ func (f *FakeClientManager) SwfClient() client.SwfClientInterface {
 }
 
 func (f *FakeClientManager) KubernetesCoreClient() client.KubernetesCoreInterface {
-	return f.k8sCoreClientFake
+	return f.KubernetesCoreClientFake
 }
 
 func (f *FakeClientManager) SubjectAccessReviewClient() client.SubjectAccessReviewInterface {
@@ -206,8 +226,12 @@ func (f *FakeClientManager) Close() error {
 // Update the uuid used in this fake client manager.
 func (f *FakeClientManager) UpdateUUID(uuid util.UUIDGeneratorInterface) {
 	f.uuid = uuid
-	f.experimentStore = storage.NewExperimentStore(f.db, f.time, uuid)
-	f.pipelineStore = storage.NewPipelineStore(f.db, f.time, uuid)
+	experimentStore, err := storage.NewExperimentStore(f.db, f.time, uuid, testDialect)
+	if err != nil {
+		glog.Fatalf("Failed to initialize experiment store: %v", err)
+	}
+	f.experimentStore = experimentStore
+	f.pipelineStore = storage.NewPipelineStore(f.db, f.time, uuid, testDialect)
 }
 
 // fakeObjectStore wraps BlobObjectStore and provides dummy implementations

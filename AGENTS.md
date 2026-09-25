@@ -7,7 +7,7 @@
 
 ### Document metadata
 
-- Last updated: 2026-09-10
+- Last updated: 2026-09-14
 - Scope: KFP master branch (v2 engine), backend (Go), SDK (Python), frontend (React 19)
 
 ### Maintenance (agents and contributors)
@@ -88,6 +88,12 @@
 
 ## Local development setup
 
+- Go modules require Go 1.27.0 and select the Go 1.27.1 toolchain.
+  CI installs this version through `.github/actions/setup-go`; Go builder images,
+  including the backend test image, use matching pinned Go 1.27.1 images.
+  Run `make check-go-version` to verify the modules, builders, and setup action.
+- Additional upstream guides are available under `docs/agents/`.
+
 - Always use a `.venv` virtual environment.
 
 ```bash
@@ -146,6 +152,8 @@ For local API server development with additional debugging capabilities:
 
 ```bash
 make -C backend dev-kind-cluster
+# Use PostgreSQL instead of MySQL:
+make -C backend DATABASE=postgres dev-kind-cluster
 ```
 
 This target:
@@ -314,7 +322,20 @@ make -C api python && make -C api golang
 
 ### 🚫 NEVER EDIT DIRECTLY (Generated files)
 
+- Compiled workflow goldens under `test_data/compiled-workflows/`
+  - Sources: pipeline IR fixtures under `test_data/pipeline_files/valid/` and `test_data/sdk_compiled_pipelines/valid/`
+  - Generate: `ginkgo -v ./backend/test/compiler -- -updateCompiledFiles=true`
+
 The following files are generated; edit their sources and regenerate:
+
+- Backend API clients under `backend/api/{v1beta1,v2beta1}/go_client`, `go_http_client`, and `python_http_client`
+  - Sources: `backend/api/{v1beta1,v2beta1}/*.proto`, Swagger specs, Python client templates, and root `VERSION`
+  - Generate Go/Swagger: `make -C backend/api generate API_VERSION=v2beta1` (or `v1beta1`)
+  - Generate Python clients: `make -C backend/api generate-kfp-server-api-package API_VERSION=v2beta1` (or `v1beta1`)
+  - Use `USE_PREBUILT_IMAGE=false` to build the generator from its source when tool versions change.
+- Pipeline-spec Go protobufs under `api/v2alpha1/go/`
+  - Sources: `api/v2alpha1/*.proto`
+  - Generate: `make -C api golang`
 
 - `api/v2alpha1/python/kfp/pipeline_spec/pipeline_spec_pb2.py`
   - Source: `api/v2alpha1/pipeline_spec.proto`
@@ -527,14 +548,17 @@ When changing an effect-heavy frontend component, add or run the smallest releva
 
 ### Test matrices and variants (Kubernetes, stores, proxy, cache)
 
-- Kubernetes versions: CI runs a matrix across a low and high supported version, commonly `v1.31.14` and `v1.35.0`.
+- Kubernetes versions: CI runs a matrix across a low and high supported version, commonly `v1.33.12` and `v1.36.1`.
   - Examples: `e2e-test.yml`, `sdk-execution.yml`, `upgrade-test.yml`, `kfp-kubernetes-execution-tests.yml`, `kfp-webhooks.yml`, `api-server-tests.yml`, `compiler-tests.yml`, `legacy-v2-api-integration-tests.yml`, `integration-tests-v1.yml`, and frontend integration in `e2e-test-frontend.yml`.
 - Pipeline store variants (v2 engine): tests run with `database` and `kubernetes` stores, and a dedicated job compiles pipelines to Kubernetes-native manifests.
   - Example: `e2e-test.yml` job "API integration tests v2 - K8s with ${pipeline_store}" and "compile pipelines with Kubernetes".
-- Argo Workflows version matrix for compatibility (where relevant): `e2e-test.yml` exercises `v3.5.14`, `v3.7.3`, and `v4.0.4` across the standard cache/test-label matrix, while `api-server-tests.yml` covers standalone and Kubernetes-native Argo compatibility across the standard matrices (with standalone low-Kubernetes spot lanes per supported Argo version).
+- Argo Workflows version matrix for compatibility (where relevant): `e2e-test.yml` exercises `v3.7.18` and `v4.1.2` across the standard cache/test-label matrix, while `api-server-tests.yml` covers standalone and Kubernetes-native Argo compatibility across the standard matrices (with standalone low-Kubernetes spot lanes per supported Argo version).
 - Proxy / cache toggles: dedicated jobs run with HTTP proxy enabled and with execution cache disabled to validate those modes.
 - Dynamic Resource Allocation (DRA): `e2e-test.yml` has a `dra-check` Kind lane on Kubernetes `v1.34.3`. It installs the DRA example driver and validates static, JSON, and passthrough pod resource claims.
-- The MLflow E2E job and the Kubernetes 1.31 MinIO `E2EEssential` matrix lane are temporarily disabled while their CI setup is repaired.
+- The MLflow E2E job remains disabled while its CI setup is repaired.
+- PostgreSQL CI uses `db_type: pgx` and direct manifest deployment. The ODH deploy wrapper forwards this setting and exports `postgres` as the database service name. PostgreSQL lanes currently exclude unsupported cache-disabled, proxy, and TLS combinations.
+- Automatic E2E runs split critical tests into `E2ECriticalShardA` and `E2ECriticalShardB`; manual dispatch retains the unsharded labels. A separate `gpu-scheduling-check` lane uses the Fake GPU Operator.
+- ODH image-output consumers retain their `needs: build` dependency, operator deployment metadata, and TLS coverage.
 - Artifacts: failing logs and test outputs are uploaded as workflow artifacts for debugging.
 
 ### CI cluster setup and helpers
@@ -545,6 +569,7 @@ When changing an effect-heavy frontend component, add or run the smallest releva
 - CI Docker-sensitive paths use shell retry wrappers with sleeps for image builds, Buildx bootstrap, and runtime base-image pulls; Kind node image bootstrap also falls back to `gcr.io/k8s-staging-kind/node` when Docker Hub flakes.
 - The `test-and-report` action port-forwards MLMD on port `8080` only when `ARGO_COMPATIBILITY_TESTS=true`, allowing the canonical Argo compatibility API job to validate execution/artifact metadata without adding another test lane.
 - Proxy test failures collect both the KFP namespace and `tinyproxy` namespace logs/events to diagnose proxy-service readiness separately from pipeline failures.
+- CI image loading includes cached runtime base images and an optional Modelcar fixture; test reporting captures runner and network diagnostics.
 - The CI proxy runs Tinyproxy as a lightweight forward proxy in the `tinyproxy` namespace on port `3128`.
 - The `protobuf` composite action prepares `protoc` and related dependencies when compiling Python protobufs.
 - The `create-cluster` action caches Kind node images by Kubernetes version to reduce Docker Hub pulls.
@@ -561,7 +586,7 @@ When changing an effect-heavy frontend component, add or run the smallest releva
 
 Notes:
 
-- Legacy `kfp-samples.yml` and `periodic.yml` workflows were removed.
+- Legacy `kfp-samples.yml`, `periodic.yml`, `gcpc-modules-tests.yml`, `sdk-component-yaml.yml`, and `trivy.yml` workflows were removed. The downstream `docs-freshness.yml` deletion is retained.
 
 ### Workflow path verification
 
