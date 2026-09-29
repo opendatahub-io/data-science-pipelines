@@ -6,6 +6,8 @@ operator, and configuring it for external Argo.
 
 import os
 
+import yaml
+
 from deployment_manager import K8sDeploymentManager
 from deployment_manager import ResourceType
 from deployment_manager import WaitCondition
@@ -288,6 +290,55 @@ class OperatorDeployer:
             self._configure_operator_for_external_argo()
 
         print('✅ Data Science Pipelines Operator deployed successfully')
+
+    def enable_modular_architecture(self):
+        """Enable DSPO's modular AIPipelines CI fixture and wait for it.
+
+        The fixture supplies the platform handshake ConfigMap and the singleton
+        AIPipelines resource. It is intentionally opt-in because DSPO retains
+        legacy mode by default outside modular upgrade tests.
+        """
+        if not self.operator_repo_path:
+            raise ValueError('Operator repository not cloned')
+
+        fixture_path = os.path.join(self.operator_repo_path, '.github',
+                                    'resources', 'aipipelines')
+        operator_deployment = (
+            'deployment/data-science-pipelines-operator-controller-manager')
+
+        print('🔧 Enabling modular AIPipelines CI fixture...')
+        rendered_fixture = self.deployment_manager.run_command(
+            ['kubectl', 'kustomize', fixture_path]).stdout
+        fixture_resources = list(yaml.safe_load_all(rendered_fixture))
+        platform_config_found = False
+        for resource in fixture_resources:
+            if (resource and resource.get('kind') == 'ConfigMap' and
+                    resource.get('metadata', {}).get('name') ==
+                    'odh-aipipelines-config'):
+                resource['metadata']['namespace'] = self.operator_namespace
+                platform_config_found = True
+        if not platform_config_found:
+            raise ValueError(
+                'Modular AIPipelines fixture has no odh-aipipelines-config ConfigMap')
+        self.deployment_manager.apply_resource(
+            manifest_content=yaml.safe_dump_all(
+                fixture_resources, sort_keys=False),
+            description='modular AIPipelines CI fixture')
+        self.deployment_manager.run_command([
+            'kubectl', 'set', 'env', '-n', self.operator_namespace,
+            operator_deployment,
+            'DSPO_ENABLEAIPIPELINESMODULECONTROLLER=true',
+            f'APPLICATIONS_NAMESPACE={self.operator_namespace}',
+        ])
+        self.deployment_manager.run_command([
+            'kubectl', 'rollout', 'status', '-n', self.operator_namespace,
+            operator_deployment, '--timeout=300s',
+        ])
+        for condition in ('Ready=true', 'ProvisioningSucceeded=true'):
+            self.deployment_manager.run_command([
+                'kubectl', 'wait', 'aipipelines/default-aipipelines',
+                f'--for=condition={condition}', '--timeout=300s',
+            ])
 
     def _configure_operator_for_external_argo(self):
         """Configure the deployed operator to use external Argo Workflows."""
