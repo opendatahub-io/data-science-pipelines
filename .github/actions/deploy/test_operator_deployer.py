@@ -5,6 +5,8 @@ import subprocess
 import unittest
 from unittest.mock import MagicMock, call, patch
 
+import yaml
+
 from operator_deployer import OperatorDeployer
 
 
@@ -153,6 +155,83 @@ class TestOperatorImageAlignment(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'not built from cloned source'):
                 deployer.deploy_operator()
 
+    def test_enable_modular_architecture_applies_fixture_and_waits_for_readiness(self):
+        deployer = _make_deployer()
+        deployer.operator_repo_path = '/tmp/test/data-science-pipelines-operator'
+        deployer.deployment_manager.run_command.return_value = (
+            subprocess.CompletedProcess(
+                [], 0,
+                stdout='''apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odh-aipipelines-config
+  namespace: opendatahub
+---
+apiVersion: components.platform.opendatahub.io/v1alpha1
+kind: AIPipelines
+metadata:
+  name: default-aipipelines
+'''))
+
+        deployer.enable_modular_architecture()
+
+        commands = [
+            command.args[0]
+            for command in deployer.deployment_manager.run_command.call_args_list
+        ]
+        self.assertEqual(commands, [
+            [
+                'kubectl', 'kustomize',
+                '/tmp/test/data-science-pipelines-operator/.github/resources/aipipelines'
+            ],
+            [
+                'kubectl', 'set', 'env', '-n', 'opendatahub',
+                'deployment/data-science-pipelines-operator-controller-manager',
+                'DSPO_ENABLEAIPIPELINESMODULECONTROLLER=true',
+                'APPLICATIONS_NAMESPACE=opendatahub',
+            ],
+            [
+                'kubectl', 'rollout', 'status', '-n', 'opendatahub',
+                'deployment/data-science-pipelines-operator-controller-manager',
+                '--timeout=300s',
+            ],
+            [
+                'kubectl', 'wait', 'aipipelines/default-aipipelines',
+                '--for=condition=Ready=true', '--timeout=300s',
+            ],
+            [
+                'kubectl', 'wait', 'aipipelines/default-aipipelines',
+                '--for=condition=ProvisioningSucceeded=true', '--timeout=300s',
+            ],
+        ])
+        applied_fixture = yaml.safe_load_all(
+            deployer.deployment_manager.apply_resource.call_args.kwargs[
+                'manifest_content'])
+        fixture_resources = list(applied_fixture)
+        self.assertEqual(
+            fixture_resources[0]['metadata']['namespace'], 'opendatahub')
+
+    def test_enable_modular_architecture_uses_rhods_for_platform_config(self):
+        deployer = _make_deployer()
+        deployer.operator_namespace = 'rhods'
+        deployer.operator_repo_path = '/tmp/test/data-science-pipelines-operator'
+        deployer.deployment_manager.run_command.return_value = (
+            subprocess.CompletedProcess(
+                [], 0,
+                stdout='''apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odh-aipipelines-config
+  namespace: opendatahub
+'''))
+
+        deployer.enable_modular_architecture()
+
+        fixture_resources = list(yaml.safe_load_all(
+            deployer.deployment_manager.apply_resource.call_args.kwargs[
+                'manifest_content']))
+        self.assertEqual(fixture_resources[0]['metadata']['namespace'], 'rhods')
+
 
 class TestActionBranchWiring(unittest.TestCase):
 
@@ -172,6 +251,38 @@ class TestActionBranchWiring(unittest.TestCase):
         operator_input = operator_input.split('deploy_external_db:', 1)[0]
 
         self.assertIn("default: 'true'", operator_input)
+
+    def test_aipipelines_module_is_opt_in_and_forwarded_to_deployer(self):
+        action = self._action_text()
+        module_input = action.split('enable_modular_architecture:', 1)[1]
+        module_input = module_input.split('skip_load_docker_images:', 1)[0]
+
+        self.assertIn("default: 'false'", module_input)
+        self.assertIn('ENABLE_MODULAR_ARCHITECTURE: ${{ inputs.enable_modular_architecture }}', action)
+        self.assertIn('--enable-modular-architecture "$ENABLE_MODULAR_ARCHITECTURE"', action)
+
+    def test_upgrade_workflow_enables_module_only_for_target_deployment(self):
+        workflow = (Path(__file__).parents[2] / 'workflows' /
+                    'upgrade-test.yml').read_text()
+        initial_deployment, target_deployment = workflow.split(
+            '      - name: Deploy from Branch', 1)
+
+        self.assertNotIn('enable_modular_architecture:', initial_deployment)
+        self.assertIn("enable_modular_architecture: 'true'", target_deployment)
+
+    def test_upgrade_workflow_asserts_legacy_architecture_before_preparation(self):
+        workflow = (Path(__file__).parents[2] / 'workflows' /
+                    'upgrade-test.yml').read_text()
+        legacy_checks, _ = workflow.split('      - name: Prepare for Upgrade', 1)
+
+        self.assertIn('      - name: Verify initial release is non-modular',
+                      legacy_checks)
+        self.assertIn(
+            'kubectl get crd aipipelines.components.platform.opendatahub.io',
+            legacy_checks)
+        self.assertIn(
+            'kubectl get aipipelines/default-aipipelines --ignore-not-found -o name',
+            legacy_checks)
 
 
 if __name__ == '__main__':
