@@ -46,6 +46,11 @@ export class AllRunsList extends Page<{ namespace?: string }, AllRunsListState> 
         .newRun()
         .compareRuns(() => this.state.selectedIds)
         .cloneRun(() => this.state.selectedIds, false)
+        .retryRun(
+          () => this.state.selectedIds,
+          false,
+          (selectedIds) => this._selectionChanged(selectedIds),
+        )
         .archive(
           'run',
           () => this.state.selectedIds,
@@ -89,6 +94,7 @@ export class AllRunsList extends Page<{ namespace?: string }, AllRunsListState> 
     toolbarActions[ButtonKeys.COMPARE].disabled =
       selectedIds.length <= 1 || selectedIds.length > 10;
     toolbarActions[ButtonKeys.CLONE_RUN].disabled = selectedIds.length !== 1;
+    toolbarActions[ButtonKeys.RETRY].disabled = !selectedIds.length;
     toolbarActions[ButtonKeys.ARCHIVE].disabled = !selectedIds.length;
     this.props.updateToolbar({
       actions: toolbarActions,
