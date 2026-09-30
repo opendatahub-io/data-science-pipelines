@@ -30,7 +30,7 @@ func TestParseAIPipelinesModuleStatusHappyPath(t *testing.T) {
 	}
 	expectations := AIPipelinesUpgradeExpectations{
 		ExpectedPlatformReleaseVersion: "3.2.0",
-		RequireReleaseVersionMatch:       true,
+		RequireReleaseVersionMatch:     true,
 	}
 	if err := VerifyAIPipelinesModuleStatus(status, expectations); err != nil {
 		t.Fatalf("VerifyAIPipelinesModuleStatus: %v", err)
@@ -44,6 +44,9 @@ func TestParseAIPipelinesModuleStatusFloat64ObservedGeneration(t *testing.T) {
 	for _, rawCondition := range statusMap["conditions"].([]interface{}) {
 		conditionMap := rawCondition.(map[string]interface{})
 		conditionMap["observedGeneration"] = float64(3)
+	}
+	if err := unstructured.SetNestedMap(module.Object, statusMap, "status"); err != nil {
+		t.Fatalf("SetNestedMap status: %v", err)
 	}
 
 	status, err := ParseAIPipelinesModuleStatus(module)
@@ -130,7 +133,7 @@ func TestVerifyAIPipelinesModuleStatusFailures(t *testing.T) {
 			},
 			expectations: AIPipelinesUpgradeExpectations{
 				ExpectedPlatformReleaseVersion: "3.2.0",
-				RequireReleaseVersionMatch:       true,
+				RequireReleaseVersionMatch:     true,
 			},
 			want: "does not match expected",
 		},
@@ -151,7 +154,7 @@ func TestVerifyAIPipelinesModuleStatusFailures(t *testing.T) {
 				PlatformReleaseName: AIPipelinesReleasePlatform, PlatformVersion: "3.2.0",
 				Conditions: map[string]unstructuredCondition{
 					"Ready":                         {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
-					"ProvisioningSucceeded":           {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
+					"ProvisioningSucceeded":         {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
 					"ArgoWorkflowsControllersReady": {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
 				},
 			},
@@ -165,8 +168,8 @@ func TestVerifyAIPipelinesModuleStatusFailures(t *testing.T) {
 				PlatformReleaseName: AIPipelinesReleasePlatform, PlatformVersion: "3.2.0",
 				Conditions: map[string]unstructuredCondition{
 					"Ready":                         {Status: string(metav1.ConditionFalse), ObservedGeneration: 3, Message: "still reconciling"},
-					"ProvisioningSucceeded":           {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
-					"DSPOReady":                       {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
+					"ProvisioningSucceeded":         {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
+					"DSPOReady":                     {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
 					"ArgoWorkflowsControllersReady": {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
 				},
 			},
@@ -180,8 +183,8 @@ func TestVerifyAIPipelinesModuleStatusFailures(t *testing.T) {
 				PlatformReleaseName: AIPipelinesReleasePlatform, PlatformVersion: "3.2.0",
 				Conditions: map[string]unstructuredCondition{
 					"Ready":                         {Status: string(metav1.ConditionTrue), ObservedGeneration: 2},
-					"ProvisioningSucceeded":           {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
-					"DSPOReady":                       {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
+					"ProvisioningSucceeded":         {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
+					"DSPOReady":                     {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
 					"ArgoWorkflowsControllersReady": {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
 				},
 			},
