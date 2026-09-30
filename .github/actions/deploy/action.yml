@@ -93,6 +93,10 @@ inputs:
     description: "Exact DSPO source branch. Defaults to the PR head branch or current branch with upstream fallback."
     required: false
     default: ''
+  enable_modular_architecture:
+    description: "Enable the modular AIPipelines CI fixture after deploying DSPO"
+    required: false
+    default: 'false'
   skip_load_docker_images:
     description: "Skip loading images to kind registry"
     required: false
@@ -196,6 +200,7 @@ runs:
         DEPLOY_EXTERNAL_DB: ${{ inputs.deploy_external_db }}
         DSPA_NAME: ${{ inputs.dspa_name }}
         CLUSTER_NAME: ${{ inputs.cluster_name }}
+        ENABLE_MODULAR_ARCHITECTURE: ${{ inputs.enable_modular_architecture }}
       run: |
         # Apply defaults for empty values
         PIPELINE_STORE="${PIPELINE_STORE:-database}"
@@ -232,4 +237,5 @@ runs:
           --skip-operator-deployment "$SKIP_OPERATOR_DEPLOYMENT" \
           --image-path-prefix "$IMAGE_PATH_PREFIX" \
           --deploy-external-db "$DEPLOY_EXTERNAL_DB" \
-          --dspa-name "$DSPA_NAME"
+          --dspa-name "$DSPA_NAME" \
+          --enable-modular-architecture "$ENABLE_MODULAR_ARCHITECTURE"

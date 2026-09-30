@@ -140,10 +140,47 @@ podman run -it \
   --num-parallel-tests=5
 ```
 
+## Upgrade verification (RHOAI / ODH product upgrade)
+
+OpenShift product upgrade jobs run the same Ginkgo suites with `--label-filter=UpgradePreparation` before the
+cluster upgrade and `--label-filter=UpgradeVerification` after upgrade (see `backend/test/v2/api/upgrade_api_test.go`
+and `upgrade_aipipelines_verification_test.go`). GitHub Actions runs the same labels in
+[`.github/workflows/upgrade-test.yml`](../../../.github/workflows/upgrade-test.yml).
+
+`UpgradeVerification` reuses the DSPA namespace and API data created during `UpgradePreparation` (`test-run.sh`).
+
+### Modular AIPipelines acceptance criteria (post-upgrade)
+
+After a platform upgrade, `UpgradeVerification` checks the cluster-scoped modular **AIPipelines** operand when
+the CRD `aipipelines.components.platform.opendatahub.io` is present. If the CRD is absent and
+`EXPECTED_PLATFORM_RELEASE_VERSION` is set (required on RHOAI/ODH product upgrade jobs), the test **fails**. If
+both the CRD and that variable are unset, the spec is **skipped** (for example Kind KFP upgrade CI without the
+modular module):
+
+1. CRD exists and is Established
+2. Cluster-scoped `default-aipipelines` exists and is reconciled (`status.observedGeneration == metadata.generation`)
+3. `status.phase == Ready`
+4. Conditions `Ready`, `ProvisioningSucceeded`, `DSPOReady`, and `ArgoWorkflowsControllersReady` are True with
+   matching `observedGeneration`
+5. `status.releases[name=platform].version` matches `EXPECTED_PLATFORM_RELEASE_VERSION`
+
+Full DSPA lifecycle and module deletion scenarios remain in DSPO integration and `aipipelines-e2e-test`.
+
+**Required on Jenkins / `rhoai-test-flow` `UpgradeVerification`:** set the target platform release so missing
+CRD or a stale handshake fails closed:
+
+```bash
+export EXPECTED_PLATFORM_RELEASE_VERSION="<target platform version>"
+```
+
+**Out of scope:** RHOAI downgrade paths are not exercised here; downgrade remains a manual / release-process concern.
+
 ## Test Labels Available
 
 Based on the default configuration:
 
+- `UpgradePreparation` - Seed DSPA API data before a product upgrade
+- `UpgradeVerification` - Verify DSPA API persistence and modular AIPipelines status after upgrade
 - `E2ECritical` - Critical end-to-end tests (default)
 - `smoke` - Basic functionality validation
 - `integration` - Integration test scenarios

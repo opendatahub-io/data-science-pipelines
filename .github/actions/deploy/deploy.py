@@ -64,7 +64,8 @@ class DSPDeployer:
             'deploy_pypi_server', 'deploy_external_argo', 'proxy',
             'cache_enabled', 'multi_user', 'artifact_proxy', 'forward_port',
             'pod_to_pod_tls_enabled', 'deploy_external_db',
-            'skip_operator_deployment', 'operator_branch_required'
+            'skip_operator_deployment', 'operator_branch_required',
+            'enable_modular_architecture'
         ]
         for arg_name in boolean_args:
             if hasattr(self.args, arg_name):
@@ -236,6 +237,9 @@ class DSPDeployer:
                 self.infra.deploy_argo_lite()
                 self.infra.deploy_external_argo()
 
+                if self.args.enable_modular_architecture:
+                    self.operator.enable_modular_architecture()
+
                 self.infra.apply_webhooks()
                 self.infra.deploy_pypi_server()
 
@@ -400,6 +404,9 @@ def main():
         help='Deploy DB externally instead of via DSPO')
     parser.add_argument(
         '--dspa-name', default='dspa-test', help='Name of DSPA resource')
+    parser.add_argument(
+        '--enable-modular-architecture', default='false',
+        help='Apply the modular AIPipelines CI fixture and enable its controller')
     args = parser.parse_args()
 
     deployer = DSPDeployer(args)

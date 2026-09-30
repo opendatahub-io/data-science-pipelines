@@ -90,6 +90,19 @@ jobs:
           fi
           echo "CA_CERT_PATH=${{ github.workspace }}/ca.crt" >> "$GITHUB_ENV"
 
+      - name: Verify initial release is non-modular
+        if: ${{ steps.deploy-release.outcome == 'success' }}
+        shell: bash
+        run: |
+          AIPIPELINES_CRD=$(kubectl get crd aipipelines.components.platform.opendatahub.io --ignore-not-found -o name)
+          if [ -n "$AIPIPELINES_CRD" ]; then
+            MODULE_NAME=$(kubectl get aipipelines/default-aipipelines --ignore-not-found -o name)
+            if [ -n "$MODULE_NAME" ]; then
+              echo "ERROR: default-aipipelines exists before the upgrade; expected the stable release to use legacy architecture"
+              exit 1
+            fi
+          fi
+
       - name: Prepare for Upgrade
         id: prepare-upgrade
         uses: ./.github/actions/test-and-report
@@ -120,6 +133,7 @@ jobs:
           forward_port: 'false'
           skip_operator_deployment: ${{ env.SKIP_OPERATOR_DEPLOYMENT }}
           pod_to_pod_tls_enabled: ${{ matrix.tls_enabled }}
+          enable_modular_architecture: 'true'
 
       - name: Wait for upgrade rollout and re-establish port-forwarding
         if: ${{ steps.deploy.outcome == 'success' }}
