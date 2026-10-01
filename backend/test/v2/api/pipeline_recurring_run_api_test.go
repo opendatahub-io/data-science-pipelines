@@ -27,7 +27,7 @@ import (
 
 // ################## POSITIVE TESTS ##################
 
-var _ = PDescribe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.PipelineScheduledRun, constants.APIServerTests, constants.FullRegression), func() {
+var _ = PDescribe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.PipelineScheduledRun, constants.APIServerTests, constants.FullRegression, constants.Tier2), func() {
 
 	Context("Create reccurring pipeline run >", func() {
 		It("Create a Pipeline Run with cron that runs every 5min", func() {
@@ -57,7 +57,7 @@ var _ = PDescribe("Verify Pipeline Run >", Label(constants.POSITIVE, constants.P
 	})
 })
 
-var _ = PDescribe("List Recurring Pipeline Runs >", Label(constants.POSITIVE, constants.PipelineScheduledRun, "ListRecurringPipelineRun", constants.APIServerTests, constants.FullRegression), func() {
+var _ = PDescribe("List Recurring Pipeline Runs >", Label(constants.POSITIVE, constants.PipelineScheduledRun, "ListRecurringPipelineRun", constants.APIServerTests, constants.FullRegression, constants.Tier2), func() {
 
 	Context("Basic Operations >", func() {
 		It("Create 2 runs and list", func() {
@@ -127,7 +127,7 @@ var _ = PDescribe("List Recurring Pipeline Runs >", Label(constants.POSITIVE, co
 
 // ################## NEGATIVE TESTS ##################
 
-var _ = PDescribe("Verify Pipeline Run Negative Tests >", Label(constants.NEGATIVE, constants.PipelineScheduledRun, constants.APIServerTests, constants.FullRegression), func() {
+var _ = PDescribe("Verify Pipeline Run Negative Tests >", Label(constants.NEGATIVE, constants.PipelineScheduledRun, constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
 
 	Context("Create reccurring pipeline run >", func() {
 		It("Create a Pipeline Run with invalid cron", func() {

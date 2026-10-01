@@ -80,6 +80,22 @@ jobs:
         test_label: [ "E2ECritical", "E2EEssential", "E2EParallelNested" ]
         pod_to_pod_tls_enabled: [ "true" ]
         include:
+          - k8s_version: "v1.35.0"
+            cache_enabled: "true"
+            deploy_external_argo: "false"
+            storage: "seaweedfs"
+            proxy: "false"
+            deploy_pypi_server: "false"
+            test_label: "smoke"
+            pod_to_pod_tls_enabled: "true"
+          - k8s_version: "v1.35.0"
+            cache_enabled: "true"
+            deploy_external_argo: "false"
+            storage: "seaweedfs"
+            proxy: "false"
+            deploy_pypi_server: "false"
+            test_label: "Tier1"
+            pod_to_pod_tls_enabled: "true"
           - k8s_version: "v1.31.0"
             cache_enabled: "false"
             proxy: "true"
@@ -217,16 +233,22 @@ jobs:
         if: ${{ steps.deploy.outcome == 'success' && steps.install-dra-driver.outcome != 'failure' }}
         run: |
           NUMBER_OF_NODES=${{ env.NUMBER_OF_PARALLEL_NODES }}
-          TEST_LABEL=${{ matrix.test_label }}
+          TEST_LABEL="${{ matrix.test_label }}"
           NAMESPACE=${{ env.NAMESPACE }}
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             NUMBER_OF_NODES=${{ inputs.number_of_parallel_tests }}
-            TEST_LABEL=${{ inputs.test_label }}
+            TEST_LABEL="${{ inputs.test_label }}"
             NAMESPACE=${{ inputs.namespace }}
           fi
 
           if [ "$TEST_LABEL" == "E2EParallelNested" ]; then
             NUMBER_OF_NODES=3
+          fi
+
+          # Kind does not install the Ray CRD. Keep the Ginkgo Tier1 label on
+          # integration specs for DSPO, but do not run them in this lane.
+          if [ "$TEST_LABEL" == "Tier1" ]; then
+            TEST_LABEL='Tier1 && !integration'
           fi
 
           {

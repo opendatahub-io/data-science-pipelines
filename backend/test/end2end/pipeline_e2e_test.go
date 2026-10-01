@@ -41,6 +41,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// e2eSmokePipelineBasenames are Smoke IRs skipped in other folder sweeps.
+var e2eSmokePipelineBasenames = map[string]struct{}{
+	"iris_pipeline_compiled.yaml":                 {},
+	"component_with_pip_index_urls.yaml":          {},
+	"flip_coin.yaml":                              {},
+	"pipeline_with_artifact_upload_download.yaml": {},
+	"parallel_for_after_dependency.yaml":          {},
+}
+
+// e2eTier1PipelineBasenames are former Sanity IRs skipped in other folder sweeps.
+var e2eTier1PipelineBasenames = map[string]struct{}{
+	"pipeline_in_pipeline.yaml":             {},
+	"pipeline_with_secret_as_env.yaml":      {},
+	"pipeline_with_input_status_state.yaml": {},
+	"notebook_component_simple.yaml":        {},
+}
+
 var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func() {
 	var testContext *apitests.TestContext
 
@@ -108,20 +125,26 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 
 	// ################## TESTS ##################
 
-	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(E2eEssential), func() {
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(E2eEssential, Tier1), func() {
 		var pipelineDir = "valid/essential"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
+			if _, skip := e2eSmokePipelineBasenames[pipelineFile]; skip {
+				continue
+			}
 			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})
 		}
 	})
 
-	Context("Upload a nested or a parallel pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(E2eParallelNested), func() {
+	Context("Upload a nested or a parallel pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(E2eParallelNested, Tier2), func() {
 		var pipelineDir = "valid/parallel_and_nested"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
+			if _, skip := e2eTier1PipelineBasenames[pipelineFile]; skip {
+				continue
+			}
 			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})
@@ -129,10 +152,16 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 	})
 
 	// Few of the following pipelines randomly fail in Multi User Mode during CI run - which is why a FlakeAttempt is added, but we need to investigate, create ticket and fix it in the future
-	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label("Sample", E2eCritical), func() {
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label("Sample", E2eCritical, Tier2), func() {
 		var pipelineDir = "valid/critical"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
+			if _, skip := e2eSmokePipelineBasenames[pipelineFile]; skip {
+				continue
+			}
+			if _, skip := e2eTier1PipelineBasenames[pipelineFile]; skip {
+				continue
+			}
 			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})
@@ -168,11 +197,11 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		}
 	})
 
-	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(Sanity), func() {
+	// Former Sanity IRs that are not already covered by Smoke or the Essential
+	// Tier1 sweep. component_with_pip_index_urls stays Smoke-only.
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds Tier1 >", FlakeAttempts(2), Label(Tier1), func() {
 		var pipelineDir = "valid"
 		pipelineFiles := []string{
-			"essential/component_with_pip_index_urls.yaml",
-			"essential/lightweight_python_functions_pipeline.yaml",
 			"parallel_and_nested/pipeline_in_pipeline.yaml",
 			"critical/pipeline_with_secret_as_env.yaml",
 			"critical/pipeline_with_input_status_state.yaml",
@@ -185,7 +214,7 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		}
 	})
 
-	Context("Upload a pipeline file, run it and verify that pipeline run succeeds Smoke >", FlakeAttempts(1), Label(Integration), func() {
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds Smoke >", FlakeAttempts(1), Label(Integration, Tier1), func() {
 		var pipelineDir = "valid/integration"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
@@ -195,7 +224,7 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		}
 	})
 
-	Context("Create a pipeline run with HTTP proxy >", Label(E2eProxy), func() {
+	Context("Create a pipeline run with HTTP proxy >", Label(E2eProxy, Tier2), func() {
 		var pipelineDir = "valid"
 		pipelineFile := "env-var.yaml"
 		It(fmt.Sprintf("Create a pipeline run with http proxy, using specs: %s", pipelineFile), func() {
@@ -225,7 +254,7 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		})
 	})
 
-	Context("Upload a pipeline file, run it and verify that pipeline run fails >", Label(E2eFailed), func() {
+	Context("Upload a pipeline file, run it and verify that pipeline run fails >", Label(E2eFailed, Tier3), func() {
 		var pipelineDir = "valid/failing"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
@@ -251,7 +280,7 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 
 	// E2eGpu-labeled specs run even when the package has no --label-filter; see
 	// AGENTS.md (Local testing → Backend Ginkgo test suites → End-to-end tests).
-	Context("GPU component test >", Label(E2eGpu), func() {
+	Context("GPU component test >", Label(E2eGpu, Tier2), func() {
 		var pipelineDir = "valid/gpu"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {

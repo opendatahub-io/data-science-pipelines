@@ -60,7 +60,7 @@ var _ = BeforeEach(func() {
 
 // ################## POSITIVE TESTS ##################
 
-var _ = Describe("Verify Pipeline Upload >", Label(constants.POSITIVE, constants.PipelineUpload, constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Verify Pipeline Upload >", Label(constants.POSITIVE, constants.PipelineUpload, constants.APIServerTests, constants.FullRegression, constants.Tier1), func() {
 
 	/* Positive Scenarios of uploading a pipeline file */
 	Context("Upload a valid pipeline and verify pipeline metadata after upload >", func() {
@@ -91,7 +91,7 @@ var _ = Describe("Verify Pipeline Upload >", Label(constants.POSITIVE, constants
 	})
 })
 
-var _ = Describe("Verify Pipeline Upload with Tags >", Label(constants.POSITIVE, constants.PipelineUpload, constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Verify Pipeline Upload with Tags >", Label(constants.POSITIVE, constants.PipelineUpload, constants.APIServerTests, constants.FullRegression, constants.Tier2), func() {
 
 	Context("Upload a valid pipeline with tags and verify tags are stored >", func() {
 		var pipelineDir = "valid"
@@ -143,17 +143,17 @@ var _ = Describe("Verify Pipeline Upload Version >", Label(constants.POSITIVE, "
 	argParamPipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, pipelineWithArgsFileName)
 	/* Positive Scenarios of uploading a pipeline file */
 	Context("Upload a pipeline and upload the same pipeline to change version >", func() {
-		It(fmt.Sprintf("Upload %s pipeline file and upload a new version with the same file", helloWorldPipelineFileName), Label(constants.SMOKE), func() {
+		It(fmt.Sprintf("Upload %s pipeline file and upload a new version with the same file", helloWorldPipelineFileName), Label(constants.SMOKE, constants.Smoke), func() {
 			uploadPipelineAndChangePipelineVersion(helloWorldPipelineSpecFilePath, helloWorldPipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
 		})
-		It(fmt.Sprintf("Upload %s pipeline file and upload a new version with the different file %s", helloWorldPipelineFileName, pipelineWithArgsFileName), func() {
+		It(fmt.Sprintf("Upload %s pipeline file and upload a new version with the different file %s", helloWorldPipelineFileName, pipelineWithArgsFileName), Label(constants.Tier1), func() {
 			uploadPipelineAndChangePipelineVersion(helloWorldPipelineSpecFilePath, argParamPipelineSpecFilePath, &testContext.Pipeline.PipelineGeneratedName, nil)
 		})
 
 	})
 })
 
-var _ = Describe("Verify Pipeline Upload Version with Tags >", Label(constants.POSITIVE, "PipelineUpload", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Verify Pipeline Upload Version with Tags >", Label(constants.POSITIVE, "PipelineUpload", constants.APIServerTests, constants.FullRegression, constants.Tier2), func() {
 	var pipelineDir = "valid"
 	helloWorldPipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
 
@@ -288,7 +288,7 @@ var _ = Describe("Verify Pipeline Upload Version with Tags >", Label(constants.P
 
 // ################## NEGATIVE TESTS ##################
 
-var _ = Describe("Verify Pipeline Upload Version with Tags Failure >", Label("Negative", "PipelineUpload", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Verify Pipeline Upload Version with Tags Failure >", Label("Negative", "PipelineUpload", constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
 	var pipelineDir = "valid"
 	pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
 
@@ -355,7 +355,7 @@ var _ = Describe("Verify Pipeline Upload Version with Tags Failure >", Label("Ne
 	})
 })
 
-var _ = Describe("Verify Pipeline Upload Failure >", Label("Negative", "PipelineUpload", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Verify Pipeline Upload Failure >", Label("Negative", "PipelineUpload", constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
 	var pipelineDir = "invalid"
 	invalidPipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(pipelineFilesRootDir, pipelineDir))
 
@@ -386,7 +386,7 @@ var _ = Describe("Verify Pipeline Upload Failure >", Label("Negative", "Pipeline
 	})
 })
 
-var _ = Describe("Verify Pipeline Upload Version Failure >", Label("Negative", "PipelineUpload", constants.APIServerTests, constants.FullRegression), func() {
+var _ = Describe("Verify Pipeline Upload Version Failure >", Label("Negative", "PipelineUpload", constants.APIServerTests, constants.FullRegression, constants.Tier3), func() {
 	var pipelineDir = "valid"
 	pipelineSpecFilePath := filepath.Join(pipelineFilesRootDir, pipelineDir, helloWorldPipelineFileName)
 	/* Negative Scenarios of uploading a pipeline file */
