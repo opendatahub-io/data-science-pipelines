@@ -79,7 +79,6 @@ var (
 	webhookTLSKeyPath             = flag.String("webhookTLSKeyPath", "", "Path to the webhook TLS private key. Defaults to tlsCertKeyPath value")
 	configPath                    = flag.String("config", "", "Path to JSON file containing config")
 	sampleConfigPath              = flag.String("sampleconfig", "", "Path to samples")
-	managedPipelinesDir           = flag.String("managedPipelinesDir", "", "Directory containing managed-pipelines.json manifest")
 	tlsCertPath                   = flag.String("tlsCertPath", "", "Path to the public TLS cert.")
 	tlsCertKeyPath                = flag.String("tlsCertKeyPath", "", "Path to the private TLS key cert.")
 	tlsMinVersion                 = flag.String("tlsMinVersion", "VersionTLS12", "Minimum TLS version (VersionTLS12 or VersionTLS13)")
@@ -222,7 +221,6 @@ func main() {
 		GlobalKubernetesWebhookMode:  *globalKubernetesWebhookMode,
 		Context:                      backgroundCtx,
 		WaitGroup:                    &wg,
-		CaCertPath:                   *tlsCertPath,
 	}
 
 	tlsCfg, err := initCerts()
@@ -306,7 +304,7 @@ func main() {
 			DefaultHostUsers:     parseOptionalBool(common.GetDefaultSecurityContextHostUsers()),
 		},
 	)
-	err = config.LoadSamples(resourceManager, *sampleConfigPath, *managedPipelinesDir)
+	err = config.LoadSamples(resourceManager, *sampleConfigPath)
 	if err != nil {
 		glog.Fatalf("Failed to load samples. Err: %v", err)
 	}
@@ -474,15 +472,13 @@ func startRPCServer(resourceManager *resource.ResourceManager, tlsCfg *tls.Confi
 	ReportServerV1 := server.NewReportServerV1(resourceManager)
 	ReportServer := server.NewReportServer(resourceManager)
 
-	ArtifactServer := server.NewArtifactServer(resourceManager, &server.ArtifactServerOptions{CollectMetrics: *collectMetricsFlag})
+	ArtifactServer := server.NewArtifactServer(resourceManager)
 
 	apiv1beta1.RegisterExperimentServiceServer(s, ExperimentServerV1)
 	apiv1beta1.RegisterPipelineServiceServer(s, PipelineServerV1)
 	apiv1beta1.RegisterJobServiceServer(s, JobServerV1)
 	apiv1beta1.RegisterRunServiceServer(s, RunServerV1)
-	apiv1beta1.RegisterTaskServiceServer(s, server.NewTaskServer(resourceManager))
 	apiv1beta1.RegisterReportServiceServer(s, ReportServerV1)
-
 	apiv1beta1.RegisterVisualizationServiceServer(
 		s,
 		server.NewVisualizationServer(
@@ -491,13 +487,12 @@ func startRPCServer(resourceManager *resource.ResourceManager, tlsCfg *tls.Confi
 			common.GetStringConfig(cm.VisualizationServicePort),
 		))
 	apiv1beta1.RegisterAuthServiceServer(s, server.NewAuthServer(resourceManager))
-
 	apiv2beta1.RegisterExperimentServiceServer(s, ExperimentServer)
-	apiv2beta1.RegisterArtifactServiceServer(s, ArtifactServer)
 	apiv2beta1.RegisterPipelineServiceServer(s, PipelineServer)
 	apiv2beta1.RegisterRecurringRunServiceServer(s, JobServer)
 	apiv2beta1.RegisterRunServiceServer(s, RunServer)
 	apiv2beta1.RegisterReportServiceServer(s, ReportServer)
+	apiv2beta1.RegisterArtifactServiceServer(s, ArtifactServer)
 
 	// Register reflection service on gRPC server.
 	reflection.Register(s)

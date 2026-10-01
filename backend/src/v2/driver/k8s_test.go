@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
-	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
+	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
+	"github.com/kubeflow/pipelines/backend/src/v2/driver/common"
 	"github.com/kubeflow/pipelines/kubernetes_platform/go/kubernetesplatform"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -16,11 +17,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// mapToIOParameters converts a map of parameter values to a slice of IOParameter
+func mapToIOParameters(params map[string]*structpb.Value) []*apiv2beta1.PipelineTask_InputOutputs_IOParameter {
+	if params == nil {
+		return nil
+	}
+	result := make([]*apiv2beta1.PipelineTask_InputOutputs_IOParameter, 0, len(params))
+	for key, value := range params {
+		result = append(result, &apiv2beta1.PipelineTask_InputOutputs_IOParameter{
+			ParameterKey: key,
+			Value:        value,
+		})
+	}
+	return result
+}
+
 func Test_makeVolumeMountPatch(t *testing.T) {
 	type args struct {
 		pvcMount []*kubernetesplatform.PvcMount
-		dag      *metadata.DAG
-		dagTasks map[string]*metadata.Execution
 	}
 
 	tests := []struct {
@@ -39,8 +53,6 @@ func Test_makeVolumeMountPatch(t *testing.T) {
 						PvcReference: &kubernetesplatform.PvcMount_Constant{Constant: "pvc-name"},
 					},
 				},
-				nil,
-				nil,
 			},
 			"/mnt/path",
 			"pvc-name",
@@ -53,11 +65,9 @@ func Test_makeVolumeMountPatch(t *testing.T) {
 					{
 						MountPath:        "/mnt/path",
 						PvcReference:     &kubernetesplatform.PvcMount_Constant{Constant: "not-used"},
-						PvcNameParameter: inputParamConstant("pvc-name"),
+						PvcNameParameter: common.InputParamConstant("pvc-name"),
 					},
 				},
-				nil,
-				nil,
 			},
 			"/mnt/path",
 			"pvc-name",
@@ -69,11 +79,9 @@ func Test_makeVolumeMountPatch(t *testing.T) {
 				[]*kubernetesplatform.PvcMount{
 					{
 						MountPath:        "/mnt/path",
-						PvcNameParameter: inputParamComponent("param_1"),
+						PvcNameParameter: common.InputParamComponent("param_1"),
 					},
 				},
-				nil,
-				nil,
 			},
 			"/mnt/path",
 			"pvc-name",
@@ -88,11 +96,9 @@ func Test_makeVolumeMountPatch(t *testing.T) {
 					{
 						MountPath:        "/mnt/data",
 						SubPath:          "models",
-						PvcNameParameter: inputParamConstant("my-pvc"),
+						PvcNameParameter: common.InputParamConstant("my-pvc"),
 					},
 				},
-				nil,
-				nil,
 			},
 			"/mnt/data",
 			"my-pvc",
@@ -103,14 +109,9 @@ func Test_makeVolumeMountPatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			volumeMounts, volumes, err := makeVolumeMountPatch(
-				context.Background(),
-				Options{},
+				common.Options{},
 				tt.args.pvcMount,
-				tt.args.dag,
-				nil,
-				nil,
-				tt.inputParams,
-				nil,
+				mapToIOParameters(tt.inputParams),
 			)
 			assert.Nil(t, err)
 			assert.Equal(t, 1, len(volumeMounts))
@@ -179,7 +180,7 @@ func Test_makePodSpecPatch_nodeSelector(t *testing.T) {
 			"Valid - Json Parameter",
 			&kubernetesplatform.KubernetesExecutorConfig{
 				NodeSelector: &kubernetesplatform.NodeSelector{
-					NodeSelectorJson: inputParamComponent("param_1"),
+					NodeSelectorJson: common.InputParamComponent("param_1"),
 				},
 			},
 			&k8score.PodSpec{
@@ -213,7 +214,7 @@ func Test_makePodSpecPatch_nodeSelector(t *testing.T) {
 			"Valid - empty json",
 			&kubernetesplatform.KubernetesExecutorConfig{
 				NodeSelector: &kubernetesplatform.NodeSelector{
-					NodeSelectorJson: inputParamComponent("param_1"),
+					NodeSelectorJson: common.InputParamComponent("param_1"),
 				},
 			},
 			&k8score.PodSpec{
@@ -242,11 +243,8 @@ func Test_makePodSpecPatch_nodeSelector(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				got,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				tt.inputParams,
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(tt.inputParams),
 				taskConfig,
 			)
 			assert.Nil(t, err)
@@ -311,7 +309,7 @@ func Test_extendPodSpecPatch_Secret(t *testing.T) {
 				SecretAsVolume: []*kubernetesplatform.SecretAsVolume{
 					{
 						SecretName:          "not-used",
-						SecretNameParameter: inputParamConstant("secret1"),
+						SecretNameParameter: common.InputParamConstant("secret1"),
 						MountPath:           "/data/path",
 					},
 				},
@@ -352,7 +350,7 @@ func Test_extendPodSpecPatch_Secret(t *testing.T) {
 				SecretAsVolume: []*kubernetesplatform.SecretAsVolume{
 					{
 						SecretName:          "not-used",
-						SecretNameParameter: inputParamConstant("secret1"),
+						SecretNameParameter: common.InputParamConstant("secret1"),
 						MountPath:           "/data/path",
 						Optional:            &[]bool{false}[0],
 					},
@@ -394,7 +392,7 @@ func Test_extendPodSpecPatch_Secret(t *testing.T) {
 				SecretAsVolume: []*kubernetesplatform.SecretAsVolume{
 					{
 						SecretName:          "not-used",
-						SecretNameParameter: inputParamConstant("secret1"),
+						SecretNameParameter: common.InputParamConstant("secret1"),
 						MountPath:           "/data/path",
 						Optional:            &[]bool{true}[0],
 					},
@@ -455,7 +453,7 @@ func Test_extendPodSpecPatch_Secret(t *testing.T) {
 				SecretAsVolume: []*kubernetesplatform.SecretAsVolume{
 					{
 						SecretName:          "not-used",
-						SecretNameParameter: inputParamComponent("param_1"),
+						SecretNameParameter: common.InputParamComponent("param_1"),
 						MountPath:           "/data/path",
 						Optional:            &[]bool{true}[0],
 					},
@@ -542,7 +540,7 @@ func Test_extendPodSpecPatch_Secret(t *testing.T) {
 				SecretAsEnv: []*kubernetesplatform.SecretAsEnv{
 					{
 						SecretName:          "not-used",
-						SecretNameParameter: inputParamConstant("my-secret"),
+						SecretNameParameter: common.InputParamConstant("my-secret"),
 						KeyToEnv: []*kubernetesplatform.SecretAsEnv_SecretKeyToEnvMap{
 							{
 								SecretKey: "password",
@@ -585,7 +583,7 @@ func Test_extendPodSpecPatch_Secret(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				SecretAsEnv: []*kubernetesplatform.SecretAsEnv{
 					{
-						SecretNameParameter: inputParamComponent("param_1"),
+						SecretNameParameter: common.InputParamComponent("param_1"),
 						KeyToEnv: []*kubernetesplatform.SecretAsEnv_SecretKeyToEnvMap{
 							{
 								SecretKey: "password",
@@ -630,7 +628,7 @@ func Test_extendPodSpecPatch_Secret(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				SecretAsEnv: []*kubernetesplatform.SecretAsEnv{
 					{
-						SecretNameParameter: inputParamConstant("my-secret"),
+						SecretNameParameter: common.InputParamConstant("my-secret"),
 						KeyToEnv: []*kubernetesplatform.SecretAsEnv_SecretKeyToEnvMap{
 							{
 								SecretKey: "password",
@@ -674,7 +672,7 @@ func Test_extendPodSpecPatch_Secret(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				SecretAsEnv: []*kubernetesplatform.SecretAsEnv{
 					{
-						SecretNameParameter: inputParamConstant("my-secret"),
+						SecretNameParameter: common.InputParamConstant("my-secret"),
 						KeyToEnv: []*kubernetesplatform.SecretAsEnv_SecretKeyToEnvMap{
 							{
 								SecretKey: "password",
@@ -721,11 +719,8 @@ func Test_extendPodSpecPatch_Secret(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				tt.podSpec,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				tt.inputParams,
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(tt.inputParams),
 				taskConfig,
 			)
 			assert.Nil(t, err)
@@ -795,7 +790,7 @@ func Test_extendPodSpecPatch_ConfigMap(t *testing.T) {
 				ConfigMapAsVolume: []*kubernetesplatform.ConfigMapAsVolume{
 					{
 						ConfigMapName:          "not-used",
-						ConfigMapNameParameter: inputParamConstant("cm1"),
+						ConfigMapNameParameter: common.InputParamConstant("cm1"),
 						MountPath:              "/data/path",
 					},
 				},
@@ -839,7 +834,7 @@ func Test_extendPodSpecPatch_ConfigMap(t *testing.T) {
 				ConfigMapAsVolume: []*kubernetesplatform.ConfigMapAsVolume{
 					{
 						ConfigMapName:          "not-used",
-						ConfigMapNameParameter: inputParamConstant("cm1"),
+						ConfigMapNameParameter: common.InputParamConstant("cm1"),
 						MountPath:              "/data/path",
 						Optional:               &[]bool{false}[0],
 					},
@@ -884,7 +879,7 @@ func Test_extendPodSpecPatch_ConfigMap(t *testing.T) {
 				ConfigMapAsVolume: []*kubernetesplatform.ConfigMapAsVolume{
 					{
 						ConfigMapName:          "not-used",
-						ConfigMapNameParameter: inputParamConstant("cm1"),
+						ConfigMapNameParameter: common.InputParamConstant("cm1"),
 						MountPath:              "/data/path",
 						Optional:               &[]bool{true}[0],
 					},
@@ -948,7 +943,7 @@ func Test_extendPodSpecPatch_ConfigMap(t *testing.T) {
 				ConfigMapAsVolume: []*kubernetesplatform.ConfigMapAsVolume{
 					{
 						ConfigMapName:          "not-used",
-						ConfigMapNameParameter: inputParamComponent("param_1"),
+						ConfigMapNameParameter: common.InputParamComponent("param_1"),
 						MountPath:              "/data/path",
 						Optional:               &[]bool{true}[0],
 					},
@@ -1038,7 +1033,7 @@ func Test_extendPodSpecPatch_ConfigMap(t *testing.T) {
 				ConfigMapAsEnv: []*kubernetesplatform.ConfigMapAsEnv{
 					{
 						ConfigMapName:          "not-used",
-						ConfigMapNameParameter: inputParamConstant("my-cm"),
+						ConfigMapNameParameter: common.InputParamConstant("my-cm"),
 						KeyToEnv: []*kubernetesplatform.ConfigMapAsEnv_ConfigMapKeyToEnvMap{
 							{
 								ConfigMapKey: "foo",
@@ -1082,7 +1077,7 @@ func Test_extendPodSpecPatch_ConfigMap(t *testing.T) {
 				ConfigMapAsEnv: []*kubernetesplatform.ConfigMapAsEnv{
 					{
 						ConfigMapName:          "not-used",
-						ConfigMapNameParameter: inputParamComponent("param_1"),
+						ConfigMapNameParameter: common.InputParamComponent("param_1"),
 						KeyToEnv: []*kubernetesplatform.ConfigMapAsEnv_ConfigMapKeyToEnvMap{
 							{
 								ConfigMapKey: "foo",
@@ -1127,7 +1122,7 @@ func Test_extendPodSpecPatch_ConfigMap(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				ConfigMapAsEnv: []*kubernetesplatform.ConfigMapAsEnv{
 					{
-						ConfigMapNameParameter: inputParamConstant("my-cm"),
+						ConfigMapNameParameter: common.InputParamConstant("my-cm"),
 						KeyToEnv: []*kubernetesplatform.ConfigMapAsEnv_ConfigMapKeyToEnvMap{
 							{
 								ConfigMapKey: "foo",
@@ -1171,7 +1166,7 @@ func Test_extendPodSpecPatch_ConfigMap(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				ConfigMapAsEnv: []*kubernetesplatform.ConfigMapAsEnv{
 					{
-						ConfigMapNameParameter: inputParamConstant("my-cm"),
+						ConfigMapNameParameter: common.InputParamConstant("my-cm"),
 						KeyToEnv: []*kubernetesplatform.ConfigMapAsEnv_ConfigMapKeyToEnvMap{
 							{
 								ConfigMapKey: "foo",
@@ -1218,11 +1213,8 @@ func Test_extendPodSpecPatch_ConfigMap(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				tt.podSpec,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				tt.inputParams,
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(tt.inputParams),
 				taskConfig,
 			)
 			assert.Nil(t, err)
@@ -1392,11 +1384,8 @@ func Test_extendPodSpecPatch_EmptyVolumeMount(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				tt.podSpec,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				map[string]*structpb.Value{},
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(map[string]*structpb.Value{}),
 				taskConfig,
 			)
 			assert.Nil(t, err)
@@ -1440,8 +1429,8 @@ func Test_extendPodSpecPatch_ImagePullSecrets(t *testing.T) {
 			"Valid - SecretA and SecretB",
 			&kubernetesplatform.KubernetesExecutorConfig{
 				ImagePullSecret: []*kubernetesplatform.ImagePullSecret{
-					{SecretName: "SecretA", SecretNameParameter: inputParamConstant("SecretA")},
-					{SecretName: "SecretB", SecretNameParameter: inputParamConstant("SecretB")},
+					{SecretName: "SecretA", SecretNameParameter: common.InputParamConstant("SecretA")},
+					{SecretName: "SecretB", SecretNameParameter: common.InputParamConstant("SecretB")},
 				},
 			},
 			&k8score.PodSpec{
@@ -1487,8 +1476,8 @@ func Test_extendPodSpecPatch_ImagePullSecrets(t *testing.T) {
 			"Valid - multiple input parameter secret names",
 			&kubernetesplatform.KubernetesExecutorConfig{
 				ImagePullSecret: []*kubernetesplatform.ImagePullSecret{
-					{SecretName: "not-used1", SecretNameParameter: inputParamComponent("param_1")},
-					{SecretName: "not-used2", SecretNameParameter: inputParamComponent("param_2")},
+					{SecretName: "not-used1", SecretNameParameter: common.InputParamComponent("param_1")},
+					{SecretName: "not-used2", SecretNameParameter: common.InputParamComponent("param_2")},
 				},
 			},
 			&k8score.PodSpec{
@@ -1518,11 +1507,8 @@ func Test_extendPodSpecPatch_ImagePullSecrets(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				got,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				tt.inputParams,
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(tt.inputParams),
 				nil,
 			)
 			assert.Nil(t, err)
@@ -1642,7 +1628,7 @@ func Test_extendPodSpecPatch_Tolerations(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				Tolerations: []*kubernetesplatform.Toleration{
 					{
-						TolerationJson: inputParamComponent("param_1"),
+						TolerationJson: common.InputParamComponent("param_1"),
 					},
 				},
 			},
@@ -1678,7 +1664,7 @@ func Test_extendPodSpecPatch_Tolerations(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				Tolerations: []*kubernetesplatform.Toleration{
 					{
-						TolerationJson: inputParamComponent("param_1"),
+						TolerationJson: common.InputParamComponent("param_1"),
 					},
 				},
 			},
@@ -1700,7 +1686,7 @@ func Test_extendPodSpecPatch_Tolerations(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				Tolerations: []*kubernetesplatform.Toleration{
 					{
-						TolerationJson: inputParamComponent("param_1"),
+						TolerationJson: common.InputParamComponent("param_1"),
 					},
 					{
 						TolerationJson: structInputParamConstant(map[string]interface{}{
@@ -1768,7 +1754,7 @@ func Test_extendPodSpecPatch_Tolerations(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				Tolerations: []*kubernetesplatform.Toleration{
 					{
-						TolerationJson: inputParamComponent("param_1"),
+						TolerationJson: common.InputParamComponent("param_1"),
 					},
 				},
 			},
@@ -1833,10 +1819,10 @@ func Test_extendPodSpecPatch_Tolerations(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				Tolerations: []*kubernetesplatform.Toleration{
 					{
-						TolerationJson: inputParamComponent("param_1"),
+						TolerationJson: common.InputParamComponent("param_1"),
 					},
 					{
-						TolerationJson: inputParamComponent("param_2"),
+						TolerationJson: common.InputParamComponent("param_2"),
 					},
 					{
 						Key:      "key5",
@@ -1928,7 +1914,7 @@ func Test_extendPodSpecPatch_Tolerations(t *testing.T) {
 			&kubernetesplatform.KubernetesExecutorConfig{
 				Tolerations: []*kubernetesplatform.Toleration{
 					{
-						TolerationJson: inputParamComponent("param_1"),
+						TolerationJson: common.InputParamComponent("param_1"),
 					},
 				},
 			},
@@ -1957,11 +1943,8 @@ func Test_extendPodSpecPatch_Tolerations(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				got,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				tt.inputParams,
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(tt.inputParams),
 				taskConfig,
 			)
 			assert.Nil(t, err)
@@ -2010,7 +1993,7 @@ func Test_extendPodSpecPatch_FieldPathAsEnv(t *testing.T) {
 				SecretAsEnv: []*kubernetesplatform.SecretAsEnv{
 					{
 						SecretName:          "my-secret",
-						SecretNameParameter: inputParamConstant("my-secret"),
+						SecretNameParameter: common.InputParamConstant("my-secret"),
 						KeyToEnv: []*kubernetesplatform.SecretAsEnv_SecretKeyToEnvMap{
 							{
 								SecretKey: "password",
@@ -2064,11 +2047,8 @@ func Test_extendPodSpecPatch_FieldPathAsEnv(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				got,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				map[string]*structpb.Value{},
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(map[string]*structpb.Value{}),
 				taskConfig,
 			)
 			assert.Nil(t, err)
@@ -2137,11 +2117,8 @@ func Test_extendPodSpecPatch_ActiveDeadlineSeconds(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				got,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				map[string]*structpb.Value{},
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(map[string]*structpb.Value{}),
 				nil,
 			)
 			assert.Nil(t, err)
@@ -2250,11 +2227,8 @@ func Test_extendPodSpecPatch_SecurityContext(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				got,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
 				nil,
-				nil,
-				nil,
-				map[string]*structpb.Value{},
 				nil,
 			)
 			assert.Nil(t, err)
@@ -2278,7 +2252,7 @@ func Test_extendPodSpecPatch_SecurityContext_CombinedWithOtherFeatures(t *testin
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+		common.Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 			SecurityContext: &kubernetesplatform.SecurityContext{
 				RunAsUser:  &nobodyUID,
 				RunAsGroup: &rootGID,
@@ -2287,9 +2261,6 @@ func Test_extendPodSpecPatch_SecurityContext_CombinedWithOtherFeatures(t *testin
 			ImagePullPolicy:       string(imagePullPolicy),
 		}},
 		nil,
-		nil,
-		nil,
-		map[string]*structpb.Value{},
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2325,7 +2296,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminSetPreserved(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsUser:  &adminUID,
 			DefaultRunAsGroup: &adminGID,
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
@@ -2336,9 +2307,6 @@ func Test_extendPodSpecPatch_SecurityContext_AdminSetPreserved(t *testing.T) {
 			},
 		},
 		nil,
-		nil,
-		nil,
-		map[string]*structpb.Value{},
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2359,12 +2327,11 @@ func Test_extendPodSpecPatch_SecurityContext_AdminDefaultsNoUserOverride(t *test
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsUser: &adminUID,
 			// No KubernetesExecutorConfig — user didn't call set_security_context.
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2387,15 +2354,12 @@ func Test_extendPodSpecPatch_SecurityContext_RootRejected(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+		common.Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 			SecurityContext: &kubernetesplatform.SecurityContext{
 				RunAsUser: &rootUID,
 			},
 		}},
 		nil,
-		nil,
-		nil,
-		map[string]*structpb.Value{},
 		nil,
 	)
 	assert.ErrorContains(t, err, "runAsUser=0 (root) is not allowed")
@@ -2411,7 +2375,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminRunAsNonRoot(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsNonRoot: &adminRunAsNonRoot,
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 				SecurityContext: &kubernetesplatform.SecurityContext{
@@ -2419,8 +2383,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminRunAsNonRoot(t *testing.T) {
 				},
 			},
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2440,12 +2403,11 @@ func Test_extendPodSpecPatch_SecurityContext_AdminRunAsNonRootNoUserOverride(t *
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsNonRoot: &adminRunAsNonRoot,
 			// No KubernetesExecutorConfig — user didn't call set_security_context.
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2462,15 +2424,14 @@ func Test_extendPodSpecPatch_SecurityContext_UserRunAsNonRootNoAdmin(t *testing.
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 				SecurityContext: &kubernetesplatform.SecurityContext{
 					RunAsNonRoot: &userRunAsNonRoot,
 				},
 			},
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -2488,7 +2449,7 @@ func Test_extendPodSpecPatch_SecurityContext_RootRejectedWhenRunAsNonRootEnforce
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsNonRoot: &adminRunAsNonRoot,
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 				SecurityContext: &kubernetesplatform.SecurityContext{
@@ -2496,8 +2457,7 @@ func Test_extendPodSpecPatch_SecurityContext_RootRejectedWhenRunAsNonRootEnforce
 				},
 			},
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	// runAsUser=0 must be rejected when admin enforces runAsNonRoot=true.
@@ -2515,7 +2475,7 @@ func Test_extendPodSpecPatch_SecurityContext_NonRootAllowedWhenRunAsNonRootEnfor
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsNonRoot: &adminRunAsNonRoot,
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 				SecurityContext: &kubernetesplatform.SecurityContext{
@@ -2523,8 +2483,7 @@ func Test_extendPodSpecPatch_SecurityContext_NonRootAllowedWhenRunAsNonRootEnfor
 				},
 			},
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	require.Nil(t, err)
@@ -2546,13 +2505,12 @@ func Test_extendPodSpecPatch_SecurityContext_NonRootAllowedOnHardenedContainer(t
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+		common.Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 			SecurityContext: &kubernetesplatform.SecurityContext{
 				RunAsUser: &nonRootUID,
 			},
 		}},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	// Non-root UID is allowed even on hardened containers.
@@ -2570,14 +2528,13 @@ func Test_extendPodSpecPatch_SecurityContext_RootRejectedWithUserRunAsNonRoot(t 
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+		common.Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 			SecurityContext: &kubernetesplatform.SecurityContext{
 				RunAsUser:    &rootUID,
 				RunAsNonRoot: &userRunAsNonRoot,
 			},
 		}},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	// Component sets runAsNonRoot=true and runAsUser=0 — contradiction must be rejected.
@@ -2596,7 +2553,7 @@ func Test_extendPodSpecPatch_SecurityContext_RootRejectedWhenAdminRunAsNonRootFa
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			DefaultRunAsNonRoot: &adminRunAsNonRoot,
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 				SecurityContext: &kubernetesplatform.SecurityContext{
@@ -2605,8 +2562,7 @@ func Test_extendPodSpecPatch_SecurityContext_RootRejectedWhenAdminRunAsNonRootFa
 				},
 			},
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	// ODH rejects root workloads regardless of runAsNonRoot overrides.
@@ -2623,14 +2579,13 @@ func Test_extendPodSpecPatch_SecurityContext_RootRejectedWithUserRunAsNonRootFal
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+		common.Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 			SecurityContext: &kubernetesplatform.SecurityContext{
 				RunAsUser:    &rootUID,
 				RunAsNonRoot: &userRunAsNonRoot,
 			},
 		}},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	// ODH rejects root workloads regardless of runAsNonRoot overrides.
@@ -2713,11 +2668,8 @@ func Test_extendPodSpecPatch_ImagePullPolicy(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				tt.podSpec,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				map[string]*structpb.Value{},
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(map[string]*structpb.Value{}),
 				nil,
 			)
 			assert.Nil(t, err)
@@ -2911,11 +2863,8 @@ func Test_extendPodSpecPatch_GenericEphemeralVolume(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				tt.podSpec,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				map[string]*structpb.Value{},
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(map[string]*structpb.Value{}),
 				taskConfig,
 			)
 			assert.Nil(t, err)
@@ -3215,11 +3164,8 @@ func Test_extendPodSpecPatch_NodeAffinity(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				got,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				tt.inputParams,
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(tt.inputParams),
 				taskConfig,
 			)
 			assert.NoError(t, err)
@@ -3261,7 +3207,7 @@ func Test_extendPodSpecPatch_TaskConfig_CapturesAndApplies(t *testing.T) {
 		}},
 		PvcMount: []*kubernetesplatform.PvcMount{{
 			MountPath:        "/data",
-			PvcNameParameter: inputParamConstant("kubernetes-task-config-pvc"),
+			PvcNameParameter: common.InputParamConstant("kubernetes-task-config-pvc"),
 		}},
 		SecretAsEnv: []*kubernetesplatform.SecretAsEnv{{
 			SecretName: "my-secret",
@@ -3300,11 +3246,8 @@ func Test_extendPodSpecPatch_TaskConfig_CapturesAndApplies(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{KubernetesExecutorConfig: cfg, Component: comp},
-		nil,
-		nil,
-		nil,
-		map[string]*structpb.Value{},
+		common.Options{KubernetesExecutorConfig: cfg, Component: comp},
+		mapToIOParameters(map[string]*structpb.Value{}),
 		taskCfg,
 	)
 	assert.NoError(t, err)
@@ -3442,7 +3385,7 @@ func Test_extendPodSpecPatch_PvcMounts_Passthrough_NotAppliedToPod(t *testing.T)
 	cfg := &kubernetesplatform.KubernetesExecutorConfig{
 		PvcMount: []*kubernetesplatform.PvcMount{{
 			MountPath:        "/data",
-			PvcNameParameter: inputParamConstant("my-pvc"),
+			PvcNameParameter: common.InputParamConstant("my-pvc"),
 		}},
 	}
 	comp := &pipelinespec.ComponentSpec{
@@ -3455,11 +3398,8 @@ func Test_extendPodSpecPatch_PvcMounts_Passthrough_NotAppliedToPod(t *testing.T)
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{KubernetesExecutorConfig: cfg, Component: comp},
-		nil,
-		nil,
-		nil,
-		map[string]*structpb.Value{},
+		common.Options{KubernetesExecutorConfig: cfg, Component: comp},
+		mapToIOParameters(map[string]*structpb.Value{}),
 		taskCfg,
 	)
 	assert.NoError(t, err)
@@ -3476,7 +3416,7 @@ func Test_extendPodSpecPatch_PvcMounts_Passthrough_AppliedToPod(t *testing.T) {
 	cfg := &kubernetesplatform.KubernetesExecutorConfig{
 		PvcMount: []*kubernetesplatform.PvcMount{{
 			MountPath:        "/data",
-			PvcNameParameter: inputParamConstant("my-pvc"),
+			PvcNameParameter: common.InputParamConstant("my-pvc"),
 		}},
 	}
 	comp := &pipelinespec.ComponentSpec{
@@ -3489,11 +3429,8 @@ func Test_extendPodSpecPatch_PvcMounts_Passthrough_AppliedToPod(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{KubernetesExecutorConfig: cfg, Component: comp},
-		nil,
-		nil,
-		nil,
-		map[string]*structpb.Value{},
+		common.Options{KubernetesExecutorConfig: cfg, Component: comp},
+		mapToIOParameters(map[string]*structpb.Value{}),
 		taskCfg,
 	)
 	assert.NoError(t, err)
@@ -3583,11 +3520,10 @@ func Test_extendPodSpecPatch_DefaultHostUsersFalse(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{
+		common.Options{
 			DefaultHostUsers: &hostUsersInDedicatedNamespace,
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -3606,11 +3542,10 @@ func Test_extendPodSpecPatch_DefaultHostUsersTrue(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{
+		common.Options{
 			DefaultHostUsers: &hostUsersInHostNamespace,
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -3625,11 +3560,10 @@ func Test_extendPodSpecPatch_DefaultHostUsersNil(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{
+		common.Options{
 			DefaultHostUsers: nil,
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -3649,7 +3583,7 @@ func Test_extendPodSpecPatch_RootUserWithHostUsersNamespace(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{
+		common.Options{
 			DefaultHostUsers: &hostUsersInDedicatedNamespace,
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 				SecurityContext: &kubernetesplatform.SecurityContext{
@@ -3657,8 +3591,7 @@ func Test_extendPodSpecPatch_RootUserWithHostUsersNamespace(t *testing.T) {
 				},
 			},
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.ErrorContains(t, err, "runAsUser=0 (root) is not allowed")
@@ -3679,11 +3612,10 @@ func Test_extendPodSpecPatch_HostUsersAdminOverrideProtection(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{
+		common.Options{
 			DefaultHostUsers: &adminFalse,
 		},
-		nil, nil, nil,
-		map[string]*structpb.Value{},
+		nil,
 		nil,
 	)
 	assert.Nil(t, err)
@@ -4032,11 +3964,8 @@ func Test_extendPodSpecPatch_InitContainers(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				got,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
 				nil,
-				nil,
-				nil,
-				map[string]*structpb.Value{},
 				nil,
 			)
 			if tt.expectedErr != "" {
@@ -4063,7 +3992,7 @@ func Test_extendPodSpecPatch_InitContainers_AdminSecurityDefaults(t *testing.T) 
 	err := extendPodSpecPatch(
 		context.Background(),
 		got,
-		Options{
+		common.Options{
 			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
 				InitContainers: []*kubernetesplatform.InitContainer{
 					{Name: "fetch-config", Image: "busybox:1.36"},
@@ -4075,9 +4004,6 @@ func Test_extendPodSpecPatch_InitContainers_AdminSecurityDefaults(t *testing.T) 
 			DefaultHostUsers:    &hostUsers,
 		},
 		nil,
-		nil,
-		nil,
-		map[string]*structpb.Value{},
 		nil,
 	)
 	assert.Nil(t, err)
@@ -4104,58 +4030,44 @@ func Test_extendPodSpecPatch_InitContainers_AdminSecurityDefaults(t *testing.T) 
 	assert.False(t, *got.HostUsers)
 }
 
-func Test_extendPodSpecPatch_InvalidResourceQuantities(t *testing.T) {
+func Test_extendPodSpecPatch_InvalidStorageQuantities(t *testing.T) {
 	invalidSize := "invalid-size"
 	tests := []struct {
 		name       string
 		k8sExecCfg *kubernetesplatform.KubernetesExecutorConfig
+		errorText  string
 	}{
 		{
-			name: "Invalid Generic Ephemeral Volume size",
+			name: "generic ephemeral volume",
 			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
 				GenericEphemeralVolume: []*kubernetesplatform.GenericEphemeralVolume{
-					{
-						VolumeName: "ephemeral1",
-						MountPath:  "/mnt/data",
-						Size:       "invalid-size",
-					},
+					{VolumeName: "ephemeral", MountPath: "/mnt/data", Size: invalidSize},
 				},
 			},
+			errorText: "failed to parse generic ephemeral volume size",
 		},
 		{
-			name: "Invalid EmptyDir size limit",
+			name: "emptyDir size limit",
 			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
 				EmptyDirMounts: []*kubernetesplatform.EmptyDirMount{
-					{
-						VolumeName: "emptydir1",
-						MountPath:  "/mnt/data",
-						SizeLimit:  &invalidSize,
-					},
+					{VolumeName: "emptydir", MountPath: "/mnt/data", SizeLimit: &invalidSize},
 				},
 			},
+			errorText: "failed to parse size limit",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			podSpec := &k8score.PodSpec{
-				Containers: []k8score.Container{
-					{
-						Name: "main",
-					},
-				},
-			}
+			podSpec := &k8score.PodSpec{Containers: []k8score.Container{{Name: "main"}}}
 			err := extendPodSpecPatch(
 				context.Background(),
 				podSpec,
-				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				common.Options{KubernetesExecutorConfig: tt.k8sExecCfg},
 				nil,
 				nil,
-				nil,
-				nil,
-				&TaskConfig{},
 			)
-			assert.Error(t, err)
+			assert.ErrorContains(t, err, tt.errorText)
 		})
 	}
 }
@@ -4577,11 +4489,8 @@ func Test_extendPodSpecPatch_PodResourceClaims(t *testing.T) {
 			err := extendPodSpecPatch(
 				context.Background(),
 				got,
-				Options{TaskName: tt.taskName, KubernetesExecutorConfig: tt.k8sExecCfg},
-				nil,
-				nil,
-				nil,
-				tt.inputParams,
+				common.Options{TaskName: tt.taskName, KubernetesExecutorConfig: tt.k8sExecCfg},
+				mapToIOParameters(tt.inputParams),
 				taskConfig,
 			)
 
@@ -4613,10 +4522,7 @@ func Test_extendPodSpecPatch_PodResourceClaims_Passthrough_NotAppliedToPod(t *te
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{KubernetesExecutorConfig: cfg, Component: comp},
-		nil,
-		nil,
-		nil,
+		common.Options{KubernetesExecutorConfig: cfg, Component: comp},
 		nil,
 		taskCfg,
 	)
@@ -4646,10 +4552,7 @@ func Test_extendPodSpecPatch_PodResourceClaims_Passthrough_AppliedToPod(t *testi
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{KubernetesExecutorConfig: cfg, Component: comp},
-		nil,
-		nil,
-		nil,
+		common.Options{KubernetesExecutorConfig: cfg, Component: comp},
 		nil,
 		taskCfg,
 	)
@@ -4677,10 +4580,7 @@ func Test_extendPodSpecPatch_PodResourceClaims_DefaultSetOnPod(t *testing.T) {
 	err := extendPodSpecPatch(
 		context.Background(),
 		podSpec,
-		Options{KubernetesExecutorConfig: cfg, Component: comp},
-		nil,
-		nil,
-		nil,
+		common.Options{KubernetesExecutorConfig: cfg, Component: comp},
 		nil,
 		taskCfg,
 	)

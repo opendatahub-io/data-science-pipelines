@@ -34,26 +34,31 @@ class V2beta1ListArtifactResponse(object):
     """
     openapi_types = {
         'artifacts': 'list[V2beta1Artifact]',
+        'total_size': 'int',
         'next_page_token': 'str'
     }
 
     attribute_map = {
         'artifacts': 'artifacts',
+        'total_size': 'total_size',
         'next_page_token': 'next_page_token'
     }
 
-    def __init__(self, artifacts=None, next_page_token=None, local_vars_configuration=None):  # noqa: E501
+    def __init__(self, artifacts=None, total_size=None, next_page_token=None, local_vars_configuration=None):  # noqa: E501
         """V2beta1ListArtifactResponse - a model defined in OpenAPI"""  # noqa: E501
         if local_vars_configuration is None:
             local_vars_configuration = Configuration()
         self.local_vars_configuration = local_vars_configuration
 
         self._artifacts = None
+        self._total_size = None
         self._next_page_token = None
         self.discriminator = None
 
         if artifacts is not None:
             self.artifacts = artifacts
+        if total_size is not None:
+            self.total_size = total_size
         if next_page_token is not None:
             self.next_page_token = next_page_token
 
@@ -61,7 +66,7 @@ class V2beta1ListArtifactResponse(object):
     def artifacts(self):
         """Gets the artifacts of this V2beta1ListArtifactResponse.  # noqa: E501
 
-        List of retrieved artifacts.  # noqa: E501
+        The list of artifacts returned.  # noqa: E501
 
         :return: The artifacts of this V2beta1ListArtifactResponse.  # noqa: E501
         :rtype: list[V2beta1Artifact]
@@ -72,7 +77,7 @@ class V2beta1ListArtifactResponse(object):
     def artifacts(self, artifacts):
         """Sets the artifacts of this V2beta1ListArtifactResponse.
 
-        List of retrieved artifacts.  # noqa: E501
+        The list of artifacts returned.  # noqa: E501
 
         :param artifacts: The artifacts of this V2beta1ListArtifactResponse.  # noqa: E501
         :type artifacts: list[V2beta1Artifact]
@@ -81,9 +86,33 @@ class V2beta1ListArtifactResponse(object):
         self._artifacts = artifacts
 
     @property
+    def total_size(self):
+        """Gets the total_size of this V2beta1ListArtifactResponse.  # noqa: E501
+
+        The total number of artifacts available. This field is not always populated.  # noqa: E501
+
+        :return: The total_size of this V2beta1ListArtifactResponse.  # noqa: E501
+        :rtype: int
+        """
+        return self._total_size
+
+    @total_size.setter
+    def total_size(self, total_size):
+        """Sets the total_size of this V2beta1ListArtifactResponse.
+
+        The total number of artifacts available. This field is not always populated.  # noqa: E501
+
+        :param total_size: The total_size of this V2beta1ListArtifactResponse.  # noqa: E501
+        :type total_size: int
+        """
+
+        self._total_size = total_size
+
+    @property
     def next_page_token(self):
         """Gets the next_page_token of this V2beta1ListArtifactResponse.  # noqa: E501
 
+        A token to retrieve the next page of results, or empty if there are no more results in the list.  # noqa: E501
 
         :return: The next_page_token of this V2beta1ListArtifactResponse.  # noqa: E501
         :rtype: str
@@ -94,6 +123,7 @@ class V2beta1ListArtifactResponse(object):
     def next_page_token(self, next_page_token):
         """Sets the next_page_token of this V2beta1ListArtifactResponse.
 
+        A token to retrieve the next page of results, or empty if there are no more results in the list.  # noqa: E501
 
         :param next_page_token: The next_page_token of this V2beta1ListArtifactResponse.  # noqa: E501
         :type next_page_token: str

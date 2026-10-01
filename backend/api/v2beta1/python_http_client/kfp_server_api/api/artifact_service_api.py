@@ -36,19 +36,269 @@ class ArtifactServiceApi(object):
             api_client = ApiClient()
         self.api_client = api_client
 
-    def artifact_service_get_artifact(self, artifact_id, **kwargs):  # noqa: E501
-        """Finds a specific Artifact by ID.  # noqa: E501
+    def batch_create_artifact_tasks(self, body, **kwargs):  # noqa: E501
+        """Creates multiple artifact-task relationships in bulk.  # noqa: E501
 
         This method makes a synchronous HTTP request by default. To make an
         asynchronous HTTP request, please pass async_req=True
 
-        >>> thread = api.artifact_service_get_artifact(artifact_id, async_req=True)
+        >>> thread = api.batch_create_artifact_tasks(body, async_req=True)
         >>> result = thread.get()
 
-        :param artifact_id: Required. The ID of the artifact to be retrieved. (required)
-        :type artifact_id: str
-        :param view: Optional. Set to \"DOWNLOAD\" to included a signed URL with an expiry (default 15 seconds, unless configured other wise). This URL can be used to download the Artifact directly from the Artifact's storage provider. Set to \"BASIC\" to exclude the download_url from server responses, thus preventing the creation of any signed url. Defaults to BASIC.   - ARTIFACT_VIEW_UNSPECIFIED: Not specified, equivalent to BASIC.  - BASIC: Server responses excludes download_url  - DOWNLOAD: Server responses include download_url  - RENDER: Server response includes a signed URL, allowing in-browser rendering or preview of the artifact.
-        :type view: str
+        :param body: (required)
+        :type body: V2beta1CreateArtifactTasksBulkRequest
+        :param async_req: Whether to execute the request asynchronously.
+        :type async_req: bool, optional
+        :param _preload_content: if False, the urllib3.HTTPResponse object will
+                                 be returned without reading/decoding response
+                                 data. Default is True.
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :return: Returns the result object.
+                 If the method is called asynchronously,
+                 returns the request thread.
+        :rtype: V2beta1CreateArtifactTasksBulkResponse
+        """
+        kwargs['_return_http_data_only'] = True
+        return self.batch_create_artifact_tasks_with_http_info(body, **kwargs)  # noqa: E501
+
+    def batch_create_artifact_tasks_with_http_info(self, body, **kwargs):  # noqa: E501
+        """Creates multiple artifact-task relationships in bulk.  # noqa: E501
+
+        This method makes a synchronous HTTP request by default. To make an
+        asynchronous HTTP request, please pass async_req=True
+
+        >>> thread = api.batch_create_artifact_tasks_with_http_info(body, async_req=True)
+        >>> result = thread.get()
+
+        :param body: (required)
+        :type body: V2beta1CreateArtifactTasksBulkRequest
+        :param async_req: Whether to execute the request asynchronously.
+        :type async_req: bool, optional
+        :param _return_http_data_only: response data without head status code
+                                       and headers
+        :type _return_http_data_only: bool, optional
+        :param _preload_content: if False, the urllib3.HTTPResponse object will
+                                 be returned without reading/decoding response
+                                 data. Default is True.
+        :type _preload_content: bool, optional
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :return: Returns the result object.
+                 If the method is called asynchronously,
+                 returns the request thread.
+        :rtype: tuple(V2beta1CreateArtifactTasksBulkResponse, status_code(int), headers(HTTPHeaderDict))
+        """
+
+        local_var_params = locals()
+
+        all_params = [
+            'body'
+        ]
+        all_params.extend(
+            [
+                'async_req',
+                '_return_http_data_only',
+                '_preload_content',
+                '_request_timeout'
+            ]
+        )
+
+        for key, val in six.iteritems(local_var_params['kwargs']):
+            if key not in all_params:
+                raise ApiTypeError(
+                    "Got an unexpected keyword argument '%s'"
+                    " to method batch_create_artifact_tasks" % key
+                )
+            local_var_params[key] = val
+        del local_var_params['kwargs']
+        # verify the required parameter 'body' is set
+        if self.api_client.client_side_validation and ('body' not in local_var_params or  # noqa: E501
+                                                        local_var_params['body'] is None):  # noqa: E501
+            raise ApiValueError("Missing the required parameter `body` when calling `batch_create_artifact_tasks`")  # noqa: E501
+
+        collection_formats = {}
+
+        path_params = {}
+
+        query_params = []
+
+        header_params = {}
+
+        form_params = []
+        local_var_files = {}
+
+        body_params = None
+        if 'body' in local_var_params:
+            body_params = local_var_params['body']
+        # HTTP header `Accept`
+        header_params['Accept'] = self.api_client.select_header_accept(
+            ['application/json'])  # noqa: E501
+
+        # HTTP header `Content-Type`
+        header_params['Content-Type'] = self.api_client.select_header_content_type(  # noqa: E501
+            ['application/json'])  # noqa: E501
+
+        # Authentication setting
+        auth_settings = ['Bearer']  # noqa: E501
+
+        return self.api_client.call_api(
+            '/apis/v2beta1/artifact_tasks:batchCreate', 'POST',
+            path_params,
+            query_params,
+            header_params,
+            body=body_params,
+            post_params=form_params,
+            files=local_var_files,
+            response_type='V2beta1CreateArtifactTasksBulkResponse',  # noqa: E501
+            auth_settings=auth_settings,
+            async_req=local_var_params.get('async_req'),
+            _return_http_data_only=local_var_params.get('_return_http_data_only'),  # noqa: E501
+            _preload_content=local_var_params.get('_preload_content', True),
+            _request_timeout=local_var_params.get('_request_timeout'),
+            collection_formats=collection_formats)
+
+    def batch_create_artifacts(self, body, **kwargs):  # noqa: E501
+        """Creates multiple artifacts in bulk.  # noqa: E501
+
+        This method makes a synchronous HTTP request by default. To make an
+        asynchronous HTTP request, please pass async_req=True
+
+        >>> thread = api.batch_create_artifacts(body, async_req=True)
+        >>> result = thread.get()
+
+        :param body: (required)
+        :type body: V2beta1CreateArtifactsBulkRequest
+        :param async_req: Whether to execute the request asynchronously.
+        :type async_req: bool, optional
+        :param _preload_content: if False, the urllib3.HTTPResponse object will
+                                 be returned without reading/decoding response
+                                 data. Default is True.
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :return: Returns the result object.
+                 If the method is called asynchronously,
+                 returns the request thread.
+        :rtype: V2beta1CreateArtifactsBulkResponse
+        """
+        kwargs['_return_http_data_only'] = True
+        return self.batch_create_artifacts_with_http_info(body, **kwargs)  # noqa: E501
+
+    def batch_create_artifacts_with_http_info(self, body, **kwargs):  # noqa: E501
+        """Creates multiple artifacts in bulk.  # noqa: E501
+
+        This method makes a synchronous HTTP request by default. To make an
+        asynchronous HTTP request, please pass async_req=True
+
+        >>> thread = api.batch_create_artifacts_with_http_info(body, async_req=True)
+        >>> result = thread.get()
+
+        :param body: (required)
+        :type body: V2beta1CreateArtifactsBulkRequest
+        :param async_req: Whether to execute the request asynchronously.
+        :type async_req: bool, optional
+        :param _return_http_data_only: response data without head status code
+                                       and headers
+        :type _return_http_data_only: bool, optional
+        :param _preload_content: if False, the urllib3.HTTPResponse object will
+                                 be returned without reading/decoding response
+                                 data. Default is True.
+        :type _preload_content: bool, optional
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :return: Returns the result object.
+                 If the method is called asynchronously,
+                 returns the request thread.
+        :rtype: tuple(V2beta1CreateArtifactsBulkResponse, status_code(int), headers(HTTPHeaderDict))
+        """
+
+        local_var_params = locals()
+
+        all_params = [
+            'body'
+        ]
+        all_params.extend(
+            [
+                'async_req',
+                '_return_http_data_only',
+                '_preload_content',
+                '_request_timeout'
+            ]
+        )
+
+        for key, val in six.iteritems(local_var_params['kwargs']):
+            if key not in all_params:
+                raise ApiTypeError(
+                    "Got an unexpected keyword argument '%s'"
+                    " to method batch_create_artifacts" % key
+                )
+            local_var_params[key] = val
+        del local_var_params['kwargs']
+        # verify the required parameter 'body' is set
+        if self.api_client.client_side_validation and ('body' not in local_var_params or  # noqa: E501
+                                                        local_var_params['body'] is None):  # noqa: E501
+            raise ApiValueError("Missing the required parameter `body` when calling `batch_create_artifacts`")  # noqa: E501
+
+        collection_formats = {}
+
+        path_params = {}
+
+        query_params = []
+
+        header_params = {}
+
+        form_params = []
+        local_var_files = {}
+
+        body_params = None
+        if 'body' in local_var_params:
+            body_params = local_var_params['body']
+        # HTTP header `Accept`
+        header_params['Accept'] = self.api_client.select_header_accept(
+            ['application/json'])  # noqa: E501
+
+        # HTTP header `Content-Type`
+        header_params['Content-Type'] = self.api_client.select_header_content_type(  # noqa: E501
+            ['application/json'])  # noqa: E501
+
+        # Authentication setting
+        auth_settings = ['Bearer']  # noqa: E501
+
+        return self.api_client.call_api(
+            '/apis/v2beta1/artifacts:batchCreate', 'POST',
+            path_params,
+            query_params,
+            header_params,
+            body=body_params,
+            post_params=form_params,
+            files=local_var_files,
+            response_type='V2beta1CreateArtifactsBulkResponse',  # noqa: E501
+            auth_settings=auth_settings,
+            async_req=local_var_params.get('async_req'),
+            _return_http_data_only=local_var_params.get('_return_http_data_only'),  # noqa: E501
+            _preload_content=local_var_params.get('_preload_content', True),
+            _request_timeout=local_var_params.get('_request_timeout'),
+            collection_formats=collection_formats)
+
+    def create_artifact(self, body, **kwargs):  # noqa: E501
+        """Creates a new artifact.  # noqa: E501
+
+        This method makes a synchronous HTTP request by default. To make an
+        asynchronous HTTP request, please pass async_req=True
+
+        >>> thread = api.create_artifact(body, async_req=True)
+        >>> result = thread.get()
+
+        :param body: (required)
+        :type body: V2beta1CreateArtifactRequest
         :param async_req: Whether to execute the request asynchronously.
         :type async_req: bool, optional
         :param _preload_content: if False, the urllib3.HTTPResponse object will
@@ -64,21 +314,19 @@ class ArtifactServiceApi(object):
         :rtype: V2beta1Artifact
         """
         kwargs['_return_http_data_only'] = True
-        return self.artifact_service_get_artifact_with_http_info(artifact_id, **kwargs)  # noqa: E501
+        return self.create_artifact_with_http_info(body, **kwargs)  # noqa: E501
 
-    def artifact_service_get_artifact_with_http_info(self, artifact_id, **kwargs):  # noqa: E501
-        """Finds a specific Artifact by ID.  # noqa: E501
+    def create_artifact_with_http_info(self, body, **kwargs):  # noqa: E501
+        """Creates a new artifact.  # noqa: E501
 
         This method makes a synchronous HTTP request by default. To make an
         asynchronous HTTP request, please pass async_req=True
 
-        >>> thread = api.artifact_service_get_artifact_with_http_info(artifact_id, async_req=True)
+        >>> thread = api.create_artifact_with_http_info(body, async_req=True)
         >>> result = thread.get()
 
-        :param artifact_id: Required. The ID of the artifact to be retrieved. (required)
-        :type artifact_id: str
-        :param view: Optional. Set to \"DOWNLOAD\" to included a signed URL with an expiry (default 15 seconds, unless configured other wise). This URL can be used to download the Artifact directly from the Artifact's storage provider. Set to \"BASIC\" to exclude the download_url from server responses, thus preventing the creation of any signed url. Defaults to BASIC.   - ARTIFACT_VIEW_UNSPECIFIED: Not specified, equivalent to BASIC.  - BASIC: Server responses excludes download_url  - DOWNLOAD: Server responses include download_url  - RENDER: Server response includes a signed URL, allowing in-browser rendering or preview of the artifact.
-        :type view: str
+        :param body: (required)
+        :type body: V2beta1CreateArtifactRequest
         :param async_req: Whether to execute the request asynchronously.
         :type async_req: bool, optional
         :param _return_http_data_only: response data without head status code
@@ -101,8 +349,7 @@ class ArtifactServiceApi(object):
         local_var_params = locals()
 
         all_params = [
-            'artifact_id',
-            'view'
+            'body'
         ]
         all_params.extend(
             [
@@ -117,14 +364,266 @@ class ArtifactServiceApi(object):
             if key not in all_params:
                 raise ApiTypeError(
                     "Got an unexpected keyword argument '%s'"
-                    " to method artifact_service_get_artifact" % key
+                    " to method create_artifact" % key
+                )
+            local_var_params[key] = val
+        del local_var_params['kwargs']
+        # verify the required parameter 'body' is set
+        if self.api_client.client_side_validation and ('body' not in local_var_params or  # noqa: E501
+                                                        local_var_params['body'] is None):  # noqa: E501
+            raise ApiValueError("Missing the required parameter `body` when calling `create_artifact`")  # noqa: E501
+
+        collection_formats = {}
+
+        path_params = {}
+
+        query_params = []
+
+        header_params = {}
+
+        form_params = []
+        local_var_files = {}
+
+        body_params = None
+        if 'body' in local_var_params:
+            body_params = local_var_params['body']
+        # HTTP header `Accept`
+        header_params['Accept'] = self.api_client.select_header_accept(
+            ['application/json'])  # noqa: E501
+
+        # HTTP header `Content-Type`
+        header_params['Content-Type'] = self.api_client.select_header_content_type(  # noqa: E501
+            ['application/json'])  # noqa: E501
+
+        # Authentication setting
+        auth_settings = ['Bearer']  # noqa: E501
+
+        return self.api_client.call_api(
+            '/apis/v2beta1/artifacts', 'POST',
+            path_params,
+            query_params,
+            header_params,
+            body=body_params,
+            post_params=form_params,
+            files=local_var_files,
+            response_type='V2beta1Artifact',  # noqa: E501
+            auth_settings=auth_settings,
+            async_req=local_var_params.get('async_req'),
+            _return_http_data_only=local_var_params.get('_return_http_data_only'),  # noqa: E501
+            _preload_content=local_var_params.get('_preload_content', True),
+            _request_timeout=local_var_params.get('_request_timeout'),
+            collection_formats=collection_formats)
+
+    def create_artifact_task(self, body, **kwargs):  # noqa: E501
+        """Creates an artifact-task relationship.  # noqa: E501
+
+        This method makes a synchronous HTTP request by default. To make an
+        asynchronous HTTP request, please pass async_req=True
+
+        >>> thread = api.create_artifact_task(body, async_req=True)
+        >>> result = thread.get()
+
+        :param body: (required)
+        :type body: V2beta1CreateArtifactTaskRequest
+        :param async_req: Whether to execute the request asynchronously.
+        :type async_req: bool, optional
+        :param _preload_content: if False, the urllib3.HTTPResponse object will
+                                 be returned without reading/decoding response
+                                 data. Default is True.
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :return: Returns the result object.
+                 If the method is called asynchronously,
+                 returns the request thread.
+        :rtype: V2beta1ArtifactTask
+        """
+        kwargs['_return_http_data_only'] = True
+        return self.create_artifact_task_with_http_info(body, **kwargs)  # noqa: E501
+
+    def create_artifact_task_with_http_info(self, body, **kwargs):  # noqa: E501
+        """Creates an artifact-task relationship.  # noqa: E501
+
+        This method makes a synchronous HTTP request by default. To make an
+        asynchronous HTTP request, please pass async_req=True
+
+        >>> thread = api.create_artifact_task_with_http_info(body, async_req=True)
+        >>> result = thread.get()
+
+        :param body: (required)
+        :type body: V2beta1CreateArtifactTaskRequest
+        :param async_req: Whether to execute the request asynchronously.
+        :type async_req: bool, optional
+        :param _return_http_data_only: response data without head status code
+                                       and headers
+        :type _return_http_data_only: bool, optional
+        :param _preload_content: if False, the urllib3.HTTPResponse object will
+                                 be returned without reading/decoding response
+                                 data. Default is True.
+        :type _preload_content: bool, optional
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :return: Returns the result object.
+                 If the method is called asynchronously,
+                 returns the request thread.
+        :rtype: tuple(V2beta1ArtifactTask, status_code(int), headers(HTTPHeaderDict))
+        """
+
+        local_var_params = locals()
+
+        all_params = [
+            'body'
+        ]
+        all_params.extend(
+            [
+                'async_req',
+                '_return_http_data_only',
+                '_preload_content',
+                '_request_timeout'
+            ]
+        )
+
+        for key, val in six.iteritems(local_var_params['kwargs']):
+            if key not in all_params:
+                raise ApiTypeError(
+                    "Got an unexpected keyword argument '%s'"
+                    " to method create_artifact_task" % key
+                )
+            local_var_params[key] = val
+        del local_var_params['kwargs']
+        # verify the required parameter 'body' is set
+        if self.api_client.client_side_validation and ('body' not in local_var_params or  # noqa: E501
+                                                        local_var_params['body'] is None):  # noqa: E501
+            raise ApiValueError("Missing the required parameter `body` when calling `create_artifact_task`")  # noqa: E501
+
+        collection_formats = {}
+
+        path_params = {}
+
+        query_params = []
+
+        header_params = {}
+
+        form_params = []
+        local_var_files = {}
+
+        body_params = None
+        if 'body' in local_var_params:
+            body_params = local_var_params['body']
+        # HTTP header `Accept`
+        header_params['Accept'] = self.api_client.select_header_accept(
+            ['application/json'])  # noqa: E501
+
+        # HTTP header `Content-Type`
+        header_params['Content-Type'] = self.api_client.select_header_content_type(  # noqa: E501
+            ['application/json'])  # noqa: E501
+
+        # Authentication setting
+        auth_settings = ['Bearer']  # noqa: E501
+
+        return self.api_client.call_api(
+            '/apis/v2beta1/artifact_tasks', 'POST',
+            path_params,
+            query_params,
+            header_params,
+            body=body_params,
+            post_params=form_params,
+            files=local_var_files,
+            response_type='V2beta1ArtifactTask',  # noqa: E501
+            auth_settings=auth_settings,
+            async_req=local_var_params.get('async_req'),
+            _return_http_data_only=local_var_params.get('_return_http_data_only'),  # noqa: E501
+            _preload_content=local_var_params.get('_preload_content', True),
+            _request_timeout=local_var_params.get('_request_timeout'),
+            collection_formats=collection_formats)
+
+    def get_artifact(self, artifact_id, **kwargs):  # noqa: E501
+        """Finds a specific Artifact by ID.  # noqa: E501
+
+        This method makes a synchronous HTTP request by default. To make an
+        asynchronous HTTP request, please pass async_req=True
+
+        >>> thread = api.get_artifact(artifact_id, async_req=True)
+        >>> result = thread.get()
+
+        :param artifact_id: Required. The ID of the artifact to be retrieved. (required)
+        :type artifact_id: str
+        :param async_req: Whether to execute the request asynchronously.
+        :type async_req: bool, optional
+        :param _preload_content: if False, the urllib3.HTTPResponse object will
+                                 be returned without reading/decoding response
+                                 data. Default is True.
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :return: Returns the result object.
+                 If the method is called asynchronously,
+                 returns the request thread.
+        :rtype: V2beta1Artifact
+        """
+        kwargs['_return_http_data_only'] = True
+        return self.get_artifact_with_http_info(artifact_id, **kwargs)  # noqa: E501
+
+    def get_artifact_with_http_info(self, artifact_id, **kwargs):  # noqa: E501
+        """Finds a specific Artifact by ID.  # noqa: E501
+
+        This method makes a synchronous HTTP request by default. To make an
+        asynchronous HTTP request, please pass async_req=True
+
+        >>> thread = api.get_artifact_with_http_info(artifact_id, async_req=True)
+        >>> result = thread.get()
+
+        :param artifact_id: Required. The ID of the artifact to be retrieved. (required)
+        :type artifact_id: str
+        :param async_req: Whether to execute the request asynchronously.
+        :type async_req: bool, optional
+        :param _return_http_data_only: response data without head status code
+                                       and headers
+        :type _return_http_data_only: bool, optional
+        :param _preload_content: if False, the urllib3.HTTPResponse object will
+                                 be returned without reading/decoding response
+                                 data. Default is True.
+        :type _preload_content: bool, optional
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :return: Returns the result object.
+                 If the method is called asynchronously,
+                 returns the request thread.
+        :rtype: tuple(V2beta1Artifact, status_code(int), headers(HTTPHeaderDict))
+        """
+
+        local_var_params = locals()
+
+        all_params = [
+            'artifact_id'
+        ]
+        all_params.extend(
+            [
+                'async_req',
+                '_return_http_data_only',
+                '_preload_content',
+                '_request_timeout'
+            ]
+        )
+
+        for key, val in six.iteritems(local_var_params['kwargs']):
+            if key not in all_params:
+                raise ApiTypeError(
+                    "Got an unexpected keyword argument '%s'"
+                    " to method get_artifact" % key
                 )
             local_var_params[key] = val
         del local_var_params['kwargs']
         # verify the required parameter 'artifact_id' is set
         if self.api_client.client_side_validation and ('artifact_id' not in local_var_params or  # noqa: E501
                                                         local_var_params['artifact_id'] is None):  # noqa: E501
-            raise ApiValueError("Missing the required parameter `artifact_id` when calling `artifact_service_get_artifact`")  # noqa: E501
+            raise ApiValueError("Missing the required parameter `artifact_id` when calling `get_artifact`")  # noqa: E501
 
         collection_formats = {}
 
@@ -133,8 +632,6 @@ class ArtifactServiceApi(object):
             path_params['artifact_id'] = local_var_params['artifact_id']  # noqa: E501
 
         query_params = []
-        if 'view' in local_var_params and local_var_params['view'] is not None:  # noqa: E501
-            query_params.append(('view', local_var_params['view']))  # noqa: E501
 
         header_params = {}
 
@@ -165,25 +662,195 @@ class ArtifactServiceApi(object):
             _request_timeout=local_var_params.get('_request_timeout'),
             collection_formats=collection_formats)
 
-    def artifact_service_list_artifacts(self, **kwargs):  # noqa: E501
-        """Finds all artifacts within the specified namespace. Namespace field is required. In multi-user mode, the caller is required to have RBAC verb \"list\" on the \"artifacts\" resource for the specified namespace.  # noqa: E501
+    def list_artifact_tasks(self, **kwargs):  # noqa: E501
+        """Lists artifact-task relationships.  # noqa: E501
 
         This method makes a synchronous HTTP request by default. To make an
         asynchronous HTTP request, please pass async_req=True
 
-        >>> thread = api.artifact_service_list_artifacts(async_req=True)
+        >>> thread = api.list_artifact_tasks(async_req=True)
         >>> result = thread.get()
 
-        :param max_result_size: Optional. Max number of resources to return in the result. A value of zero or less will result in the default (20). The API implementation also enforces an upper-bound of 100, and picks the minimum between this value and the one specified here. [default = 20]
-        :type max_result_size: int
-        :param order_by_field: Optional. Ordering field. [default = ID]
-        :type order_by_field: str
-        :param order_by: Optional. Can be either \"asc\" (ascending) or \"desc\" (descending). [default = asc]
-        :type order_by: str
-        :param next_page_token: Optional. The next_page_token value returned from a previous List request, if any.
-        :type next_page_token: str
-        :param namespace: Required. Namespace of the Artifact's context.
+        :param task_ids: At least one of task_ids, run_ids, or artifact_ids is required. Optional, filter artifact task by a set of task_ids.
+        :type task_ids: list[str]
+        :param run_ids: Optional, filter artifact task by a set of run_ids.
+        :type run_ids: list[str]
+        :param artifact_ids: Optional, filter artifact task by a set of artifact_ids.
+        :type artifact_ids: list[str]
+        :param type: Optional. Only list artifact tasks that have artifacts of this type.   - UNSPECIFIED: For validation  - COMPONENT_DEFAULT_INPUT: This is used for inputs that are provided via default parameters in the component input definitions  - TASK_OUTPUT_INPUT: This is used for inputs that are provided via upstream tasks. In the sdk this appears as: TaskInputsSpec.kind.task_output_parameter & TaskInputsSpec.kind.task_output_artifact  - COMPONENT_INPUT: Used for inputs that are passed from parent tasks.  - RUNTIME_VALUE_INPUT: Hardcoded values passed as arguments to the task.  - COLLECTED_INPUTS: Used for dsl.Collected Usage of this type indicates that all Artifacts within the IOArtifact.artifacts are inputs collected from sub tasks with ITERATOR_OUTPUT outputs.  - ITERATOR_INPUT: In a for loop task, introduced via ParallelFor, this type is used to indicate whether this resolved input belongs to a parameterIterator or artifactIterator. In such a case the \"artifacts\" field for IOArtifact.artifacts is the list of resolved items for this parallelFor.  - ITERATOR_INPUT_RAW: Hardcoded iterator parameters. Raw Iterator inputs have no producer  - ITERATOR_OUTPUT: When an output is produced by a Runtime Iteration Task This value is use to differentiate between standard inputs  - OUTPUT: All other output types fall under this type.  - ONE_OF_OUTPUT: An output of a Conditions branch.
+        :type type: str
+        :param page_token:
+        :type page_token: str
+        :param page_size:
+        :type page_size: int
+        :param sort_by:
+        :type sort_by: str
+        :param filter:
+        :type filter: str
+        :param async_req: Whether to execute the request asynchronously.
+        :type async_req: bool, optional
+        :param _preload_content: if False, the urllib3.HTTPResponse object will
+                                 be returned without reading/decoding response
+                                 data. Default is True.
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :return: Returns the result object.
+                 If the method is called asynchronously,
+                 returns the request thread.
+        :rtype: V2beta1ListArtifactTasksResponse
+        """
+        kwargs['_return_http_data_only'] = True
+        return self.list_artifact_tasks_with_http_info(**kwargs)  # noqa: E501
+
+    def list_artifact_tasks_with_http_info(self, **kwargs):  # noqa: E501
+        """Lists artifact-task relationships.  # noqa: E501
+
+        This method makes a synchronous HTTP request by default. To make an
+        asynchronous HTTP request, please pass async_req=True
+
+        >>> thread = api.list_artifact_tasks_with_http_info(async_req=True)
+        >>> result = thread.get()
+
+        :param task_ids: At least one of task_ids, run_ids, or artifact_ids is required. Optional, filter artifact task by a set of task_ids.
+        :type task_ids: list[str]
+        :param run_ids: Optional, filter artifact task by a set of run_ids.
+        :type run_ids: list[str]
+        :param artifact_ids: Optional, filter artifact task by a set of artifact_ids.
+        :type artifact_ids: list[str]
+        :param type: Optional. Only list artifact tasks that have artifacts of this type.   - UNSPECIFIED: For validation  - COMPONENT_DEFAULT_INPUT: This is used for inputs that are provided via default parameters in the component input definitions  - TASK_OUTPUT_INPUT: This is used for inputs that are provided via upstream tasks. In the sdk this appears as: TaskInputsSpec.kind.task_output_parameter & TaskInputsSpec.kind.task_output_artifact  - COMPONENT_INPUT: Used for inputs that are passed from parent tasks.  - RUNTIME_VALUE_INPUT: Hardcoded values passed as arguments to the task.  - COLLECTED_INPUTS: Used for dsl.Collected Usage of this type indicates that all Artifacts within the IOArtifact.artifacts are inputs collected from sub tasks with ITERATOR_OUTPUT outputs.  - ITERATOR_INPUT: In a for loop task, introduced via ParallelFor, this type is used to indicate whether this resolved input belongs to a parameterIterator or artifactIterator. In such a case the \"artifacts\" field for IOArtifact.artifacts is the list of resolved items for this parallelFor.  - ITERATOR_INPUT_RAW: Hardcoded iterator parameters. Raw Iterator inputs have no producer  - ITERATOR_OUTPUT: When an output is produced by a Runtime Iteration Task This value is use to differentiate between standard inputs  - OUTPUT: All other output types fall under this type.  - ONE_OF_OUTPUT: An output of a Conditions branch.
+        :type type: str
+        :param page_token:
+        :type page_token: str
+        :param page_size:
+        :type page_size: int
+        :param sort_by:
+        :type sort_by: str
+        :param filter:
+        :type filter: str
+        :param async_req: Whether to execute the request asynchronously.
+        :type async_req: bool, optional
+        :param _return_http_data_only: response data without head status code
+                                       and headers
+        :type _return_http_data_only: bool, optional
+        :param _preload_content: if False, the urllib3.HTTPResponse object will
+                                 be returned without reading/decoding response
+                                 data. Default is True.
+        :type _preload_content: bool, optional
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :return: Returns the result object.
+                 If the method is called asynchronously,
+                 returns the request thread.
+        :rtype: tuple(V2beta1ListArtifactTasksResponse, status_code(int), headers(HTTPHeaderDict))
+        """
+
+        local_var_params = locals()
+
+        all_params = [
+            'task_ids',
+            'run_ids',
+            'artifact_ids',
+            'type',
+            'page_token',
+            'page_size',
+            'sort_by',
+            'filter'
+        ]
+        all_params.extend(
+            [
+                'async_req',
+                '_return_http_data_only',
+                '_preload_content',
+                '_request_timeout'
+            ]
+        )
+
+        for key, val in six.iteritems(local_var_params['kwargs']):
+            if key not in all_params:
+                raise ApiTypeError(
+                    "Got an unexpected keyword argument '%s'"
+                    " to method list_artifact_tasks" % key
+                )
+            local_var_params[key] = val
+        del local_var_params['kwargs']
+
+        collection_formats = {}
+
+        path_params = {}
+
+        query_params = []
+        if 'task_ids' in local_var_params and local_var_params['task_ids'] is not None:  # noqa: E501
+            query_params.append(('task_ids', local_var_params['task_ids']))  # noqa: E501
+            collection_formats['task_ids'] = 'multi'  # noqa: E501
+        if 'run_ids' in local_var_params and local_var_params['run_ids'] is not None:  # noqa: E501
+            query_params.append(('run_ids', local_var_params['run_ids']))  # noqa: E501
+            collection_formats['run_ids'] = 'multi'  # noqa: E501
+        if 'artifact_ids' in local_var_params and local_var_params['artifact_ids'] is not None:  # noqa: E501
+            query_params.append(('artifact_ids', local_var_params['artifact_ids']))  # noqa: E501
+            collection_formats['artifact_ids'] = 'multi'  # noqa: E501
+        if 'type' in local_var_params and local_var_params['type'] is not None:  # noqa: E501
+            query_params.append(('type', local_var_params['type']))  # noqa: E501
+        if 'page_token' in local_var_params and local_var_params['page_token'] is not None:  # noqa: E501
+            query_params.append(('page_token', local_var_params['page_token']))  # noqa: E501
+        if 'page_size' in local_var_params and local_var_params['page_size'] is not None:  # noqa: E501
+            query_params.append(('page_size', local_var_params['page_size']))  # noqa: E501
+        if 'sort_by' in local_var_params and local_var_params['sort_by'] is not None:  # noqa: E501
+            query_params.append(('sort_by', local_var_params['sort_by']))  # noqa: E501
+        if 'filter' in local_var_params and local_var_params['filter'] is not None:  # noqa: E501
+            query_params.append(('filter', local_var_params['filter']))  # noqa: E501
+
+        header_params = {}
+
+        form_params = []
+        local_var_files = {}
+
+        body_params = None
+        # HTTP header `Accept`
+        header_params['Accept'] = self.api_client.select_header_accept(
+            ['application/json'])  # noqa: E501
+
+        # Authentication setting
+        auth_settings = ['Bearer']  # noqa: E501
+
+        return self.api_client.call_api(
+            '/apis/v2beta1/artifact_tasks', 'GET',
+            path_params,
+            query_params,
+            header_params,
+            body=body_params,
+            post_params=form_params,
+            files=local_var_files,
+            response_type='V2beta1ListArtifactTasksResponse',  # noqa: E501
+            auth_settings=auth_settings,
+            async_req=local_var_params.get('async_req'),
+            _return_http_data_only=local_var_params.get('_return_http_data_only'),  # noqa: E501
+            _preload_content=local_var_params.get('_preload_content', True),
+            _request_timeout=local_var_params.get('_request_timeout'),
+            collection_formats=collection_formats)
+
+    def list_artifacts(self, **kwargs):  # noqa: E501
+        """Finds all artifacts within the specified namespace.  # noqa: E501
+
+        This method makes a synchronous HTTP request by default. To make an
+        asynchronous HTTP request, please pass async_req=True
+
+        >>> thread = api.list_artifacts(async_req=True)
+        >>> result = thread.get()
+
+        :param namespace: Optional input. Namespace for the artifacts.
         :type namespace: str
+        :param page_token: A page token to request the results page.
+        :type page_token: str
+        :param page_size: The number of artifacts to be listed per page. If there are more artifacts than this number, the response message will contain a valid value in the nextPageToken field.
+        :type page_size: int
+        :param sort_by: Sorting order in form of \"field_name\", \"field_name asc\" or \"field_name desc\". Ascending by default.
+        :type sort_by: str
+        :param filter: A url-encoded, JSON-serialized filter protocol buffer (see [filter.proto](https://github.com/kubeflow/pipelines/blob/master/backend/api/v2beta1/filter.proto)).
+        :type filter: str
         :param async_req: Whether to execute the request asynchronously.
         :type async_req: bool, optional
         :param _preload_content: if False, the urllib3.HTTPResponse object will
@@ -199,27 +866,27 @@ class ArtifactServiceApi(object):
         :rtype: V2beta1ListArtifactResponse
         """
         kwargs['_return_http_data_only'] = True
-        return self.artifact_service_list_artifacts_with_http_info(**kwargs)  # noqa: E501
+        return self.list_artifacts_with_http_info(**kwargs)  # noqa: E501
 
-    def artifact_service_list_artifacts_with_http_info(self, **kwargs):  # noqa: E501
-        """Finds all artifacts within the specified namespace. Namespace field is required. In multi-user mode, the caller is required to have RBAC verb \"list\" on the \"artifacts\" resource for the specified namespace.  # noqa: E501
+    def list_artifacts_with_http_info(self, **kwargs):  # noqa: E501
+        """Finds all artifacts within the specified namespace.  # noqa: E501
 
         This method makes a synchronous HTTP request by default. To make an
         asynchronous HTTP request, please pass async_req=True
 
-        >>> thread = api.artifact_service_list_artifacts_with_http_info(async_req=True)
+        >>> thread = api.list_artifacts_with_http_info(async_req=True)
         >>> result = thread.get()
 
-        :param max_result_size: Optional. Max number of resources to return in the result. A value of zero or less will result in the default (20). The API implementation also enforces an upper-bound of 100, and picks the minimum between this value and the one specified here. [default = 20]
-        :type max_result_size: int
-        :param order_by_field: Optional. Ordering field. [default = ID]
-        :type order_by_field: str
-        :param order_by: Optional. Can be either \"asc\" (ascending) or \"desc\" (descending). [default = asc]
-        :type order_by: str
-        :param next_page_token: Optional. The next_page_token value returned from a previous List request, if any.
-        :type next_page_token: str
-        :param namespace: Required. Namespace of the Artifact's context.
+        :param namespace: Optional input. Namespace for the artifacts.
         :type namespace: str
+        :param page_token: A page token to request the results page.
+        :type page_token: str
+        :param page_size: The number of artifacts to be listed per page. If there are more artifacts than this number, the response message will contain a valid value in the nextPageToken field.
+        :type page_size: int
+        :param sort_by: Sorting order in form of \"field_name\", \"field_name asc\" or \"field_name desc\". Ascending by default.
+        :type sort_by: str
+        :param filter: A url-encoded, JSON-serialized filter protocol buffer (see [filter.proto](https://github.com/kubeflow/pipelines/blob/master/backend/api/v2beta1/filter.proto)).
+        :type filter: str
         :param async_req: Whether to execute the request asynchronously.
         :type async_req: bool, optional
         :param _return_http_data_only: response data without head status code
@@ -242,11 +909,11 @@ class ArtifactServiceApi(object):
         local_var_params = locals()
 
         all_params = [
-            'max_result_size',
-            'order_by_field',
-            'order_by',
-            'next_page_token',
-            'namespace'
+            'namespace',
+            'page_token',
+            'page_size',
+            'sort_by',
+            'filter'
         ]
         all_params.extend(
             [
@@ -261,7 +928,7 @@ class ArtifactServiceApi(object):
             if key not in all_params:
                 raise ApiTypeError(
                     "Got an unexpected keyword argument '%s'"
-                    " to method artifact_service_list_artifacts" % key
+                    " to method list_artifacts" % key
                 )
             local_var_params[key] = val
         del local_var_params['kwargs']
@@ -271,16 +938,16 @@ class ArtifactServiceApi(object):
         path_params = {}
 
         query_params = []
-        if 'max_result_size' in local_var_params and local_var_params['max_result_size'] is not None:  # noqa: E501
-            query_params.append(('max_result_size', local_var_params['max_result_size']))  # noqa: E501
-        if 'order_by_field' in local_var_params and local_var_params['order_by_field'] is not None:  # noqa: E501
-            query_params.append(('order_by_field', local_var_params['order_by_field']))  # noqa: E501
-        if 'order_by' in local_var_params and local_var_params['order_by'] is not None:  # noqa: E501
-            query_params.append(('order_by', local_var_params['order_by']))  # noqa: E501
-        if 'next_page_token' in local_var_params and local_var_params['next_page_token'] is not None:  # noqa: E501
-            query_params.append(('next_page_token', local_var_params['next_page_token']))  # noqa: E501
         if 'namespace' in local_var_params and local_var_params['namespace'] is not None:  # noqa: E501
             query_params.append(('namespace', local_var_params['namespace']))  # noqa: E501
+        if 'page_token' in local_var_params and local_var_params['page_token'] is not None:  # noqa: E501
+            query_params.append(('page_token', local_var_params['page_token']))  # noqa: E501
+        if 'page_size' in local_var_params and local_var_params['page_size'] is not None:  # noqa: E501
+            query_params.append(('page_size', local_var_params['page_size']))  # noqa: E501
+        if 'sort_by' in local_var_params and local_var_params['sort_by'] is not None:  # noqa: E501
+            query_params.append(('sort_by', local_var_params['sort_by']))  # noqa: E501
+        if 'filter' in local_var_params and local_var_params['filter'] is not None:  # noqa: E501
+            query_params.append(('filter', local_var_params['filter']))  # noqa: E501
 
         header_params = {}
 

@@ -2,11 +2,7 @@ name: KFP API Integration V2 (Legacy)
 
 on:
   push:
-    branches:
-      - master
-      - main
-      - stable
-      - 'rhoai-*'
+    branches: [master]
 
   pull_request:
     paths:
@@ -105,24 +101,15 @@ jobs:
         if: ${{ matrix.db_type == 'pgx' && steps.deploy.outcome == 'success' }}
         run: kubectl -n kubeflow port-forward svc/postgres-service 5432:5432 &
 
-      - name: Forward MLMD port
-        id: forward-mlmd-port
-        if: ${{ steps.deploy.outcome == 'success' }}
-        run: |
-          MLMD_SERVICE="${{ steps.deploy.outputs.mlmd_service_name }}"
-          echo "🔗 Forwarding MLMD port for service: $MLMD_SERVICE"
-          kubectl -n kubeflow port-forward svc/$MLMD_SERVICE 8080:8080 &
-        continue-on-error: true
-
       - name: Start network observability
         id: network-observability
-        if: ${{ steps.forward-mlmd-port.outcome == 'success' }}
+        if: ${{ steps.deploy.outcome == 'success' }}
         run: ./.github/resources/scripts/network-observability.sh start kubeflow /tmp/tmp-network-observability
         continue-on-error: true
 
       - name: API integration tests v2
         id: tests
-        if: ${{ steps.forward-mlmd-port.outcome == 'success' }}
+        if: ${{ steps.deploy.outcome == 'success' }}
         working-directory: ./backend/test/v2/integration
         # The PVC cache scenario runs in its own matrix job; the main group
         # skips only that subtest. The union is the original suite, while each
@@ -132,19 +119,12 @@ jobs:
         # overrun into an explicit annotation instead of a buried panic.
         shell: bash
         run: |
-          API_SCHEME="http"
-          API_URL="http://localhost:8888"
-          if [ "${{ matrix.pod_to_pod_tls_enabled }}" == "true" ]; then
-            API_SCHEME="https"
-            API_URL="https://localhost:8888"
-          fi
           FILTER_ARGS=(-skip '^TestCache$/^TestCacheSingleRunWithPVC_SameName_Caches$')
           if [[ "${{ matrix.test_group }}" == "pvc-cache" ]]; then
             FILTER_ARGS=(-run '^TestCache$/^TestCacheSingleRunWithPVC_SameName_Caches$')
           fi
           go test -v -timeout 20m "${FILTER_ARGS[@]}" ./... \
             -args -runIntegrationTests=true -namespace=kubeflow \
-            -apiScheme="$API_SCHEME" -apiUrl="$API_URL" \
             -tlsEnabled=${{ matrix.pod_to_pod_tls_enabled }} \
             -caCertPath=${{ env.CA_CERT_PATH }} \
             -repoName=${{ github.repository }} \
@@ -159,7 +139,7 @@ jobs:
         continue-on-error: true
 
       - name: Report network observability
-        if: ${{ always() && steps.forward-mlmd-port.outcome == 'success' }}
+        if: ${{ always() && steps.network-observability.outcome == 'success' }}
         shell: bash
         run: |
           ./.github/resources/scripts/network-observability.sh stop kubeflow /tmp/tmp-network-observability || true
@@ -196,7 +176,7 @@ jobs:
           echo "::error title=Legacy V2 suite exceeded its ${BUDGET} test budget::The sharded go test group was killed by -timeout (${BUDGET}), discarding its results. See the job summary for timing and cluster-state guidance."
 
       - name: Collect failed logs
-        if: ${{ steps.deploy.outcome != 'success' || steps.forward-mlmd-port.outcome != 'success' || steps.tests.outcome != 'success' }}
+        if: ${{ steps.deploy.outcome != 'success' || steps.tests.outcome != 'success' }}
         run: |
           ./.github/resources/scripts/collect-logs.sh --ns kubeflow --output /tmp/tmp_pod_log.txt
           exit 1
