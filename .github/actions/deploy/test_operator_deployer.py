@@ -36,10 +36,20 @@ def _make_deployer(repo_owner='opendatahub-io',
 class TestOperatorSourceSelection(unittest.TestCase):
 
     def test_master_maps_to_operator_main(self):
-        self.assertEqual(OperatorDeployer._operator_branch('master'), 'main')
+        self.assertEqual(
+            OperatorDeployer._operator_branch('master', 'opendatahub-io'),
+            'main')
 
-    def test_stable_remains_stable(self):
-        self.assertEqual(OperatorDeployer._operator_branch('stable'), 'stable')
+    def test_stable_remains_stable_for_odh(self):
+        self.assertEqual(
+            OperatorDeployer._operator_branch('stable', 'opendatahub-io'),
+            'stable')
+
+    def test_stable_maps_to_main_for_rhds(self):
+        self.assertEqual(
+            OperatorDeployer._operator_branch(
+                'stable', 'red-hat-data-services'),
+            'main')
 
     @patch('operator_deployer.os.path.exists', return_value=False)
     def test_clone_prefers_fork_branch(self, _):
@@ -95,6 +105,20 @@ class TestOperatorSourceSelection(unittest.TestCase):
                 deployer.clone_operator_repo()
         clone.assert_called_once_with(
             'opendatahub-io', 'stable',
+            '/tmp/test/data-science-pipelines-operator')
+
+    @patch('operator_deployer.os.path.exists', return_value=False)
+    def test_rhds_required_stable_clones_main(self, _):
+        deployer = _make_deployer(
+            repo_owner='red-hat-data-services',
+            target_branch='stable',
+            operator_upstream_owner='red-hat-data-services',
+            operator_branch_required=True)
+        with patch.object(
+                deployer, '_clone_from_branch', return_value=True) as clone:
+            deployer.clone_operator_repo()
+        clone.assert_called_once_with(
+            'red-hat-data-services', 'main',
             '/tmp/test/data-science-pipelines-operator')
 
     @patch('operator_deployer.os.path.exists', return_value=False)
