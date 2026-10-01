@@ -78,19 +78,28 @@ jobs:
         proxy: [ "true", "false" ]
         argo_version: [ "v3.7.18", "v4.1.2" ]
         pipeline_store: [ "database" ]
-        pod_to_pod_tls_enabled: [ "true"]
+        pod_to_pod_tls_enabled: [ "false" ]
         db_type: [ "mysql", "pgx" ]
         include:
           - k8s_version: "v1.33.12"
             cache_enabled: "true"
+            proxy: "false"
             argo_version: "v3.7.18"
+            pipeline_store: "database"
+            pod_to_pod_tls_enabled: "false"
             db_type: "mysql"
           - k8s_version: "v1.33.12"
             cache_enabled: "true"
+            proxy: "false"
             argo_version: "v4.1.2"
+            pipeline_store: "database"
+            pod_to_pod_tls_enabled: "false"
             db_type: "mysql"
           - k8s_version: "v1.36.1"
             cache_enabled: "true"
+            proxy: "false"
+            argo_version: "v3.7.18"
+            pipeline_store: "database"
             pod_to_pod_tls_enabled: "true"
             db_type: "mysql"
         exclude:
@@ -216,6 +225,13 @@ jobs:
         argo_version: [ "v3.7.18", "v4.1.2" ]
         pipeline_store: [ "kubernetes" ]
         pod_to_pod_tls_enabled: [ "true" ]
+        include:
+          - k8s_version: "v1.35.0"
+            cache_enabled: "true"
+            argo_version: "v3.7.18"
+            pipeline_store: "kubernetes"
+            pod_to_pod_tls_enabled: "false"
+            uploadPipelinesWithKubernetesClient: "false"
       fail-fast: false # So that failure in 1 type of parameterized job does not cause other jobs to terminate prematurely
     name: KFP API Server tests K8s Native API - K8sVersion=${{ matrix.k8s_version }} podToPodTlsEnabled=${{ matrix.pod_to_pod_tls_enabled }} cacheEnabled=${{ matrix.cache_enabled }} argoVersion=${{ matrix.argo_version }} uploadPipelinesWithKubernetesClient=${{ matrix.uploadPipelinesWithKubernetesClient }}
 
@@ -240,9 +256,9 @@ jobs:
           pipeline_store: ${{ matrix.pipeline_store }}
           cache_enabled: ${{ matrix.cache_enabled }}
           argo_version: ${{ matrix.argo_version }}
-          image_path: images_${{ github.run_id }}
-          image_tag: latest
-          image_registry: kind-registry:5000
+          image_path: ${{ needs.build.outputs.IMAGE_PATH }}
+          image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
+          image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
           pod_to_pod_tls_enabled: ${{ matrix.pod_to_pod_tls_enabled }}
           skip_operator_deployment: ${{ env.SKIP_OPERATOR_DEPLOYMENT }}
 
@@ -268,6 +284,7 @@ jobs:
           deployment_mode: ${{ steps.deploy.outputs.deployment_mode }}
 
   api-test-multi-user:
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -321,9 +338,9 @@ jobs:
           cache_enabled: ${{ matrix.cache_enabled }}
           multi_user: ${{ matrix.multi_user }}
           db_type: ${{ matrix.db_type }}
-          image_path: images_${{ github.run_id }}
-          image_tag: latest
-          image_registry: kind-registry:5000
+          image_path: ${{ needs.build.outputs.IMAGE_PATH }}
+          image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
+          image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
 
       - name: Configure Input Variables
         shell: bash
