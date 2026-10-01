@@ -414,7 +414,6 @@ func TestValidatePipelineURL_AllowedCIDRStillNeedsDomain(t *testing.T) {
 	// The override only relaxes the IP check; the domain allowlist still applies.
 	viper.Set(common.PipelineURLValidationEnabled, "true")
 	err := ValidatePipelineURL("https://10.20.30.40/pipeline.yaml")
-	//assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not in allowlist")
 
 	viper.Set("PIPELINE_URL_ALLOWED_DOMAINS", "10.20.30.40")
