@@ -9,6 +9,7 @@ import (
 	"github.com/kubeflow/pipelines/kubernetes_platform/go/kubernetesplatform"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 	k8score "k8s.io/api/core/v1"
 	k8sres "k8s.io/apimachinery/pkg/api/resource"
@@ -109,6 +110,7 @@ func Test_makeVolumeMountPatch(t *testing.T) {
 				nil,
 				nil,
 				tt.inputParams,
+				nil,
 			)
 			assert.Nil(t, err)
 			assert.Equal(t, 1, len(volumeMounts))
@@ -2341,7 +2343,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminSetPreserved(t *testing.T) {
 	)
 	assert.Nil(t, err)
 	assert.NotNil(t, got)
-	// Admin-set values are preserved; user-specified values are ignored.
+	// Administrator-set values are preserved; user-specified values are ignored.
 	assert.Equal(t, int64(1000), *got.Containers[0].SecurityContext.RunAsUser)
 	assert.Equal(t, int64(0), *got.Containers[0].SecurityContext.RunAsGroup)
 	// Capabilities always dropped.
@@ -2366,7 +2368,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminDefaultsNoUserOverride(t *test
 		nil,
 	)
 	assert.Nil(t, err)
-	// Admin defaults are applied even without user SecurityContext.
+	// Administrator defaults are applied even without user SecurityContext.
 	assert.Equal(t, int64(1000), *got.Containers[0].SecurityContext.RunAsUser)
 }
 
@@ -2423,7 +2425,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminRunAsNonRoot(t *testing.T) {
 	)
 	assert.Nil(t, err)
 	assert.NotNil(t, got)
-	// Admin-set runAsNonRoot is preserved; user-specified value is ignored.
+	// Administrator-set runAsNonRoot is preserved; user-specified value is ignored.
 	assert.True(t, *got.Containers[0].SecurityContext.RunAsNonRoot)
 	// Capabilities always dropped.
 	assert.Equal(t, &k8score.Capabilities{Drop: []k8score.Capability{"ALL"}}, got.Containers[0].SecurityContext.Capabilities)
@@ -2447,7 +2449,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminRunAsNonRootNoUserOverride(t *
 		nil,
 	)
 	assert.Nil(t, err)
-	// Admin defaults are applied even without user SecurityContext.
+	// Administrator defaults are applied even without user SecurityContext.
 	assert.True(t, *got.Containers[0].SecurityContext.RunAsNonRoot)
 }
 
@@ -2474,6 +2476,165 @@ func Test_extendPodSpecPatch_SecurityContext_UserRunAsNonRootNoAdmin(t *testing.
 	assert.Nil(t, err)
 	// User-specified runAsNonRoot is applied when no admin default is set.
 	assert.True(t, *got.Containers[0].SecurityContext.RunAsNonRoot)
+}
+
+func Test_extendPodSpecPatch_SecurityContext_RootRejectedWhenRunAsNonRootEnforced(t *testing.T) {
+	adminRunAsNonRoot := true
+	rootUID := int64(0)
+
+	got := &k8score.PodSpec{Containers: []k8score.Container{
+		{Name: "main"},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		got,
+		Options{
+			DefaultRunAsNonRoot: &adminRunAsNonRoot,
+			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+				SecurityContext: &kubernetesplatform.SecurityContext{
+					RunAsUser: &rootUID,
+				},
+			},
+		},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	// runAsUser=0 must be rejected when admin enforces runAsNonRoot=true.
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "runAsUser=0 (root) is not allowed")
+}
+
+func Test_extendPodSpecPatch_SecurityContext_NonRootAllowedWhenRunAsNonRootEnforced(t *testing.T) {
+	adminRunAsNonRoot := true
+	nonRootUID := int64(1000)
+
+	got := &k8score.PodSpec{Containers: []k8score.Container{
+		{Name: "main"},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		got,
+		Options{
+			DefaultRunAsNonRoot: &adminRunAsNonRoot,
+			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+				SecurityContext: &kubernetesplatform.SecurityContext{
+					RunAsUser: &nonRootUID,
+				},
+			},
+		},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	require.Nil(t, err)
+	require.Equal(t, nonRootUID, *got.Containers[0].SecurityContext.RunAsUser)
+}
+
+func Test_extendPodSpecPatch_SecurityContext_NonRootAllowedOnHardenedContainer(t *testing.T) {
+	nonRootUID := int64(1000)
+	allowPrivEsc := false
+
+	got := &k8score.PodSpec{Containers: []k8score.Container{
+		{
+			Name: "main",
+			SecurityContext: &k8score.SecurityContext{
+				AllowPrivilegeEscalation: &allowPrivEsc,
+			},
+		},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		got,
+		Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+			SecurityContext: &kubernetesplatform.SecurityContext{
+				RunAsUser: &nonRootUID,
+			},
+		}},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	// Non-root UID is allowed even on hardened containers.
+	require.Nil(t, err)
+	require.Equal(t, nonRootUID, *got.Containers[0].SecurityContext.RunAsUser)
+}
+
+func Test_extendPodSpecPatch_SecurityContext_RootRejectedWithUserRunAsNonRoot(t *testing.T) {
+	rootUID := int64(0)
+	userRunAsNonRoot := true
+
+	got := &k8score.PodSpec{Containers: []k8score.Container{
+		{Name: "main"},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		got,
+		Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+			SecurityContext: &kubernetesplatform.SecurityContext{
+				RunAsUser:    &rootUID,
+				RunAsNonRoot: &userRunAsNonRoot,
+			},
+		}},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	// Component sets runAsNonRoot=true and runAsUser=0 — contradiction must be rejected.
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "runAsUser=0 (root) is not allowed")
+}
+
+func Test_extendPodSpecPatch_SecurityContext_RootRejectedWhenAdminRunAsNonRootFalseOverridesUser(t *testing.T) {
+	adminRunAsNonRoot := false
+	rootUID := int64(0)
+	userRunAsNonRoot := true
+
+	got := &k8score.PodSpec{Containers: []k8score.Container{
+		{Name: "main"},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		got,
+		Options{
+			DefaultRunAsNonRoot: &adminRunAsNonRoot,
+			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+				SecurityContext: &kubernetesplatform.SecurityContext{
+					RunAsUser:    &rootUID,
+					RunAsNonRoot: &userRunAsNonRoot,
+				},
+			},
+		},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	// ODH rejects root workloads regardless of runAsNonRoot overrides.
+	require.ErrorContains(t, err, "runAsUser=0 (root) is not allowed")
+}
+
+func Test_extendPodSpecPatch_SecurityContext_RootRejectedWithUserRunAsNonRootFalse(t *testing.T) {
+	rootUID := int64(0)
+	userRunAsNonRoot := false
+
+	got := &k8score.PodSpec{Containers: []k8score.Container{
+		{Name: "main"},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		got,
+		Options{KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+			SecurityContext: &kubernetesplatform.SecurityContext{
+				RunAsUser:    &rootUID,
+				RunAsNonRoot: &userRunAsNonRoot,
+			},
+		}},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	// ODH rejects root workloads regardless of runAsNonRoot overrides.
+	require.ErrorContains(t, err, "runAsUser=0 (root) is not allowed")
 }
 
 func Test_extendPodSpecPatch_ImagePullPolicy(t *testing.T) {
@@ -3409,6 +3570,592 @@ func Test_buildPVCDataSource(t *testing.T) {
 					assert.Nil(t, result.APIGroup)
 				}
 			}
+		})
+	}
+}
+
+func Test_extendPodSpecPatch_DefaultHostUsersFalse(t *testing.T) {
+	hostUsersInDedicatedNamespace := false
+
+	podSpec := &k8score.PodSpec{Containers: []k8score.Container{
+		{Name: "main"},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		podSpec,
+		Options{
+			DefaultHostUsers: &hostUsersInDedicatedNamespace,
+		},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	assert.Nil(t, err)
+	assert.NotNil(t, podSpec.HostUsers)
+	// hostUsers: false places the pod in a dedicated Linux user namespace,
+	// so UID 0 inside the container maps to an unprivileged host UID.
+	assert.False(t, *podSpec.HostUsers)
+}
+
+func Test_extendPodSpecPatch_DefaultHostUsersTrue(t *testing.T) {
+	hostUsersInHostNamespace := true
+
+	podSpec := &k8score.PodSpec{Containers: []k8score.Container{
+		{Name: "main"},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		podSpec,
+		Options{
+			DefaultHostUsers: &hostUsersInHostNamespace,
+		},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	assert.Nil(t, err)
+	assert.NotNil(t, podSpec.HostUsers)
+	assert.True(t, *podSpec.HostUsers)
+}
+
+func Test_extendPodSpecPatch_DefaultHostUsersNil(t *testing.T) {
+	podSpec := &k8score.PodSpec{Containers: []k8score.Container{
+		{Name: "main"},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		podSpec,
+		Options{
+			DefaultHostUsers: nil,
+		},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	assert.Nil(t, err)
+	// When the administrator default is not set, hostUsers is left unspecified so the
+	// Kubernetes default (host user namespace) applies.
+	assert.Nil(t, podSpec.HostUsers)
+}
+
+// ODH rejects root workloads even when a dedicated user namespace is configured.
+func Test_extendPodSpecPatch_RootUserWithHostUsersNamespace(t *testing.T) {
+	hostUsersInDedicatedNamespace := false
+	rootUserIdentifier := int64(0)
+
+	podSpec := &k8score.PodSpec{Containers: []k8score.Container{
+		{Name: "main"},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		podSpec,
+		Options{
+			DefaultHostUsers: &hostUsersInDedicatedNamespace,
+			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+				SecurityContext: &kubernetesplatform.SecurityContext{
+					RunAsUser: &rootUserIdentifier,
+				},
+			},
+		},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	assert.ErrorContains(t, err, "runAsUser=0 (root) is not allowed")
+}
+
+// Test_extendPodSpecPatch_HostUsersAdminOverrideProtection verifies that the
+// post-processing guard re-applies the administrator's hostUsers default even
+// when a user-supplied podSpecPatch has set hostUsers to a different value.
+func Test_extendPodSpecPatch_HostUsersAdminOverrideProtection(t *testing.T) {
+	adminFalse := false
+	// Simulate user setting hostUsers=true via podSpecPatch before
+	// the post-processing guard runs.
+	userTrue := true
+	podSpec := &k8score.PodSpec{
+		Containers: []k8score.Container{{Name: "main"}},
+		HostUsers:  &userTrue,
+	}
+	err := extendPodSpecPatch(
+		context.Background(),
+		podSpec,
+		Options{
+			DefaultHostUsers: &adminFalse,
+		},
+		nil, nil, nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	assert.Nil(t, err)
+	// The administrator's false must override the user's true.
+	assert.NotNil(t, podSpec.HostUsers)
+	assert.False(t, *podSpec.HostUsers)
+}
+
+func Test_extendPodSpecPatch_InitContainers(t *testing.T) {
+	allowPrivilegeEscalation := false
+	hardenedSecurityContext := &k8score.SecurityContext{
+		AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+		Capabilities: &k8score.Capabilities{
+			Drop: []k8score.Capability{"ALL"},
+		},
+		SeccompProfile: &k8score.SeccompProfile{
+			Type: k8score.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+	restartPolicyAlwaysValue := string(k8score.ContainerRestartPolicyAlways)
+	restartPolicyAlways := k8score.ContainerRestartPolicyAlways
+	restartPolicyNever := "Never"
+	tests := []struct {
+		name        string
+		k8sExecCfg  *kubernetesplatform.KubernetesExecutorConfig
+		expected    *k8score.PodSpec
+		expectedErr string
+	}{
+		{
+			name: "Valid - all fields",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{
+						Name:    "fetch-config",
+						Image:   "busybox:1.36",
+						Command: []string{"sh", "-c"},
+						Args:    []string{"wget -O /config/settings.json $CONFIG_URL"},
+						Env: []*kubernetesplatform.InitContainer_EnvVar{
+							{Name: "CONFIG_URL", Value: "http://config-server/settings.json"},
+						},
+						VolumeMounts: []*kubernetesplatform.InitContainer_VolumeMount{
+							{VolumeName: "config-volume", MountPath: "/config"},
+						},
+					},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{
+					{
+						Name: "main",
+					},
+				},
+				InitContainers: []k8score.Container{
+					{
+						Name: "kfp-launcher",
+					},
+					{
+						Name:    "fetch-config",
+						Image:   "busybox:1.36",
+						Command: []string{"sh", "-c"},
+						Args:    []string{"wget -O /config/settings.json $CONFIG_URL"},
+						Env: []k8score.EnvVar{
+							{Name: "CONFIG_URL", Value: "http://config-server/settings.json"},
+						},
+						VolumeMounts: []k8score.VolumeMount{
+							{Name: "config-volume", MountPath: "/config"},
+						},
+						SecurityContext: hardenedSecurityContext,
+					},
+				},
+			},
+		},
+		{
+			name: "Valid - multiple init containers preserve order",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{Name: "first-init", Image: "busybox:1.36"},
+					{Name: "second-init", Image: "busybox:1.36"},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{
+					{
+						Name: "main",
+					},
+				},
+				InitContainers: []k8score.Container{
+					{
+						Name: "kfp-launcher",
+					},
+					{
+						Name:            "first-init",
+						Image:           "busybox:1.36",
+						SecurityContext: hardenedSecurityContext,
+					},
+					{
+						Name:            "second-init",
+						Image:           "busybox:1.36",
+						SecurityContext: hardenedSecurityContext,
+					},
+				},
+			},
+		},
+		{
+			name:       "Valid - no init containers",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{
+					{
+						Name: "main",
+					},
+				},
+				InitContainers: []k8score.Container{
+					{
+						Name: "kfp-launcher",
+					},
+				},
+			},
+		},
+		{
+			name: "Valid - combined with image pull policy",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				ImagePullPolicy: "Always",
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{Name: "prepare-data", Image: "busybox:1.36"},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{
+					{
+						Name:            "main",
+						ImagePullPolicy: k8score.PullAlways,
+					},
+				},
+				InitContainers: []k8score.Container{
+					{
+						Name: "kfp-launcher",
+					},
+					{
+						Name:            "prepare-data",
+						Image:           "busybox:1.36",
+						SecurityContext: hardenedSecurityContext,
+					},
+				},
+			},
+		},
+		{
+			name: "Invalid - reserved launcher name",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{Name: "kfp-launcher", Image: "busybox:1.36"},
+				},
+			},
+			expectedErr: `init container name "kfp-launcher" conflicts with an existing container in the pod`,
+		},
+		{
+			name: "Invalid - empty name",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{Name: "", Image: "busybox:1.36"},
+				},
+			},
+			expectedErr: "init container name must not be empty",
+		},
+		{
+			name: "Invalid - missing image",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{Name: "fetch-config"},
+				},
+			},
+			expectedErr: `init container "fetch-config" must specify an image`,
+		},
+		{
+			name: "Invalid - duplicate name",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{Name: "fetch-config", Image: "busybox:1.36"},
+					{Name: "fetch-config", Image: "busybox:1.36"},
+				},
+			},
+			expectedErr: `init container name "fetch-config" conflicts with an existing container in the pod`,
+		},
+		{
+			name: "Invalid - empty environment variable name",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{
+						Name:  "fetch-config",
+						Image: "busybox:1.36",
+						Env: []*kubernetesplatform.InitContainer_EnvVar{
+							{Name: "", Value: "value"},
+						},
+					},
+				},
+			},
+			expectedErr: `init container "fetch-config" has an environment variable with an empty name`,
+		},
+		{
+			name: "Invalid - empty volume name in volume mount",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{
+						Name:  "fetch-config",
+						Image: "busybox:1.36",
+						VolumeMounts: []*kubernetesplatform.InitContainer_VolumeMount{
+							{VolumeName: "", MountPath: "/config"},
+						},
+					},
+				},
+			},
+			expectedErr: `init container "fetch-config" has a volume mount with an empty volume name`,
+		},
+		{
+			name: "Invalid - relative mount path",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{
+						Name:  "fetch-config",
+						Image: "busybox:1.36",
+						VolumeMounts: []*kubernetesplatform.InitContainer_VolumeMount{
+							{VolumeName: "config-volume", MountPath: "config"},
+						},
+					},
+				},
+			},
+			expectedErr: `init container "fetch-config" volume mount "config-volume" must use an absolute mount path`,
+		},
+		{
+			name: "Valid - native sidecar via restart policy Always",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{
+						Name:          "log-forwarder",
+						Image:         "busybox:1.36",
+						RestartPolicy: &restartPolicyAlwaysValue,
+					},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{
+					{
+						Name: "main",
+					},
+				},
+				InitContainers: []k8score.Container{
+					{
+						Name: "kfp-launcher",
+					},
+					{
+						Name:            "log-forwarder",
+						Image:           "busybox:1.36",
+						RestartPolicy:   &restartPolicyAlways,
+						SecurityContext: hardenedSecurityContext,
+					},
+				},
+			},
+		},
+		{
+			name: "Invalid - unsupported restart policy",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{
+						Name:          "log-forwarder",
+						Image:         "busybox:1.36",
+						RestartPolicy: &restartPolicyNever,
+					},
+				},
+			},
+			expectedErr: `init container "log-forwarder" restart policy must be "Always", got "Never"`,
+		},
+		{
+			name: "Valid - sidecar with resource requests and limits",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{
+						Name:          "log-forwarder",
+						Image:         "busybox:1.36",
+						RestartPolicy: &restartPolicyAlwaysValue,
+						Resources: &kubernetesplatform.InitContainer_ResourceRequirements{
+							Requests: map[string]string{"cpu": "250m", "memory": "128Mi"},
+							Limits:   map[string]string{"cpu": "500m", "memory": "256Mi"},
+						},
+					},
+				},
+			},
+			expected: &k8score.PodSpec{
+				Containers: []k8score.Container{
+					{
+						Name: "main",
+					},
+				},
+				InitContainers: []k8score.Container{
+					{
+						Name: "kfp-launcher",
+					},
+					{
+						Name:          "log-forwarder",
+						Image:         "busybox:1.36",
+						RestartPolicy: &restartPolicyAlways,
+						Resources: k8score.ResourceRequirements{
+							Requests: k8score.ResourceList{
+								k8score.ResourceCPU:    k8sres.MustParse("250m"),
+								k8score.ResourceMemory: k8sres.MustParse("128Mi"),
+							},
+							Limits: k8score.ResourceList{
+								k8score.ResourceCPU:    k8sres.MustParse("500m"),
+								k8score.ResourceMemory: k8sres.MustParse("256Mi"),
+							},
+						},
+						SecurityContext: hardenedSecurityContext,
+					},
+				},
+			},
+		},
+		{
+			name: "Invalid - unparseable resource quantity",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{
+						Name:  "log-forwarder",
+						Image: "busybox:1.36",
+						Resources: &kubernetesplatform.InitContainer_ResourceRequirements{
+							Requests: map[string]string{"cpu": "not-a-quantity"},
+						},
+					},
+				},
+			},
+			expectedErr: `init container "log-forwarder" has an invalid resource request cpu="not-a-quantity"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := &k8score.PodSpec{
+				Containers: []k8score.Container{
+					{
+						Name: "main",
+					},
+				},
+				InitContainers: []k8score.Container{
+					{
+						Name: "kfp-launcher",
+					},
+				},
+			}
+			err := extendPodSpecPatch(
+				context.Background(),
+				got,
+				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				nil,
+				nil,
+				nil,
+				map[string]*structpb.Value{},
+				nil,
+			)
+			if tt.expectedErr != "" {
+				assert.ErrorContains(t, err, tt.expectedErr)
+				return
+			}
+			assert.Nil(t, err)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func Test_extendPodSpecPatch_InitContainers_AdminSecurityDefaults(t *testing.T) {
+	runAsUser := int64(1000)
+	runAsGroup := int64(2000)
+	runAsNonRoot := true
+	hostUsers := false
+	allowPrivilegeEscalation := false
+	got := &k8score.PodSpec{Containers: []k8score.Container{
+		{
+			Name: "main",
+		},
+	}}
+	err := extendPodSpecPatch(
+		context.Background(),
+		got,
+		Options{
+			KubernetesExecutorConfig: &kubernetesplatform.KubernetesExecutorConfig{
+				InitContainers: []*kubernetesplatform.InitContainer{
+					{Name: "fetch-config", Image: "busybox:1.36"},
+				},
+			},
+			DefaultRunAsUser:    &runAsUser,
+			DefaultRunAsGroup:   &runAsGroup,
+			DefaultRunAsNonRoot: &runAsNonRoot,
+			DefaultHostUsers:    &hostUsers,
+		},
+		nil,
+		nil,
+		nil,
+		map[string]*structpb.Value{},
+		nil,
+	)
+	assert.Nil(t, err)
+	assert.Len(t, got.InitContainers, 1)
+	initContainerSecurityContext := got.InitContainers[0].SecurityContext
+	assert.Equal(t, &k8score.SecurityContext{
+		AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+		Capabilities: &k8score.Capabilities{
+			Drop: []k8score.Capability{"ALL"},
+		},
+		SeccompProfile: &k8score.SeccompProfile{
+			Type: k8score.SeccompProfileTypeRuntimeDefault,
+		},
+		RunAsUser:    &runAsUser,
+		RunAsGroup:   &runAsGroup,
+		RunAsNonRoot: &runAsNonRoot,
+	}, initContainerSecurityContext)
+	// The main container carries the same administrator identity defaults.
+	assert.Equal(t, &runAsUser, got.Containers[0].SecurityContext.RunAsUser)
+	assert.Equal(t, &runAsGroup, got.Containers[0].SecurityContext.RunAsGroup)
+	assert.Equal(t, &runAsNonRoot, got.Containers[0].SecurityContext.RunAsNonRoot)
+	// hostUsers is pod-level and therefore applies to init containers too.
+	assert.NotNil(t, got.HostUsers)
+	assert.False(t, *got.HostUsers)
+}
+
+func Test_extendPodSpecPatch_InvalidResourceQuantities(t *testing.T) {
+	invalidSize := "invalid-size"
+	tests := []struct {
+		name       string
+		k8sExecCfg *kubernetesplatform.KubernetesExecutorConfig
+	}{
+		{
+			name: "Invalid Generic Ephemeral Volume size",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				GenericEphemeralVolume: []*kubernetesplatform.GenericEphemeralVolume{
+					{
+						VolumeName: "ephemeral1",
+						MountPath:  "/mnt/data",
+						Size:       "invalid-size",
+					},
+				},
+			},
+		},
+		{
+			name: "Invalid EmptyDir size limit",
+			k8sExecCfg: &kubernetesplatform.KubernetesExecutorConfig{
+				EmptyDirMounts: []*kubernetesplatform.EmptyDirMount{
+					{
+						VolumeName: "emptydir1",
+						MountPath:  "/mnt/data",
+						SizeLimit:  &invalidSize,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			podSpec := &k8score.PodSpec{
+				Containers: []k8score.Container{
+					{
+						Name: "main",
+					},
+				},
+			}
+			err := extendPodSpecPatch(
+				context.Background(),
+				podSpec,
+				Options{KubernetesExecutorConfig: tt.k8sExecCfg},
+				nil,
+				nil,
+				nil,
+				nil,
+				&TaskConfig{},
+			)
+			assert.Error(t, err)
 		})
 	}
 }

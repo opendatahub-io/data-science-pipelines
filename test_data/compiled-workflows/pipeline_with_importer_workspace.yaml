@@ -139,6 +139,15 @@ spec:
       - metadata-grpc-service.kubeflow.svc.cluster.local
       - --mlmd_server_port
       - "8080"
+      - --cache_disabled=false
+      - --ml_pipeline_tls_enabled=false
+      - --metadata_tls_enabled=false
+      - --ca_cert_path
+      - ""
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
       command:
       - launcher-v2
       env:
@@ -205,6 +214,8 @@ spec:
       - '{{workflow.name}}'
       - --run_display_name
       - ""
+      - --pipeline_job_create_time_utc
+      - '{{workflow.creationTimestamp}}'
       - --dag_execution_id
       - '{{inputs.parameters.parent-dag-id}}'
       - --component
@@ -239,6 +250,15 @@ spec:
       - metadata-grpc-service.kubeflow.svc.cluster.local
       - --mlmd_server_port
       - "8080"
+      - --cache_disabled=false
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
+      - --ml_pipeline_tls_enabled=false
+      - --metadata_tls_enabled=false
+      - --ca_cert_path
+      - ""
       command:
       - driver
       env:
@@ -505,6 +525,8 @@ spec:
       - '{{workflow.name}}'
       - --run_display_name
       - ""
+      - --pipeline_job_create_time_utc
+      - '{{workflow.creationTimestamp}}'
       - --dag_execution_id
       - '{{inputs.parameters.parent-dag-id}}'
       - --component
@@ -537,6 +559,15 @@ spec:
       - metadata-grpc-service.kubeflow.svc.cluster.local
       - --mlmd_server_port
       - "8080"
+      - --cache_disabled=false
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
+      - --ml_pipeline_tls_enabled=false
+      - --metadata_tls_enabled=false
+      - --ca_cert_path
+      - ""
       command:
       - driver
       image: ghcr.io/kubeflow/kfp-driver:latest

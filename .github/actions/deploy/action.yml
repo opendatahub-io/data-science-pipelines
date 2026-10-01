@@ -65,6 +65,10 @@ inputs:
   argo_version:
     required: false
     description: "Argo version to use for the cluster"
+  db_type:
+    description: "The type of database to deploy for testing (mysql or pgx)."
+    required: false
+    default: ""
   forward_port:
     required: false
     default: 'true'
@@ -98,6 +102,11 @@ inputs:
     required: false
     default: 'false'
 
+  load_modelcar_fixture:
+    description: "Load the prebuilt Modelcar test fixture image into Kind."
+    required: false
+    default: 'false'
+
 outputs:
   deployment_name:
     description: "Name of the KFP API server deployment/service"
@@ -124,14 +133,15 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Deploy Squid
-      id: deploy-squid
-      if: ${{ inputs.proxy == 'true' }}
+    - name: Wait for branch image artifacts
+      if: ${{ inputs.skip_load_docker_images != 'true' }}
       shell: bash
-      run: ./.github/resources/squid/deploy-squid.sh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: ./.github/resources/scripts/wait-for-image-artifacts.sh
 
     - name: Download Docker Images
-      uses: actions/download-artifact@v7
+      uses: ./.github/actions/download-artifact-with-retry
       if: ${{ inputs.skip_load_docker_images != 'true' }}
       with:
         path: "images_${{ github.run_id }}"
@@ -158,6 +168,50 @@ runs:
         kind load docker-image python:3.11 --name ${{ inputs.cluster_name }}
         kind load docker-image registry.access.redhat.com/ubi9/python-311:latest --name ${{ inputs.cluster_name }}
 
+    - name: Load Runtime Base Images Into Kind
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        RUNTIME_BASE_IMAGE_ARCHIVE="${{ inputs.image_path }}/runtime-base-images/runtime-base-images.tar"
+
+        if [[ -f "${RUNTIME_BASE_IMAGE_ARCHIVE}" ]]; then
+          if kind --name "${{ inputs.cluster_name }}" load image-archive "${RUNTIME_BASE_IMAGE_ARCHIVE}"; then
+            rm "${RUNTIME_BASE_IMAGE_ARCHIVE}"
+            exit 0
+          fi
+
+          echo "::warning::Failed to load runtime base image archive at ${RUNTIME_BASE_IMAGE_ARCHIVE}; pulling images directly."
+        else
+          echo "::warning::Runtime base image archive not found at ${RUNTIME_BASE_IMAGE_ARCHIVE}; pulling images directly."
+        fi
+        source .github/resources/scripts/helper-functions.sh
+        load_runtime_base_images_into_kind .github/resources/runtime-base-images.txt "${{ inputs.cluster_name }}"
+
+    - name: Load Modelcar Fixture Into Kind
+      if: ${{ inputs.load_modelcar_fixture == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        MODELCAR_IMAGE_ARCHIVE="${{ inputs.image_path }}/runtime-base-images/modelcar.tar"
+        if [[ ! -f "${MODELCAR_IMAGE_ARCHIVE}" ]]; then
+          echo "::error::Modelcar fixture archive not found at ${MODELCAR_IMAGE_ARCHIVE}"
+          exit 1
+        fi
+
+        source .github/resources/scripts/helper-functions.sh
+        retry 3 10 kind --name "${{ inputs.cluster_name }}" \
+          load image-archive "${MODELCAR_IMAGE_ARCHIVE}"
+        rm "${MODELCAR_IMAGE_ARCHIVE}"
+
+    - name: Deploy Tinyproxy
+      id: deploy-tinyproxy
+      if: ${{ inputs.proxy == 'true' }}
+      shell: bash
+      env:
+        CLUSTER_NAME: ${{ inputs.cluster_name }}
+      run: ./.github/resources/tinyproxy/deploy-tinyproxy.sh
+
     - name: Install Python Dependencies
       shell: bash
       run: |
@@ -183,6 +237,7 @@ runs:
         ARGO_NAMESPACE: ${{ inputs.argo_namespace }}
         ARGO_VERSION: ${{ inputs.argo_version }}
         PIPELINE_STORE: ${{ inputs.pipeline_store }}
+        DB_TYPE: ${{ inputs.db_type }}
         PROXY: ${{ inputs.proxy }}
         CACHE_ENABLED: ${{ inputs.cache_enabled }}
         MULTI_USER: ${{ inputs.multi_user }}
@@ -221,6 +276,7 @@ runs:
           --argo-namespace "$ARGO_NAMESPACE" \
           --argo-version "$ARGO_VERSION" \
           --pipeline-store "$PIPELINE_STORE" \
+          --db-type "${DB_TYPE:-mysql}" \
           --proxy "$PROXY" \
           --cache-enabled "$CACHE_ENABLED" \
           --multi-user "$MULTI_USER" \

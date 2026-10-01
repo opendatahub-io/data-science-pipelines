@@ -11,14 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Transform, PassThrough } from 'stream';
+import { Transform, PassThrough, pipeline } from 'stream';
 import * as tar from 'tar-stream';
 import peek from 'peek-stream';
 import gunzip from 'gunzip-maybe';
 import { URL } from 'url';
 import { Client as MinioClient, ClientOptions as MinioClientOptions } from 'minio';
 import { isAWSS3Endpoint } from './aws-helper.js';
-import { S3ProviderInfo } from './handlers/artifacts.js';
+import type { S3ProviderInfo } from './handlers/artifacts.js';
 import { getK8sSecret } from './k8s-helper.js';
 import { parseJSONString } from './utils.js';
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
@@ -28,17 +28,75 @@ export interface MinioRequestConfig {
   key: string;
   client: MinioClient;
   tryExtract?: boolean;
+  /** Receives asynchronous storage or transformation failures from the returned stream. */
+  onError?: (error: Error) => void;
+  onTransformationDetermined?: (transformed: boolean) => void;
 }
 
 /** MinioClientOptionsWithOptionalSecrets wraps around MinioClientOptions where only endPoint is required (accesskey and secretkey are optional). */
 export interface MinioClientOptionsWithOptionalSecrets extends Partial<MinioClientOptions> {
   endPoint: string;
+  endpointRewrite?: string;
 }
 
 export interface Credentials {
   accessKeyId: string;
   secretAccessKey: string;
   sessionToken?: string;
+}
+
+export interface ArtifactStoreEndpoint {
+  endPoint: string;
+  port?: number;
+  useSSL: boolean;
+  origin: string;
+}
+
+export function parseArtifactStoreEndpoint(
+  endpoint: string,
+  insecure: boolean,
+): ArtifactStoreEndpoint | undefined {
+  try {
+    const hasExplicitProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(endpoint);
+    const expectedProtocol = insecure ? 'http:' : 'https:';
+    const parsed = new URL(hasExplicitProtocol ? endpoint : `${expectedProtocol}//${endpoint}`);
+    if (
+      parsed.protocol !== expectedProtocol ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== '/' ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return undefined;
+    }
+    return {
+      endPoint: parsed.hostname,
+      port: parsed.port ? Number(parsed.port) : undefined,
+      useSSL: !insecure,
+      origin: parsed.origin,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Returns the effective origin of an operator-configured object-store client. */
+export function getArtifactStoreOrigin({
+  endPoint,
+  port,
+  useSSL,
+}: Pick<MinioClientOptions, 'endPoint' | 'port' | 'useSSL'>): string | undefined {
+  const insecure = useSSL === false;
+  const endpoint = parseArtifactStoreEndpoint(endPoint, insecure);
+  if (!endpoint) {
+    return undefined;
+  }
+  const origin = new URL(endpoint.origin);
+  if (port !== undefined && !origin.port) {
+    origin.port = String(port);
+  }
+  return origin.origin;
 }
 
 /**
@@ -74,17 +132,23 @@ export async function createMinioClient(
   namespace?: string,
   customCredentialProvider?: () => Promise<Credentials> | Credentials,
 ) {
+  // Provider parsing applies request-specific endpoint and credential fields.
+  // Never let those mutations escape into the shared server configuration.
+  config = { ...config };
+
   if (customCredentialProvider) {
     try {
       const creds = await customCredentialProvider();
 
       if (creds && creds.accessKeyId && creds.secretAccessKey) {
-        return new MinioClient({
-          ...config,
-          accessKey: creds.accessKeyId,
-          secretKey: creds.secretAccessKey,
-          sessionToken: creds.sessionToken,
-        });
+        return new MinioClient(
+          applyEndpointRewrite({
+            ...config,
+            accessKey: creds.accessKeyId,
+            secretKey: creds.secretAccessKey,
+            sessionToken: creds.sessionToken,
+          }) as MinioClientOptions,
+        );
       } else {
         console.warn(
           'Custom credential resolver returned incomplete credentials, falling back to default chain',
@@ -97,16 +161,31 @@ export async function createMinioClient(
   }
 
   if (providerInfoString) {
-    const providerInfo = parseJSONString<S3ProviderInfo>(providerInfoString);
-    if (!providerInfo) {
-      throw new Error('Failed to parse provider info.');
+    const providerInfo = parseJSONString<unknown>(providerInfoString);
+    if (
+      !providerInfo ||
+      typeof providerInfo !== 'object' ||
+      Array.isArray(providerInfo) ||
+      !('Params' in providerInfo) ||
+      !providerInfo.Params ||
+      typeof providerInfo.Params !== 'object' ||
+      Array.isArray(providerInfo.Params)
+    ) {
+      throw new Error('Invalid provider info.');
+    }
+    const typedProviderInfo = providerInfo as S3ProviderInfo;
+    if (
+      typedProviderInfo.Params.fromEnv !== 'true' &&
+      typedProviderInfo.Params.fromEnv !== 'false'
+    ) {
+      throw new Error('Provider info fromEnv must be true or false.');
     }
     // If fromEnv == false, we rely on the default credentials or env to provide credentials (e.g. IRSA)
-    if (providerInfo.Params.fromEnv === 'false') {
+    if (typedProviderInfo.Params.fromEnv === 'false') {
       if (!namespace) {
         throw new Error('Artifact Store provider given, but no namespace provided.');
       } else {
-        config = await parseS3ProviderInfo(config, providerInfo, namespace);
+        config = await parseS3ProviderInfo(config, typedProviderInfo, namespace);
       }
     }
   }
@@ -124,7 +203,14 @@ export async function createMinioClient(
             secretAccessKey: secretKey,
             sessionToken,
           } = awsCredentials;
-          return new MinioClient({ ...config, accessKey, secretKey, sessionToken });
+          return new MinioClient(
+            applyEndpointRewrite({
+              ...config,
+              accessKey,
+              secretKey,
+              sessionToken,
+            }) as MinioClientOptions,
+          );
         }
       } catch (e) {
         console.error('Unable to get aws instance profile credentials: ', e);
@@ -139,19 +225,86 @@ export async function createMinioClient(
   // If using any AWS or S3 compatible store (e.g. minio, aws s3 when using manual creds, ceph, etc.)
   let mc: MinioClient;
   try {
-    mc = await new MinioClient(config as MinioClientOptions);
+    mc = await new MinioClient(applyEndpointRewrite(config) as MinioClientOptions);
   } catch (err) {
-    throw new Error(`Failed to create MinioClient: ${err}`);
+    throw new Error(`Failed to create MinioClient: ${err}`, { cause: err });
   }
   return mc;
 }
 
+function applyEndpointRewrite(
+  config: MinioClientOptionsWithOptionalSecrets,
+): MinioClientOptionsWithOptionalSecrets {
+  const { endpointRewrite, ...clientConfig } = config;
+  const rewriteConfig = endpointRewrite || process.env.MINIO_ENDPOINT_REWRITE || '';
+  if (!rewriteConfig) {
+    return clientConfig;
+  }
+
+  for (const rule of rewriteConfig.split(',')) {
+    const [rawFrom, rawTo] = rule.split('=').map((part) => part.trim());
+    if (!rawFrom || !rawTo) {
+      continue;
+    }
+
+    const from = parseEndpoint(rawFrom);
+    if (!from) {
+      continue;
+    }
+    if (
+      from.host !== clientConfig.endPoint ||
+      (from.port !== undefined && from.port !== clientConfig.port)
+    ) {
+      continue;
+    }
+
+    const to = parseEndpoint(rawTo);
+    if (!to) {
+      continue;
+    }
+    clientConfig.endPoint = to.host;
+    if (to.port !== undefined) {
+      clientConfig.port = to.port;
+    }
+    if (to.useSSL !== undefined) {
+      clientConfig.useSSL = to.useSSL;
+    }
+    break;
+  }
+
+  return clientConfig;
+}
+
+function parseEndpoint(
+  endpoint: string,
+): { host: string; port?: number; useSSL?: boolean } | undefined {
+  try {
+    const url = new URL(endpoint.match(/^https?:\/\//) ? endpoint : `http://${endpoint}`);
+    return {
+      host: url.hostname,
+      port: url.port ? Number(url.port) : undefined,
+      useSSL: endpoint.startsWith('https://')
+        ? true
+        : endpoint.startsWith('http://')
+          ? false
+          : undefined,
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn(`Ignoring invalid MinIO endpoint rewrite endpoint "${endpoint}": ${reason}`);
+    return undefined;
+  }
+}
+
 /**
- * Parse provider info for any S3-compatible store that's not AWS S3.
+ * Parse provider info for any S3-compatible store that is not AWS S3.
  *
- * WARNING: This function is unsupported in multi-user deployments.
- * The ml-pipeline-ui ClusterRole no longer grants secrets:get/list
- * permissions, so getK8sSecret() calls will be denied by RBAC.
+ * Security: This reads a Kubernetes Secret named by the provider info. The
+ * artifact handler only forwards provider info when the requested namespace is
+ * the frontend server's own namespace, so this function never reads Secrets
+ * from a customer namespace. In multi-user deployments the provider info is
+ * dropped for user namespaces and credentials fall back to the server's own
+ * environment credentials or the per-namespace artifact proxy.
  * See: https://github.com/kubeflow/pipelines/pull/12860
  */
 async function parseS3ProviderInfo(
@@ -169,6 +322,18 @@ async function parseS3ProviderInfo(
     );
   }
 
+  let parsedProviderEndpoint: ArtifactStoreEndpoint | undefined;
+  if (providerInfo.Params.endpoint) {
+    const insecure = providerInfo.Params.disableSSL?.toLowerCase() === 'true';
+    parsedProviderEndpoint = parseArtifactStoreEndpoint(providerInfo.Params.endpoint, insecure);
+    if (!parsedProviderEndpoint) {
+      throw new Error('Provider info endpoint is not a valid HTTP(S) origin.');
+    }
+    if (!parsedProviderEndpoint.useSSL && isAWSS3Endpoint(parsedProviderEndpoint.endPoint)) {
+      throw new Error('AWS S3 provider endpoints must use HTTPS.');
+    }
+  }
+
   try {
     config.accessKey = await getK8sSecret(
       providerInfo.Params.secretName,
@@ -183,52 +348,23 @@ async function parseS3ProviderInfo(
   } catch (e) {
     throw new Error(
       `Encountered error when trying to fetch provider secret ${providerInfo.Params.secretName}.`,
+      { cause: e },
     );
   }
 
-  if (isAWSS3Endpoint(providerInfo.Params.endpoint)) {
-    if (providerInfo.Params.endpoint) {
-      if (providerInfo.Params.endpoint.startsWith('https')) {
-        const parseEndpoint = new URL(providerInfo.Params.endpoint);
-        config.endPoint = parseEndpoint.hostname;
-      } else {
-        config.endPoint = providerInfo.Params.endpoint;
-      }
-    } else {
-      throw new Error('Provider info missing endpoint parameter.');
-    }
+  if (parsedProviderEndpoint) {
+    config.endPoint = parsedProviderEndpoint.endPoint;
+    config.port = parsedProviderEndpoint.port;
+    config.useSSL = parsedProviderEndpoint.useSSL;
+  }
 
-    if (providerInfo.Params.region) {
-      config.region = providerInfo.Params.region;
-    }
-
-    // It's possible the user specifies these via config
-    // since aws s3 and s3-compatible use the same config parameters
-    // safeguard the user by ensuring these remain unset (default)
-    config.port = undefined;
-    config.useSSL = undefined;
-  } else {
-    if (providerInfo.Params.endpoint) {
-      const url = providerInfo.Params.endpoint;
-      // this is a bit of a hack to add support for endpoints without a protocol (required by WHATWG URL standard)
-      // example: <ip>:<port> format. In general should expect most endpoints to provide a protocol as serviced
-      // by the backend
-      const parseEndpoint = new URL(url.startsWith('http') ? url : `https://${url}`);
-      const host = parseEndpoint.hostname;
-      const port = parseEndpoint.port;
-      config.endPoint = host;
-      // user provided port in endpoint takes precedence
-      // e.g. if the user has provided <service-name>.<namespace>.svc.cluster.local:<service-port>
-      config.port = port ? Number(port) : undefined;
-    }
-
-    config.region = providerInfo.Params.region ? providerInfo.Params.region : undefined;
-
-    if (providerInfo.Params.disableSSL) {
-      config.useSSL = !(providerInfo.Params.disableSSL.toLowerCase() === 'true');
-    } else {
-      config.useSSL = undefined;
-    }
+  if (providerInfo.Params.region) {
+    config.region = providerInfo.Params.region;
+  } else if (!isAWSS3Endpoint(config.endPoint)) {
+    config.region = undefined;
+  }
+  if (!providerInfo.Params.endpoint && providerInfo.Params.disableSSL) {
+    config.useSSL = !(providerInfo.Params.disableSSL.toLowerCase() === 'true');
   }
   return config;
 }
@@ -259,12 +395,29 @@ export function isTarball(buf: Buffer) {
  * Returns a stream that extracts the first record of a tarball if the source
  * stream is a tarball, otherwise just pipe the content as is.
  */
-export function maybeTarball(): Transform {
+export function maybeTarball(onExtractionDetermined?: (extracted: boolean) => void): Transform {
   return peek(
     { newline: false, maxBuffer: 264 },
     (data: Buffer, swap: (error?: Error, parser?: Transform) => void) => {
-      if (isTarball(data)) swap(undefined, extractFirstTarRecordAsStream());
+      const extracted = isTarball(data);
+      onExtractionDetermined?.(extracted);
+      if (extracted) swap(undefined, extractFirstTarRecordAsStream());
       else swap(undefined, new PassThrough());
+    },
+  );
+}
+
+function detectCompression(onCompressionDetermined: (compressed: boolean) => void): Transform {
+  return peek(
+    { newline: false, maxBuffer: 3 },
+    (data: Buffer, swap: (error?: Error, parser?: Transform) => void) => {
+      // Keep these signatures aligned with gunzip-maybe's is-gzip and
+      // is-deflate dependencies. The callback controls the response filename,
+      // so its decision must match whether gunzip-maybe transforms the bytes.
+      const gzip = data.length >= 3 && data[0] === 0x1f && data[1] === 0x8b && data[2] === 0x08;
+      const deflate = data.length >= 2 && data[0] === 0x78 && [0x01, 0x9c, 0xda].includes(data[1]);
+      onCompressionDetermined(gzip || deflate);
+      swap(undefined, new PassThrough());
     },
   );
 }
@@ -304,6 +457,9 @@ function extractFirstTarRecordAsStream() {
  * @param param.key Key of the object to retrieve.
  * @param param.client Minio client.
  * @param param.tryExtract Whether we try to extract *.tar.gz, default to true.
+ * @param param.onError Optional asynchronous error callback. The returned
+ * stream also emits the same error; callers that omit this callback must
+ * attach their own listener if they need request-specific recovery.
  *
  */
 export async function getObjectStream({
@@ -311,9 +467,33 @@ export async function getObjectStream({
   key,
   client,
   tryExtract = true,
+  onError,
+  onTransformationDetermined,
 }: MinioRequestConfig): Promise<Transform> {
-  const stream = await client.getObject(bucket, key);
-  return tryExtract ? stream.pipe(gunzip()).pipe(maybeTarball()) : stream.pipe(new PassThrough());
+  const source = await client.getObject(bucket, key);
+  let compressed = false;
+  const output = tryExtract
+    ? maybeTarball((extracted) => onTransformationDetermined?.(compressed || extracted))
+    : new PassThrough();
+  const streams = tryExtract
+    ? [source, detectCompression((value) => (compressed = value)), gunzip(), output]
+    : [source, output];
+  if (!tryExtract) {
+    onTransformationDetermined?.(false);
+  }
+  output.once(
+    'error',
+    onError ?? ((error) => console.error('Artifact object stream failed', error)),
+  );
+  // Readable.pipe() does not forward a source error to its destination. Use
+  // pipeline so storage and decompression failures destroy the returned stream
+  // and reach the artifact handler's abort-on-error listener.
+  pipeline(streams, (error) => {
+    if (error && !output.destroyed) {
+      output.destroy(error);
+    }
+  });
+  return output;
 }
 
 /**
@@ -381,6 +561,7 @@ export async function* listObjectsUnderPrefix(
   client: MinioClient,
   bucket: string,
   prefix: string,
+  signal?: AbortSignal,
 ): AsyncGenerator<{ name: string; size: number }> {
   const PAGE_SIZE = 300;
   const listObjectsV2Query = getListObjectsV2Query(client);
@@ -388,7 +569,11 @@ export async function* listObjectsUnderPrefix(
   let isTruncated = true;
 
   while (isTruncated) {
-    const page = await listObjectsV2Query(bucket, prefix, continuationToken, '', PAGE_SIZE, '');
+    if (signal?.aborted) {
+      throw getMinioAbortReason(signal);
+    }
+    const pageRequest = listObjectsV2Query(bucket, prefix, continuationToken, '', PAGE_SIZE, '');
+    const page = signal ? await waitForMinioOperation(pageRequest, signal) : await pageRequest;
 
     for (const item of page.objects) {
       if (item.name) {
@@ -399,6 +584,50 @@ export async function* listObjectsUnderPrefix(
     isTruncated = page.isTruncated;
     continuationToken = page.nextContinuationToken;
   }
+}
+
+function getMinioAbortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error('MinIO operation was aborted');
+}
+
+function waitForMinioOperation<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal.removeEventListener('abort', rejectOnAbort);
+    const rejectOnAbort = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(getMinioAbortReason(signal));
+    };
+
+    if (signal.aborted) {
+      rejectOnAbort();
+    } else {
+      signal.addEventListener('abort', rejectOnAbort, { once: true });
+    }
+
+    void operation.then(
+      (value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(value);
+      },
+      (error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        reject(error);
+      },
+    );
+  });
 }
 
 /**

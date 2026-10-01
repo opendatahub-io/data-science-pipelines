@@ -90,7 +90,7 @@ describe('RecurringRunDetailsV2', () => {
       display_name: 'test_pipeline_version',
       pipeline_id: 'test_pipeline_id',
       pipeline_version_id: 'test_pipeline_version_id',
-      pipeline_spec: JsYaml.safeLoad(v2YamlTemplateString),
+      pipeline_spec: JsYaml.load(v2YamlTemplateString),
     };
 
     vi.clearAllMocks();
@@ -266,7 +266,7 @@ describe('RecurringRunDetailsV2', () => {
 
   it('shows warning banner if has experiment but experiment cannot be fetched. still loads run', async () => {
     fullTestV2RecurringRun.experiment_id = 'test-experiment-id';
-    TestUtils.makeErrorResponseOnce(getExperimentSpy, 'woops!');
+    TestUtils.makeErrorResponse(getExperimentSpy, 'woops!');
     render(
       <CommonTestWrapper>
         <RecurringRunDetailsRouter {...generateProps()} />

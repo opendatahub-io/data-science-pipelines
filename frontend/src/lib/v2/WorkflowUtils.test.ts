@@ -17,6 +17,7 @@ import { Workflow, WorkflowSpec, WorkflowStatus } from 'third_party/argo-ui/argo
 import {
   convertYamlToPlatformSpec,
   getContainer,
+  isArgoWorkflowTemplate,
   isTemplateV2,
   isV2Pipeline,
 } from './WorkflowUtils';
@@ -24,17 +25,17 @@ import { ComponentSpec } from 'src/generated/pipeline_spec';
 import * as features from 'src/features';
 import v2LightweightYaml from 'src/data/test/lightweight_python_functions_v2_pipeline_rev.yaml?raw';
 import v2PvcYamlString from 'src/data/test/create_mount_delete_dynamic_pvc.yaml?raw';
-import jsyaml from 'js-yaml';
+import { dump, loadAll } from 'js-yaml';
 
 const V2_LW_YAML_TEMPLATE_STRING = v2LightweightYaml;
 const V2_PVC_YAML_STRING = v2PvcYamlString;
 // The templateStr used in WorkflowUtils is not directly from yaml file.
 // Instead, it is from BE (already been processed).
 const V2_PVC_TEMPLATE_STRING_OBJ = {
-  pipeline_spec: jsyaml.safeLoadAll(V2_PVC_YAML_STRING)[0],
-  platform_spec: jsyaml.safeLoadAll(V2_PVC_YAML_STRING)[1],
+  pipeline_spec: loadAll(V2_PVC_YAML_STRING)[0],
+  platform_spec: loadAll(V2_PVC_YAML_STRING)[1],
 };
-const V2_PVC_TEMPLATE_STRING = jsyaml.safeDump(V2_PVC_TEMPLATE_STRING_OBJ);
+const V2_PVC_TEMPLATE_STRING = dump(V2_PVC_TEMPLATE_STRING_OBJ);
 
 testBestPractices();
 describe('WorkflowUtils', () => {
@@ -178,5 +179,31 @@ PIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-scr
       lifecycle: undefined,
       resources: undefined,
     });
+  });
+});
+
+describe('isArgoWorkflowTemplate', () => {
+  it('accepts an Argo workflow manifest', () => {
+    expect(
+      isArgoWorkflowTemplate({
+        kind: 'Workflow',
+        apiVersion: 'argoproj.io/v1alpha1',
+      } as any),
+    ).toBe(true);
+  });
+
+  it('rejects a non-Argo manifest', () => {
+    expect(isArgoWorkflowTemplate({ kind: 'Workflow', apiVersion: 'v1' } as any)).toBe(false);
+  });
+
+  it('returns false rather than throwing when apiVersion is not a string', () => {
+    // Parsed YAML can carry any type here, and optional chaining alone would
+    // still call startsWith on a number.
+    expect(isArgoWorkflowTemplate({ kind: 'Workflow', apiVersion: 1 })).toBe(false);
+  });
+
+  it('returns false for non-object input', () => {
+    expect(isArgoWorkflowTemplate(undefined)).toBe(false);
+    expect(isArgoWorkflowTemplate('a string')).toBe(false);
   });
 });

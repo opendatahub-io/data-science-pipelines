@@ -180,7 +180,7 @@ export class Apis {
     return path.endsWith('/') ? path.substr(0, path.length - 1) : path;
   }
 
-  // TODO(jlyaoyuli): deprecrate v1 experimentServiceApi function after all integrations.
+  // TODO(jlyaoyuli): deprecate v1 experimentServiceApi function after all integrations.
   public static get experimentServiceApi(): ExperimentServiceApi {
     if (!this._experimentServiceApi) {
       this._experimentServiceApi = new ExperimentServiceApi(
@@ -346,10 +346,15 @@ export class Apis {
   }) {
     const { source, bucket, key } = path;
     if (isDownload) {
-      return `artifacts/${source}/${bucket}/${key}${buildQuery({
+      // Keep object keys in the query so browsers do not normalize standalone dot path segments.
+      return `artifacts/get${buildQuery({
+        source,
         namespace,
         providerInfo,
         peek,
+        bucket,
+        key,
+        download: 'true',
       })}`;
     } else {
       return `artifacts/get${buildQuery({ source, namespace, providerInfo, peek, bucket, key })}`;
@@ -372,19 +377,19 @@ export class Apis {
   }
 
   /**
-   * Gets the address (IP + port) of a Tensorboard service given the logdir and tfversion
+   * Gets the scoped proxy path for a TensorBoard service given the logdir.
    */
   public static getTensorboardApp(
     logdir: string,
     namespace: string,
-  ): Promise<{ podAddress: string; tfVersion: string; image: string }> {
-    return this._fetchAndParse<{ podAddress: string; tfVersion: string; image: string }>(
+  ): Promise<{ proxyPath: string; tfVersion: string; image: string }> {
+    return this._fetchAndParse<{ proxyPath: string; tfVersion: string; image: string }>(
       `apps/tensorboard${buildQuery({ logdir, namespace })}`,
     );
   }
 
   /**
-   * Starts a deployment and service for Tensorboard given the logdir.
+   * Starts a deployment and service for TensorBoard given the logdir.
    */
   public static startTensorboardApp({
     logdir,
@@ -411,10 +416,10 @@ export class Apis {
   }
 
   /**
-   * Check if the underlying Tensorboard pod is actually up, given the pod address
+   * Checks if the scoped TensorBoard proxy path is ready.
    */
-  public static async isTensorboardPodReady(path: string): Promise<boolean> {
-    const resp = await fetch(path, { method: 'HEAD' });
+  public static async isTensorboardPodReady(proxyPath: string): Promise<boolean> {
+    const resp = await fetch(proxyPath, { method: 'HEAD' });
     return resp.ok;
   }
 
@@ -489,6 +494,7 @@ export class Apis {
     pipelineDescription: string,
     pipelineData: File,
     namespace?: string,
+    codeSourceUrl?: string,
   ): Promise<V2beta1Pipeline> {
     const fd = new FormData();
     fd.append('uploadfile', pipelineData, pipelineData.name);
@@ -498,6 +504,9 @@ export class Apis {
 
     if (namespace) {
       query = `${query}&namespace=${encodeURIComponent(namespace)}`;
+    }
+    if (codeSourceUrl) {
+      query = `${query}&code_source_url=${encodeURIComponent(codeSourceUrl)}`;
     }
 
     return await this._fetchAndParse<V2beta1Pipeline>('/pipelines/upload', v2beta1Prefix, query, {
@@ -513,6 +522,7 @@ export class Apis {
     pipelineId: string,
     versionData: File,
     description?: string,
+    codeSourceUrl?: string,
   ): Promise<V2beta1PipelineVersion> {
     const fd = new FormData();
     fd.append('uploadfile', versionData, versionData.name);
@@ -521,7 +531,8 @@ export class Apis {
       v2beta1Prefix,
       `name=${encodeURIComponent(versionName)}&pipelineid=${encodeURIComponent(pipelineId)}` +
         `&display_name=${encodeURIComponent(versionDisplayName)}` +
-        (description ? `&description=${encodeURIComponent(description)}` : ''),
+        (description ? `&description=${encodeURIComponent(description)}` : '') +
+        (codeSourceUrl ? `&code_source_url=${encodeURIComponent(codeSourceUrl)}` : ''),
       {
         body: fd,
         cache: 'no-cache',
@@ -570,6 +581,7 @@ export class Apis {
       throw new Error(
         `Error parsing response for path: ${path}\n\n` +
           `Response was: ${responseText}\n\nError was: ${JSON.stringify(err)}`,
+        { cause: err },
       );
     }
   }
