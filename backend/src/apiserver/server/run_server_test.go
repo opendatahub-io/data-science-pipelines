@@ -46,6 +46,9 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// Minimal IR pipeline used by shared run fixtures; workflows are compiled by the v2 compiler.
+const testIRPipeline = `{"pipelineInfo":{"name":"test-pipeline"},"schemaVersion":"2.1.0","root":{"dag":{"tasks":{"echo":{"taskInfo":{"name":"echo"},"componentRef":{"name":"comp-echo"}}}}},"components":{"comp-echo":{"executorLabel":"exec-echo"}},"deploymentSpec":{"executors":{"exec-echo":{"container":{"image":"busybox","command":["echo","hello"]}}}}}`
+
 type recordingSubjectAccessReviewClient struct {
 	allowed   bool
 	authorize func(authorizationv1.ResourceAttributes) bool
@@ -569,7 +572,7 @@ func TestCanAccessReferencedPipeline_Multiuser(t *testing.T) {
 		pipelineVersion, err := resourceManager.CreatePipelineVersion(&model.PipelineVersion{
 			Name:         "p1",
 			PipelineId:   pipeline.UUID,
-			PipelineSpec: model.LargeText(testWorkflow.ToStringForStore()),
+			PipelineSpec: model.LargeText(testIRPipeline),
 		})
 		assert.Nil(t, err)
 		return resourceManager, pipeline.UUID, pipelineVersion.UUID
@@ -602,13 +605,13 @@ func TestCanAccessReferencedPipeline_Multiuser(t *testing.T) {
 	mixedRM := resource.NewResourceManager(mixedClientManager, &resource.ResourceManagerOptions{CollectMetrics: false})
 	sharedPipeline, err := mixedRM.CreatePipeline(&model.Pipeline{Name: "shared", Namespace: ""})
 	assert.Nil(t, err)
-	_, err = mixedRM.CreatePipelineVersion(&model.PipelineVersion{Name: "shared", PipelineId: sharedPipeline.UUID, PipelineSpec: model.LargeText(testWorkflow.ToStringForStore())})
+	_, err = mixedRM.CreatePipelineVersion(&model.PipelineVersion{Name: "shared", PipelineId: sharedPipeline.UUID, PipelineSpec: model.LargeText(testIRPipeline)})
 	assert.Nil(t, err)
 	mixedClientManager.UpdateUUID(util.NewFakeUUIDGeneratorOrFatal(NonDefaultFakeUUID, nil))
 	mixedRM = resource.NewResourceManager(mixedClientManager, &resource.ResourceManagerOptions{CollectMetrics: false})
 	privatePipeline, err := mixedRM.CreatePipeline(&model.Pipeline{Name: "private", Namespace: "ns2"})
 	assert.Nil(t, err)
-	privateVersion, err := mixedRM.CreatePipelineVersion(&model.PipelineVersion{Name: "private", PipelineId: privatePipeline.UUID, PipelineSpec: model.LargeText(testWorkflow.ToStringForStore())})
+	privateVersion, err := mixedRM.CreatePipelineVersion(&model.PipelineVersion{Name: "private", PipelineId: privatePipeline.UUID, PipelineSpec: model.LargeText(testIRPipeline)})
 	assert.Nil(t, err)
 	err = canAccessReferencedPipeline(ctx, mixedRM, &model.PipelineSpec{PipelineId: sharedPipeline.UUID, PipelineVersionId: privateVersion.UUID}, "ns2")
 	assert.True(t, util.IsUserErrorCodeMatch(err, codes.PermissionDenied))
