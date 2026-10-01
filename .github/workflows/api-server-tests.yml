@@ -130,9 +130,9 @@ jobs:
           argo_version: ${{ matrix.argo_version }}
           pod_to_pod_tls_enabled: ${{ matrix.pod_to_pod_tls_enabled }}
           db_type: ${{ matrix.db_type }}
-          image_path: images_${{ github.run_id }}
-          image_tag: latest
-          image_registry: kind-registry:5000
+          image_path: ${{ needs.build.outputs.IMAGE_PATH }}
+          image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
+          image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
 
       - name: Configure Cluster CA Cert for TLS-Enabled Tests
         shell: bash
@@ -237,9 +237,9 @@ jobs:
           pipeline_store: ${{ matrix.pipeline_store }}
           cache_enabled: ${{ matrix.cache_enabled }}
           argo_version: ${{ matrix.argo_version }}
-          image_path: images_${{ github.run_id }}
-          image_tag: latest
-          image_registry: kind-registry:5000
+          image_path: ${{ needs.build.outputs.IMAGE_PATH }}
+          image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
+          image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
 
       - name: Run Tests
         uses: ./.github/actions/test-and-report
