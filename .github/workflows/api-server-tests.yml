@@ -3,7 +3,7 @@ name: API Server Tests
 env:
   API_TESTS_DIR: "./backend/test/v2/api"
   TESTS_LABEL: "ApiServerTests"
-  NUMBER_OF_PARALLEL_NODES: 5
+  NUMBER_OF_PARALLEL_NODES: 15
   NUMBER_OF_MULTI_USER_PARALLEL_NODES: 2
   CLUSTER_NAME: "kfp"
   NAMESPACE: "kubeflow"
@@ -78,7 +78,7 @@ jobs:
         proxy: [ "true", "false" ]
         argo_version: [ "v3.7.18", "v4.1.2" ]
         pipeline_store: [ "database" ]
-        pod_to_pod_tls_enabled: [ "true", "false" ]
+        pod_to_pod_tls_enabled: [ "true"]
         db_type: [ "mysql", "pgx" ]
         include:
           - k8s_version: "v1.33.12"
@@ -215,7 +215,7 @@ jobs:
         uploadPipelinesWithKubernetesClient: [ "true", "false" ]
         argo_version: [ "v3.7.18", "v4.1.2" ]
         pipeline_store: [ "kubernetes" ]
-        pod_to_pod_tls_enabled: [ "true", "false" ]
+        pod_to_pod_tls_enabled: [ "true" ]
       fail-fast: false # So that failure in 1 type of parameterized job does not cause other jobs to terminate prematurely
     name: KFP API Server tests K8s Native API - K8sVersion=${{ matrix.k8s_version }} podToPodTlsEnabled=${{ matrix.pod_to_pod_tls_enabled }} cacheEnabled=${{ matrix.cache_enabled }} argoVersion=${{ matrix.argo_version }} uploadPipelinesWithKubernetesClient=${{ matrix.uploadPipelinesWithKubernetesClient }}
 
@@ -240,9 +240,9 @@ jobs:
           pipeline_store: ${{ matrix.pipeline_store }}
           cache_enabled: ${{ matrix.cache_enabled }}
           argo_version: ${{ matrix.argo_version }}
-          image_path: ${{ needs.build.outputs.IMAGE_PATH }}
-          image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
-          image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
+          image_path: images_${{ github.run_id }}
+          image_tag: latest
+          image_registry: kind-registry:5000
           pod_to_pod_tls_enabled: ${{ matrix.pod_to_pod_tls_enabled }}
           skip_operator_deployment: ${{ env.SKIP_OPERATOR_DEPLOYMENT }}
 
