@@ -284,7 +284,6 @@ jobs:
           deployment_mode: ${{ steps.deploy.outputs.deployment_mode }}
 
   api-test-multi-user:
-    needs: build
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -338,9 +337,9 @@ jobs:
           cache_enabled: ${{ matrix.cache_enabled }}
           multi_user: ${{ matrix.multi_user }}
           db_type: ${{ matrix.db_type }}
-          image_path: ${{ needs.build.outputs.IMAGE_PATH }}
-          image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
-          image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
+          image_path: images_${{ github.run_id }}
+          image_tag: latest
+          image_registry: kind-registry:5000
 
       - name: Configure Input Variables
         shell: bash
