@@ -16,9 +16,8 @@
 
 import FolderIcon from '@mui/icons-material/Folder';
 import React from 'react';
-import { Handle, Position } from '@xyflow/react';
-import { Artifact } from 'src/third_party/mlmd';
 import { ArtifactFlowElementData } from './Constants';
+import { ReadOnlyNodeHandles } from './ReadOnlyNodeHandles';
 
 interface ArtifactNodeProps {
   id: string;
@@ -29,7 +28,7 @@ interface ArtifactNodeProps {
 }
 
 function ArtifactNode({ id, data }: ArtifactNodeProps) {
-  let icon = getIcon(data.state);
+  let icon = getIcon(data.hasArtifact);
   return (
     <>
       <button
@@ -45,40 +44,22 @@ function ArtifactNode({ id, data }: ArtifactNodeProps) {
           </div>
         </div>
       </button>
-      <Handle
-        type='target'
-        position={Position.Top}
-        isValidConnection={() => false}
-        style={{ background: '#000', height: '1px', width: '1px', border: 0 }}
-      />
-      <Handle
-        type='source'
-        position={Position.Bottom}
-        isValidConnection={() => false}
-        style={{ background: '#000', height: '1px', width: '1px', border: 0 }}
-      />
+      <ReadOnlyNodeHandles />
     </>
   );
 }
 
 export default ArtifactNode;
 
-function getIcon(state: Artifact.State | undefined) {
-  if (state === undefined) {
+function getIcon(hasArtifact: boolean | undefined) {
+  if (!hasArtifact) {
     return getIconWrapper(
       <FolderIcon data-testid='artifact-icon-default' className='text-mui-grey-300-dark' />,
     );
   }
-  switch (state) {
-    case Artifact.State.LIVE:
-      return getIconWrapper(
-        <FolderIcon data-testid='artifact-icon-live' className='text-mui-yellow-800' />,
-      );
-    default:
-      return getIconWrapper(
-        <FolderIcon data-testid='artifact-icon-default' className='text-mui-grey-300-dark' />,
-      );
-  }
+  return getIconWrapper(
+    <FolderIcon data-testid='artifact-icon-live' className='text-mui-yellow-800' />,
+  );
 }
 
 function getIconWrapper(element: React.ReactElement) {

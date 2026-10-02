@@ -18,7 +18,7 @@ import * as React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { vi } from 'vitest';
 import SubDagNode from './SubDagNode';
-import { Execution } from 'src/third_party/mlmd';
+import { PipelineTaskTaskState } from 'src/apisv2beta1/run';
 import { ReactFlowProvider } from '@xyflow/react';
 
 describe('SubDagNode', () => {
@@ -29,7 +29,7 @@ describe('SubDagNode', () => {
   const defaultData = {
     label: 'sub-pipeline',
     expand: vi.fn(),
-    state: undefined as Execution.State | undefined,
+    state: undefined as PipelineTaskTaskState | undefined,
   };
 
   beforeEach(() => {
@@ -46,16 +46,19 @@ describe('SubDagNode', () => {
     expect(screen.getByRole('button', { name: 'sub-pipeline' })).toBeInTheDocument();
   });
 
-  it('renders COMPLETE state icon', () => {
+  it('renders SUCCEEDED state icon', () => {
     renderWithProvider(
-      <SubDagNode id='subdag-1' data={{ ...defaultData, state: Execution.State.COMPLETE }} />,
+      <SubDagNode
+        id='subdag-1'
+        data={{ ...defaultData, state: PipelineTaskTaskState.SUCCEEDED }}
+      />,
     );
     expect(screen.getByTestId('CheckCircleIcon')).toBeInTheDocument();
   });
 
   it('renders RUNNING state icon', () => {
     renderWithProvider(
-      <SubDagNode id='subdag-1' data={{ ...defaultData, state: Execution.State.RUNNING }} />,
+      <SubDagNode id='subdag-1' data={{ ...defaultData, state: PipelineTaskTaskState.RUNNING }} />,
     );
     expect(screen.getByTestId('RefreshIcon')).toBeInTheDocument();
   });
@@ -71,5 +74,26 @@ describe('SubDagNode', () => {
   it('renders with the correct id on the label span', () => {
     renderWithProvider(<SubDagNode id='subdag-42' data={defaultData} />);
     expect(screen.getByTestId('subdag-42')).toBeInTheDocument();
+  });
+
+  it('renders hidden, non-connectable edge anchors', () => {
+    const { container } = renderWithProvider(<SubDagNode id='subdag-1' data={defaultData} />);
+    const handles = container.querySelectorAll('.react-flow__handle');
+
+    expect(handles).toHaveLength(2);
+    handles.forEach((handle) => {
+      expect(handle).toHaveStyle({
+        height: '1px',
+        minHeight: '1px',
+        minWidth: '1px',
+        opacity: '0',
+        pointerEvents: 'none',
+        width: '1px',
+      });
+      expect(handle).not.toHaveClass('connectable');
+      expect(handle).not.toHaveClass('connectablestart');
+      expect(handle).not.toHaveClass('connectableend');
+      expect(handle).not.toHaveClass('connectionindicator');
+    });
   });
 });

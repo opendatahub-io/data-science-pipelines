@@ -35,14 +35,17 @@ const (
 	KubeflowUserIDPrefix                    string = "KUBEFLOW_USERID_PREFIX"
 	UpdatePipelineVersionByDefault          string = "AUTO_UPDATE_PIPELINE_DEFAULT_VERSION"
 	TokenReviewAudience                     string = "TOKEN_REVIEW_AUDIENCE"
-	MetadataGrpcServiceServiceHost          string = "METADATA_GRPC_SERVICE_SERVICE_HOST"
-	MetadataGrpcServiceServicePort          string = "METADATA_GRPC_SERVICE_SERVICE_PORT"
-	SignedURLExpiryTimeSeconds              string = "SIGNED_URL_EXPIRY_TIME_SECONDS"
+	MLPipelineGRPCBackoffBaseDelay          string = "ML_PIPELINE_GRPC_BACKOFF_BASE_DELAY"
+	MLPipelineGRPCBackoffMultiplier         string = "ML_PIPELINE_GRPC_BACKOFF_MULTIPLIER"
+	MLPipelineGRPCBackoffJitter             string = "ML_PIPELINE_GRPC_BACKOFF_JITTER"
+	MLPipelineGRPCBackoffMaxDelay           string = "ML_PIPELINE_GRPC_BACKOFF_MAX_DELAY"
+	MLPipelineGRPCMinConnectTimeout         string = "ML_PIPELINE_GRPC_MIN_CONNECT_TIMEOUT"
 	MetadataTLSEnabled                      string = "METADATA_TLS_ENABLED"
 	CaBundleSecretName                      string = "CABUNDLE_SECRET_NAME"
 	CaBundleConfigMapName                   string = "CABUNDLE_CONFIGMAP_NAME"
 	CaBundleKeyName                         string = "CABUNDLE_KEY_NAME"
 	RequireNamespaceForPipelines            string = "REQUIRE_NAMESPACE_FOR_PIPELINES"
+	ListRunsFullViewMaxPageSize             string = "LIST_RUNS_FULL_VIEW_MAX_PAGE_SIZE"
 	CompiledPipelineSpecPatch               string = "COMPILED_PIPELINE_SPEC_PATCH"
 	MLPipelineServiceName                   string = "ML_PIPELINE_SERVICE_NAME"
 	MetadataServiceName                     string = "METADATA_SERVICE_NAME"
@@ -50,9 +53,9 @@ const (
 	DefaultSecurityContextRunAsUser         string = "DEFAULT_SECURITY_CONTEXT_RUN_AS_USER"
 	DefaultSecurityContextRunAsGroup        string = "DEFAULT_SECURITY_CONTEXT_RUN_AS_GROUP"
 	DefaultSecurityContextRunAsNonRoot      string = "DEFAULT_SECURITY_CONTEXT_RUN_AS_NON_ROOT"
-	BlockV1Pipelines                        string = "BLOCK_V1_PIPELINES"
-	V1NamespaceWhitelist                    string = "V1_ALLOWED_NAMESPACES"
+	DefaultSecurityContextHostUsers         string = "DEFAULT_SECURITY_CONTEXT_HOST_USERS"
 	PipelineURLAllowedDomains               string = "PIPELINE_URL_ALLOWED_DOMAINS"
+	PipelineURLAllowedCIDRs                 string = "PIPELINE_URL_ALLOWED_CIDRS"
 	PipelineURLAllowHTTP                    string = "PIPELINE_URL_ALLOW_HTTP"
 	PipelineURLTimeout                      string = "PIPELINE_URL_TIMEOUT"
 	PipelineURLValidationEnabled            string = "PIPELINE_URL_VALIDATION_ENABLED"
@@ -60,6 +63,14 @@ const (
 	PluginMaxPayloadBytes                   string = "PLUGIN_MAX_PAYLOAD_BYTES"
 	PluginMaxTotalPayloadBytes              string = "PLUGIN_MAX_TOTAL_PAYLOAD_BYTES"
 	PluginMaxNestingDepth                   string = "PLUGIN_MAX_NESTING_DEPTH"
+	WorkflowGCGracePeriodSeconds            string = "WORKFLOW_GC_GRACE_PERIOD_SECONDS"
+
+	// Run garbage collection configuration keys.
+	// Disabled by default (zero values).
+	RunsRetentionTime         string = "RUNS_RETENTION_TIME"
+	ArchivedRunsRetentionTime string = "ARCHIVED_RUNS_RETENTION_TIME"
+	RunsGCInterval            string = "RUNS_GC_INTERVAL"
+	RunsGCBatchSize           string = "RUNS_GC_BATCH_SIZE"
 )
 
 type PluginLimitsConfig struct {
@@ -67,6 +78,16 @@ type PluginLimitsConfig struct {
 	MaxPayloadBytes      int
 	MaxTotalPayloadBytes int
 	MaxNestingDepth      int
+}
+
+// GetWorkflowGCGracePeriodSeconds returns the grace period in seconds during
+// which a workflow without a corresponding DB entry receives a retryable
+// response. After the grace period the API server re-reads the live workflow
+// and deletes it only when its UID and run ID label identify the orphan; it
+// never deletes based on caller-controlled report metadata. This prevents races
+// while the run record is being written.
+func GetWorkflowGCGracePeriodSeconds() int {
+	return GetIntConfigWithDefault(WorkflowGCGracePeriodSeconds, 120)
 }
 
 func IsPipelineVersionUpdatedByDefault() bool {
@@ -152,6 +173,22 @@ func GetDurationConfig(configName string) time.Duration {
 	return viper.GetDuration(configName)
 }
 
+func GetDurationConfigWithDefault(configName string, value time.Duration) time.Duration {
+	if !viper.IsSet(configName) {
+		return value
+	}
+	raw := strings.TrimSpace(viper.GetString(configName))
+	if raw == "" {
+		return value
+	}
+	duration, parseError := time.ParseDuration(raw)
+	if parseError != nil {
+		glog.Errorf("Failed to parse duration for %s: %v. Using default %v", configName, parseError, value)
+		return value
+	}
+	return duration
+}
+
 func IsMultiUserMode() bool {
 	return GetBoolConfigWithDefault(MultiUserMode, false)
 }
@@ -200,18 +237,36 @@ func GetTokenReviewAudience() string {
 	return GetStringConfigWithDefault(TokenReviewAudience, DefaultTokenReviewAudience)
 }
 
-func GetMetadataGrpcServiceServiceHost() string {
-	return GetStringConfigWithDefault(MetadataGrpcServiceServiceHost, DefaultMetadataGrpcServiceServiceHost)
+// TokenAudienceForRun returns the projected-token audience bound to a single
+// in-flight run. Runtime pods authenticate with this audience so a stolen
+// launcher token cannot authorize API calls against other runs.
+func TokenAudienceForRun(runID string) string {
+	return GetTokenReviewAudience() + TokenAudienceRunPrefix + runID
 }
 
-func GetMetadataGrpcServiceServicePort() string {
-	return GetStringConfigWithDefault(MetadataGrpcServiceServicePort, DefaultMetadataGrpcServiceServicePort)
+func GetMLPipelineGRPCBackoffBaseDelay() string {
+	return GetStringConfigWithDefault(MLPipelineGRPCBackoffBaseDelay, "")
 }
 
-func GetSignedURLExpiryTimeSeconds() int {
-	return GetIntConfigWithDefault(SignedURLExpiryTimeSeconds, DefaultSignedURLExpiryTimeSeconds)
+func GetMLPipelineGRPCBackoffMultiplier() string {
+	return GetStringConfigWithDefault(MLPipelineGRPCBackoffMultiplier, "")
 }
 
+func GetMLPipelineGRPCBackoffJitter() string {
+	return GetStringConfigWithDefault(MLPipelineGRPCBackoffJitter, "")
+}
+
+func GetMLPipelineGRPCBackoffMaxDelay() string {
+	return GetStringConfigWithDefault(MLPipelineGRPCBackoffMaxDelay, "")
+}
+
+func GetMLPipelineGRPCMinConnectTimeout() string {
+	return GetStringConfigWithDefault(MLPipelineGRPCMinConnectTimeout, "")
+}
+
+// GetMetadataTLSEnabled returns whether metadata TLS is enabled.
+// Keep this getter during the PR 1 extraction so packages that still depend on
+// the MLMD runtime wiring continue to build until PR 2 removes those call sites.
 func GetMetadataTLSEnabled() bool {
 	return GetBoolConfigWithDefault(MetadataTLSEnabled, DefaultMetadataTLSEnabled)
 }
@@ -242,6 +297,10 @@ func GetDefaultSecurityContextRunAsGroup() string {
 
 func GetDefaultSecurityContextRunAsNonRoot() string {
 	return GetStringConfigWithDefault(DefaultSecurityContextRunAsNonRoot, "")
+}
+
+func GetDefaultSecurityContextHostUsers() string {
+	return GetStringConfigWithDefault(DefaultSecurityContextHostUsers, "")
 }
 
 func GetPluginLimitsConfig() (PluginLimitsConfig, error) {
@@ -280,6 +339,37 @@ func GetPluginLimitsConfig() (PluginLimitsConfig, error) {
 	}, nil
 }
 
+func GetRunsRetentionTime() time.Duration {
+	return GetDurationConfigWithDefault(RunsRetentionTime, 0)
+}
+
+func GetArchivedRunsRetentionTime() time.Duration {
+	return GetDurationConfigWithDefault(ArchivedRunsRetentionTime, 0)
+}
+
+func GetRunsGCInterval() time.Duration {
+	garbageCollectionInterval := GetDurationConfigWithDefault(RunsGCInterval, 6*time.Hour)
+	if garbageCollectionInterval <= 0 {
+		return 6 * time.Hour
+	}
+	return garbageCollectionInterval
+}
+
+func GetRunsGCBatchSize() int {
+	configuredBatchSize := GetIntConfigWithDefault(RunsGCBatchSize, 100)
+	if configuredBatchSize <= 0 {
+		return 100
+	}
+	// Upper bound: DeleteExpiredArchivedRuns uses batch UUIDs in IN-clauses
+	// across 4 tables (run_metrics, tasks, resource_references, run_details).
+	// MySQL/PostgreSQL bind parameter limit is 65535; 1000 per batch stays
+	// well within that ceiling while remaining efficient.
+	if configuredBatchSize > 1000 {
+		return 1000
+	}
+	return configuredBatchSize
+}
+
 func ValidateServiceAccountAllowList(serviceAccount string) error {
 	if serviceAccount == "" {
 		return nil
@@ -293,7 +383,7 @@ func ValidateServiceAccountAllowList(serviceAccount string) error {
 	if allowedServiceAccounts == "" {
 		return fmt.Errorf("service account %q is not allowed; contact your administrator to configure the allowed service accounts", serviceAccount)
 	}
-	for _, allowed := range strings.Split(allowedServiceAccounts, ",") {
+	for allowed := range strings.SplitSeq(allowedServiceAccounts, ",") {
 		if strings.TrimSpace(allowed) == serviceAccount {
 			return nil
 		}

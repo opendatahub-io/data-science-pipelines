@@ -128,7 +128,11 @@ cd backend/src/ && go test ./...
 
 ### Frontend
 
-TODO: add instruction
+Run the frontend unit tests:
+
+```bash
+cd frontend && npm test
+```
 
 ### DSL
 

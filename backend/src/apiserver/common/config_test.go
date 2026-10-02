@@ -349,6 +349,31 @@ func TestConfigWrapperDefaults(t *testing.T) {
 			expected: DefaultTokenReviewAudience,
 		},
 		{
+			name:     "GetMLPipelineGRPCBackoffBaseDelay defaults to empty string",
+			getter:   func() interface{} { return GetMLPipelineGRPCBackoffBaseDelay() },
+			expected: "",
+		},
+		{
+			name:     "GetMLPipelineGRPCBackoffMultiplier defaults to empty string",
+			getter:   func() interface{} { return GetMLPipelineGRPCBackoffMultiplier() },
+			expected: "",
+		},
+		{
+			name:     "GetMLPipelineGRPCBackoffJitter defaults to empty string",
+			getter:   func() interface{} { return GetMLPipelineGRPCBackoffJitter() },
+			expected: "",
+		},
+		{
+			name:     "GetMLPipelineGRPCBackoffMaxDelay defaults to empty string",
+			getter:   func() interface{} { return GetMLPipelineGRPCBackoffMaxDelay() },
+			expected: "",
+		},
+		{
+			name:     "GetMLPipelineGRPCMinConnectTimeout defaults to empty string",
+			getter:   func() interface{} { return GetMLPipelineGRPCMinConnectTimeout() },
+			expected: "",
+		},
+		{
 			name:     "GetMetadataTLSEnabled defaults to false",
 			getter:   func() interface{} { return GetMetadataTLSEnabled() },
 			expected: false,
@@ -473,6 +498,48 @@ func TestConfigWrapperCustomValues(t *testing.T) {
 			expected: "custom.audience.org",
 		},
 		{
+			name:     "TokenAudienceForRun appends run ID to custom audience",
+			envKey:   TokenReviewAudience,
+			envValue: "custom.audience.org",
+			getter:   func() interface{} { return TokenAudienceForRun("run-abc") },
+			expected: "custom.audience.org/runs/run-abc",
+		},
+		{
+			name:     "GetMLPipelineGRPCBackoffBaseDelay with custom value",
+			envKey:   MLPipelineGRPCBackoffBaseDelay,
+			envValue: "2s",
+			getter:   func() interface{} { return GetMLPipelineGRPCBackoffBaseDelay() },
+			expected: "2s",
+		},
+		{
+			name:     "GetMLPipelineGRPCBackoffMultiplier with custom value",
+			envKey:   MLPipelineGRPCBackoffMultiplier,
+			envValue: "1.8",
+			getter:   func() interface{} { return GetMLPipelineGRPCBackoffMultiplier() },
+			expected: "1.8",
+		},
+		{
+			name:     "GetMLPipelineGRPCBackoffJitter with custom value",
+			envKey:   MLPipelineGRPCBackoffJitter,
+			envValue: "0.3",
+			getter:   func() interface{} { return GetMLPipelineGRPCBackoffJitter() },
+			expected: "0.3",
+		},
+		{
+			name:     "GetMLPipelineGRPCBackoffMaxDelay with custom value",
+			envKey:   MLPipelineGRPCBackoffMaxDelay,
+			envValue: "30s",
+			getter:   func() interface{} { return GetMLPipelineGRPCBackoffMaxDelay() },
+			expected: "30s",
+		},
+		{
+			name:     "GetMLPipelineGRPCMinConnectTimeout with custom value",
+			envKey:   MLPipelineGRPCMinConnectTimeout,
+			envValue: "15s",
+			getter:   func() interface{} { return GetMLPipelineGRPCMinConnectTimeout() },
+			expected: "15s",
+		},
+		{
 			name:     "GetMetadataTLSEnabled with custom true",
 			envKey:   MetadataTLSEnabled,
 			envValue: "true",
@@ -544,6 +611,58 @@ func TestConfigWrapperCustomValues(t *testing.T) {
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
+}
+
+// TestRunGarbageCollectionConfigEnvVars locks the contract that the apiserver
+// deployment relies on: viper.AutomaticEnv() uppercases the config key to
+// derive the env var name. If these names drift, the GC silently falls back
+// to its disabled/default values.
+func TestRunGarbageCollectionConfigEnvVars(t *testing.T) {
+	t.Run("retention times read from uppercased env vars", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("RUNS_RETENTION_TIME", "720h")
+		t.Setenv("ARCHIVED_RUNS_RETENTION_TIME", "2160h")
+		viper.AutomaticEnv()
+
+		assert.Equal(t, 720*time.Hour, GetRunsRetentionTime())
+		assert.Equal(t, 2160*time.Hour, GetArchivedRunsRetentionTime())
+	})
+
+	t.Run("interval and batch size read from uppercased env vars", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("RUNS_GC_INTERVAL", "1h")
+		t.Setenv("RUNS_GC_BATCH_SIZE", "250")
+		viper.AutomaticEnv()
+
+		assert.Equal(t, time.Hour, GetRunsGCInterval())
+		assert.Equal(t, 250, GetRunsGCBatchSize())
+	})
+
+	t.Run("empty retention keeps GC disabled", func(t *testing.T) {
+		viper.Reset()
+		viper.AutomaticEnv()
+
+		assert.Equal(t, time.Duration(0), GetRunsRetentionTime())
+		assert.Equal(t, time.Duration(0), GetArchivedRunsRetentionTime())
+	})
+
+	t.Run("non-positive interval and batch size fall back to defaults", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("RUNS_GC_INTERVAL", "0s")
+		t.Setenv("RUNS_GC_BATCH_SIZE", "0")
+		viper.AutomaticEnv()
+
+		assert.Equal(t, 6*time.Hour, GetRunsGCInterval())
+		assert.Equal(t, 100, GetRunsGCBatchSize())
+	})
+
+	t.Run("batch size exceeding upper bound is clamped to 1000", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("RUNS_GC_BATCH_SIZE", "5000")
+		viper.AutomaticEnv()
+
+		assert.Equal(t, 1000, GetRunsGCBatchSize())
+	})
 }
 
 func TestGetClusterDomain(t *testing.T) {

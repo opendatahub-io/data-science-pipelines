@@ -1,78 +1,48 @@
-# Install Kubeflow Pipelines Standalone using Kustomize Manifests
+# Kubeflow Pipelines Kustomize Manifests
 
-This folder contains [Kubeflow Pipelines Standalone](https://www.kubeflow.org/docs/components/pipelines/installation/standalone-deployment/)
-Kustomize manifests.
-
-Kubeflow Pipelines Standalone is one option to install Kubeflow Pipelines. You can review all other options in
+Kubeflow Pipelines can be installed standalone and as part of the [community distribution](https://github.com/kubeflow/community-distribution).
 [Installation Options for Kubeflow Pipelines](https://www.kubeflow.org/docs/components/pipelines/operator-guides/installation/).
 
-## Install options for different envs
+## Artifact download responses
 
-To install Kubeflow Pipelines Standalone, follow [Kubeflow Pipelines Standalone Deployment documentation](https://www.kubeflow.org/docs/components/pipelines/installation/standalone-deployment/).
+Artifact download routes return S3 and MinIO objects without extracting archive
+contents and force the browser to treat every response as an attachment. Archive
+filenames are preserved when available. Preview routes may still decompress an
+archive and show its first entry, but they use the same download-only response
+hardening; clients should consume the response body instead of relying on browser
+inline rendering.
 
-There are environment specific installation instructions not covered in the official deployment documentation, they are listed below.
+## Custom artifact-store endpoints
 
-### (env/platform-agnostic) install on any Kubernetes cluster
+The UI server only accepts secret-backed S3-compatible `bucketProviders` whose
+HTTP(S) origin matches the operator-configured MinIO or AWS endpoint. Add any
+additional origins to `ALLOWED_ARTIFACT_ENDPOINTS` in `pipeline-install-config`.
+Entries are comma-separated absolute origins, including the scheme and optional
+port, for example `https://objects.example.com:9443`; paths and credentials are
+not accepted. HTTP origins must be listed as HTTP and should only be used for
+trusted in-cluster stores.
 
-Install:
+Upgrades from releases that allowed arbitrary provider endpoints must configure
+this allowlist before users can read artifacts from a custom store. Rejected
+requests return HTTP 400 and identify `ALLOWED_ARTIFACT_ENDPOINTS` as the
+required operator setting. Official regional AWS S3 service endpoints are
+trusted as a group only when `AWS_S3_ENDPOINT` is explicitly configured to an
+official AWS S3 service endpoint; otherwise list each required origin.
+Profile-created artifact proxies intentionally do not inherit another UI
+server's object-store environment, so custom stores must also be listed in
+`ALLOWED_ARTIFACT_ENDPOINTS` for those proxies. UI deployments that configure
+`AWS_S3_ENDPOINT` directly may put the port in that value or set
+`AWS_S3_PORT`; if both specify a port, they must agree.
 
-```bash
-KFP_ENV=platform-agnostic
-kustomize build cluster-scoped-resources/ | kubectl apply -f -
-kubectl wait crd/applications.app.k8s.io --for condition=established --timeout=60s
-kustomize build "env/${KFP_ENV}/" | kubectl apply -f -
-kubectl wait pods -l application-crd-id=kubeflow-pipelines -n kubeflow --for condition=Ready --timeout=1800s
-kubectl port-forward -n kubeflow svc/ml-pipeline-ui 8080:80
-```
-
-Now you can access Kubeflow Pipelines UI in your browser by <http://localhost:8080>.
-
-Data:
-
-Application data are persisted in in-cluster PersistentVolumeClaim storage.
-
-## Uninstall
-
-If the installation is based on CloudSQL/GCS, after the uninstall, the data is still there,
-reinstall a newer version can reuse the data.
-
-```bash
-### 1. namespace scoped
-# Depends on how you installed it:
-kubectl kustomize env/platform-agnostic | kubectl delete -f -
-# or
-kubectl kustomize env/dev | kubectl delete -f -
-# or
-kubectl delete applications/pipeline -n kubeflow
-
-### 2. cluster scoped
-kubectl delete -k cluster-scoped-resources/
-```
-
-## Folder Structure
-
-### Overview
-
-* User facing manifest entrypoints are `cluster-scoped-resources` package and `env/<env-name>` package.
-  * `cluster-scoped-resources` should collect all cluster-scoped resources.
-  * `env/<env-name>` should collect env specific namespace-scoped resources.
-  * Note, for multi-user envs, they already included cluster-scoped resources.
-* KFP core components live in `base/<component-name>` folders.
-  * If a component requires cluster-scoped resources, it should have a folder inside named `cluster-scoped` with related resources, but note that `base/<component-name>/kustomization.yaml` shouldn't include the `cluster-scoped` folder. `cluster-scoped` folders should be collected by top level `cluster-scoped-resources` folder.
-* KFP core installations are in `base/installs/<install-type>`, they only include the core KFP components, not third party ones.
-* Third party components live in `third-party/<component-name>` folders.
-
-### For direct deployments
-
-Env specific overlays live in `env/<env-name>` folders, they compose above components to get ready for directly deploying.
-
-### For downstream consumers
-
-Please compose `base/installs/<install-type>` and third party dependencies based on your own requirements.
-
-### Rationale
-
-Constraints for namespaced installation we need to comply with (that drove above structure):
-
-* CRDs must be applied separately, because if we apply CRs in the same `kubectl apply` command, the CRD may not have been accepted by k8s api server (e.g. Application CRD).
-* [A Kubeflow 1.0 constraint](https://github.com/kubeflow/pipelines/issues/2884#issuecomment-577158715) is that we should separate cluster scoped resources from namespace scoped resources, because sometimes different roles are required to deploy them. Cluster scoped resources usually need a cluster admin role, while namespaced resources can be deployed by individual teams managing a namespace.
+Archived pod logs retrieved from workflow status also require an exact match
+with a configured MinIO or AWS origin, or an entry in `ALLOWED_ARTIFACT_ENDPOINTS`.
+For a Kubernetes service configured through `MINIO_HOST` and `MINIO_NAMESPACE`,
+the server also trusts the exact `.svc` and `CLUSTER_DOMAIN` hostnames generated
+by the Argo controller and profile repositories, using `MINIO_SSL` and
+`MINIO_PORT`. This preserves stock archived logs without extra allowlist entries.
+Custom profile-controller `OBJECT_STORE_HOST` and `CLUSTER_DOMAIN` settings must
+match the frontend's `MINIO_HOST` and `CLUSTER_DOMAIN`, or their origins must be
+listed explicitly. External hostnames do not receive generated service aliases.
+The server rejects other workflow-supplied endpoints before selecting credentials
+or contacting storage. If configured, the operator's archive bucket remains
+available as the final log-retrieval fallback.
