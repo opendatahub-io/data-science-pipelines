@@ -92,6 +92,9 @@
   CI installs this version through `.github/actions/setup-go`; Go builder images,
   including the backend test image, use matching pinned Go 1.27.1 images.
   Run `make check-go-version` to verify the modules, builders, and setup action.
+- The API server accepts `--managedPipelinesDir=<directory>` to load
+  `managed-pipelines.json` and its referenced pipeline specs alongside `--sampleconfig`.
+  The default empty value skips managed pipelines.
 - Additional upstream guides are available under `docs/agents/`.
 
 - Always use a `.venv` virtual environment.

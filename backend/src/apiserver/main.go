@@ -79,6 +79,7 @@ var (
 	webhookTLSKeyPath             = flag.String("webhookTLSKeyPath", "", "Path to the webhook TLS private key. Defaults to tlsCertKeyPath value")
 	configPath                    = flag.String("config", "", "Path to JSON file containing config")
 	sampleConfigPath              = flag.String("sampleconfig", "", "Path to samples")
+	managedPipelinesDir           = flag.String("managedPipelinesDir", "", "Directory containing managed pipelines manifest and specs")
 	tlsCertPath                   = flag.String("tlsCertPath", "", "Path to the public TLS cert.")
 	tlsCertKeyPath                = flag.String("tlsCertKeyPath", "", "Path to the private TLS key cert.")
 	tlsMinVersion                 = flag.String("tlsMinVersion", "VersionTLS12", "Minimum TLS version (VersionTLS12 or VersionTLS13)")
@@ -304,7 +305,7 @@ func main() {
 			DefaultHostUsers:     parseOptionalBool(common.GetDefaultSecurityContextHostUsers()),
 		},
 	)
-	err = config.LoadSamples(resourceManager, *sampleConfigPath)
+	err = config.LoadSamples(resourceManager, *sampleConfigPath, *managedPipelinesDir)
 	if err != nil {
 		glog.Fatalf("Failed to load samples. Err: %v", err)
 	}
