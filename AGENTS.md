@@ -231,8 +231,8 @@ ginkgo -v ./backend/test/compiler
 # Update compiled workflow goldens when intended
 ginkgo -v ./backend/test/compiler -- -updateCompiledFiles=true
 
-# Auto-create missing goldens (default true); disable with:
-ginkgo -v ./backend/test/compiler -- -createGoldenFiles=false
+# Create missing goldens (default false):
+ginkgo -v ./backend/test/compiler -- -createGoldenFiles=true
 ```
 
 - v2 API integration tests (label-filterable):
@@ -325,6 +325,7 @@ make -C api python && make -C api golang
 - Compiled workflow goldens under `test_data/compiled-workflows/`
   - Sources: pipeline IR fixtures under `test_data/pipeline_files/valid/` and `test_data/sdk_compiled_pipelines/valid/`
   - Generate: `ginkgo -v ./backend/test/compiler -- -updateCompiledFiles=true`
+  - The compiler suite maps each fixture's basename to a golden of the same basename; commit newly generated goldens alongside their source fixtures.
 
 The following files are generated; edit their sources and regenerate:
 
