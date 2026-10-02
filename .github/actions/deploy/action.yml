@@ -123,9 +123,6 @@ outputs:
   database_name:
     description: "Name of the database deployment/service"
     value: ${{ steps.deploy-kfp.outputs.DATABASE_NAME }}
-  mlmd_service_name:
-    description: "Name of the MLMD (MetaData) service"
-    value: ${{ steps.deploy-kfp.outputs.MLMD_SERVICE_NAME }}
   frontend_service_name:
     description: "Name of the Frontend UI service"
     value: ${{ steps.deploy-kfp.outputs.FRONTEND_SERVICE_NAME }}
@@ -151,7 +148,7 @@ runs:
       shell: bash
       if: ${{ inputs.skip_load_docker_images != 'true' }}
       run: |
-        ALL_APPS=("apiserver" "scheduledworkflow" "persistenceagent" "frontend" "metadata-writer" "viewer-crd-controller" "visualization-server" "cache-deployer" "cache-server" "metadata-envoy" "driver" "launcher")
+        ALL_APPS=("apiserver" "scheduledworkflow" "persistenceagent" "frontend" "viewer-crd-controller" "visualization-server" "cache-deployer" "cache-server" "driver" "launcher")
         for app in "${ALL_APPS[@]}"; do
           docker image load -i ${{ inputs.image_path }}/$app/$app.tar
           docker tag ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }} localhost:5000/$app:${{ inputs.image_tag }}
