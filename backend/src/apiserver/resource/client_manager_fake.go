@@ -15,7 +15,10 @@
 package resource
 
 import (
+	"context"
 	"database/sql"
+	"net/url"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/archive"
@@ -24,7 +27,9 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common/sql/dialect"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/storage"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
+	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	"gocloud.dev/blob/memblob"
+	v1 "k8s.io/api/core/v1"
 )
 
 var testDialect = dialect.NewDBDialect("sqlite")
@@ -87,7 +92,6 @@ func NewFakeClientManager(time util.TimeInterface, uuid util.UUIDGeneratorInterf
 		return nil, err
 	}
 
-	// TODO(neuromage): Pass in metadata.Store instance for tests as well.
 	return &FakeClientManager{
 		db:                            db,
 		experimentStore:               experimentStore,
@@ -241,8 +245,28 @@ func (f *FakeClientManager) UpdateUUID(uuid util.UUIDGeneratorInterface) {
 	f.pipelineStore = storage.NewPipelineStore(f.db, f.time, uuid, testDialect)
 }
 
+// fakeObjectStore wraps BlobObjectStore and provides dummy implementations
+// for GetSignedUrl and GetObjectSize that don't require real S3 credentials.
+type fakeObjectStore struct {
+	*storage.BlobObjectStore
+}
+
+func (f *fakeObjectStore) GetSignedUrl(ctx context.Context, bucketConfig *objectstore.Config, secret *v1.Secret, expirySeconds time.Duration, artifactURI string, queryParams url.Values) (string, error) {
+	disposition := queryParams.Get("response-content-disposition")
+	if disposition == "inline" {
+		return "dummy-render-url", nil
+	}
+	return "dummy-signed-url", nil
+}
+
+func (f *fakeObjectStore) GetObjectSize(ctx context.Context, bucketConfig *objectstore.Config, secret *v1.Secret, artifactURI string) (int64, error) {
+	return 123, nil
+}
+
 // newFakeObjectStore returns an in-memory object store for testing.
 func newFakeObjectStore() storage.ObjectStore {
 	bucket := memblob.OpenBucket(nil)
-	return storage.NewBlobObjectStore(bucket, "pipelines")
+	return &fakeObjectStore{
+		BlobObjectStore: storage.NewBlobObjectStore(bucket, "pipelines"),
+	}
 }

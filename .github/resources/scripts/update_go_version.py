@@ -53,11 +53,11 @@ MANAGED_DOCKERFILES = (
     DockerPin(
         Path('backend/Dockerfile.viewercontroller'), '-alpine', 'builder'),
     DockerPin(Path('backend/api/Dockerfile'), '', 'generator'),
+    DockerPin(Path('backend/test/images/Dockerfile.test'), '-bookworm', 'builder'),
 )
 
 MANAGED_SETUP_GO_ACTIONS = (
     Path('.github/actions/setup-go/action.yml'),
-    Path('.github/actions/test-and-report/action.yml'),
 )
 
 DECIMAL = r'(?:0|[1-9][0-9]*)'

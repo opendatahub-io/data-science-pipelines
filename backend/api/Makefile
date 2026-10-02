@@ -32,8 +32,8 @@ ifneq ($(USE_PREBUILT_IMAGE),false)
 $(error USE_PREBUILT_IMAGE must be 'true' or 'false', got '$(USE_PREBUILT_IMAGE)')
 endif
 endif
-PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:master
-RELEASE_IMAGE=ghcr.io/kubeflow/kfp-release:master
+PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:release-2.17@sha256:28f1aaa56c2abefedecf162f5917843283253d2cd8d99bc53c18587033320370
+RELEASE_IMAGE=ghcr.io/kubeflow/kfp-release:release-2.17@sha256:ac28d91d9e42e6dbcebbacb63b7850a0acdf0e3bd580395f07a36051707baefe
 CONTAINER_ENGINE ?= docker
 
 # Generate clients using either pre-built image (fast) or source build (current tools).

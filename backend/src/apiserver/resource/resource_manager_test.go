@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -47,6 +48,7 @@ import (
 
 	"github.com/kubeflow/pipelines/backend/src/common/util"
 	swfapi "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
+	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	"github.com/pkg/errors"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/spf13/viper"
@@ -65,6 +67,15 @@ import (
 
 // v1AllowedNamespaces mirrors the unexported constant in backend/src/common/util/v1_support.go.
 const v1AllowedNamespaces = "V1_ALLOWED_NAMESPACES"
+
+const legacyV1TestNamespaces = "ns1,user1,user,kubeflow"
+
+func TestMain(m *testing.M) {
+	// Most resource-manager fixtures exercise legacy V1 pipelines. Production
+	// blocks them by default, so allow only the fixture namespaces here.
+	viper.Set(v1AllowedNamespaces, legacyV1TestNamespaces)
+	os.Exit(m.Run())
+}
 
 type duplicateRecurringRunStore struct {
 	storage.RunStoreInterface
@@ -134,7 +145,9 @@ func setupMLflowViperConfig(t *testing.T, endpoint string) {
 	})
 }
 
-type FakeBadObjectStore struct{}
+type FakeBadObjectStore struct {
+	readerOnlyObjectStore
+}
 
 func (m *FakeBadObjectStore) GetPipelineKey(pipelineID string) string {
 	return pipelineID
@@ -197,6 +210,14 @@ func (m *readerOnlyObjectStore) GetFileReader(ctx context.Context, filePath stri
 		return nil, util.NewInternalServerError(errors.New("not found"), "file not found")
 	}
 	return io.NopCloser(bytes.NewReader(content)), nil
+}
+
+func (m *readerOnlyObjectStore) GetSignedUrl(context.Context, *objectstore.Config, *corev1.Secret, time.Duration, string, url.Values) (string, error) {
+	return "", errors.New("signed URLs are not supported by the reader-only object store")
+}
+
+func (m *readerOnlyObjectStore) GetObjectSize(context.Context, *objectstore.Config, *corev1.Secret, string) (int64, error) {
+	return 0, errors.New("artifact sizes are not supported by the reader-only object store")
 }
 
 func createPipelineV1(name string) *model.Pipeline {
@@ -1412,7 +1433,7 @@ func TestCreatePipelineAndPipelineVersion_V1Blocked(t *testing.T) {
 	viper.Set(common.PodNamespace, "ns1")
 	defer func() {
 		viper.Set(util.BlockV1Pipelines, nil)
-		viper.Set(v1AllowedNamespaces, nil)
+		viper.Set(v1AllowedNamespaces, legacyV1TestNamespaces)
 		viper.Set(common.PodNamespace, nil)
 	}()
 
@@ -1437,7 +1458,7 @@ func TestCreatePipelineAndPipelineVersion_V1Blocked_PodNamespaceFallback(t *test
 	viper.Set(common.PodNamespace, "other-ns")
 	defer func() {
 		viper.Set(util.BlockV1Pipelines, nil)
-		viper.Set(v1AllowedNamespaces, nil)
+		viper.Set(v1AllowedNamespaces, legacyV1TestNamespaces)
 		viper.Set(common.PodNamespace, nil)
 	}()
 
@@ -1462,7 +1483,7 @@ func TestCreatePipelineVersion_V1Blocked(t *testing.T) {
 	viper.Set(common.PodNamespace, "ns1")
 	defer func() {
 		viper.Set(util.BlockV1Pipelines, nil)
-		viper.Set(v1AllowedNamespaces, nil)
+		viper.Set(v1AllowedNamespaces, legacyV1TestNamespaces)
 		viper.Set(common.PodNamespace, nil)
 	}()
 
@@ -2385,11 +2406,13 @@ func TestCreateRun_BlockV1Pipelines(t *testing.T) {
 			useV2Spec:         false,
 		},
 		{
-			msg:               "BlockV1_Disabled_AnyNamespaceAllowed",
+			msg:               "BlockV1_Disabled_StillBlockedInDSP",
 			blockV1:           false,
 			allowedNamespaces: "",
 			namespace:         "ns1",
 			useV2Spec:         false,
+			errorCode:         codes.InvalidArgument,
+			errorMsg:          "not allowed to run v1 pipelines",
 		},
 		{
 			msg:               "BlockV1_V2PipelineNotBlocked",
@@ -2422,7 +2445,7 @@ func TestCreateRun_BlockV1Pipelines(t *testing.T) {
 			viper.Set(v1AllowedNamespaces, test.allowedNamespaces)
 			defer func() {
 				viper.Set(util.BlockV1Pipelines, nil)
-				viper.Set(v1AllowedNamespaces, nil)
+				viper.Set(v1AllowedNamespaces, legacyV1TestNamespaces)
 			}()
 
 			store, manager, exp := initWithExperiment(t)
@@ -3971,11 +3994,13 @@ func TestCreateJob_BlocksV1Pipelines(t *testing.T) {
 			useV2Spec:         false,
 		},
 		{
-			msg:               "BlockV1_Disabled_AnyNamespaceAllowed",
+			msg:               "BlockV1_Disabled_StillBlockedInDSP",
 			blockV1:           false,
 			allowedNamespaces: "",
 			namespace:         "ns1",
 			useV2Spec:         false,
+			errorCode:         codes.InvalidArgument,
+			errorMsg:          "not allowed to run v1 pipelines",
 		},
 		{
 			msg:               "BlockV1_V2PipelineNotBlocked",
@@ -4008,7 +4033,7 @@ func TestCreateJob_BlocksV1Pipelines(t *testing.T) {
 			viper.Set(v1AllowedNamespaces, test.allowedNamespaces)
 			defer func() {
 				viper.Set(util.BlockV1Pipelines, nil)
-				viper.Set(v1AllowedNamespaces, nil)
+				viper.Set(v1AllowedNamespaces, legacyV1TestNamespaces)
 			}()
 
 			store, manager, exp := initWithExperiment(t)

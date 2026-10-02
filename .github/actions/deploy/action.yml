@@ -1,11 +1,43 @@
-name: "Set up KFP on KinD"
-description: "Step to start and configure KFP on Kind"
+name: "Deploy Data Science Pipelines"
+description: "Enhanced deployment with DSPO and PyPI server support"
 
 inputs:
   cluster_name:
     description: "Kind cluster name"
     default: 'kfp'
     required: false
+  # Image configuration
+  image_tag:
+    default: "latest"
+    required: true
+    description: "Provide the image tag your image was tagged with"
+  image_path:
+    required: true
+    description: "Path within github artifacts where your image tarball is stored"
+  image_path_prefix:
+    required: false
+    default: ''
+    description: "Registry path prefix for images (e.g., 'opendatahub' results in 'quay.io/opendatahub/apiserver:tag')"
+  image_registry:
+    default: "kind-registry:5000"
+    required: true
+    description: "Image Registry address of the images"
+
+  # Operator deployment options
+  deploy_pypi_server:
+    description: "Deploy PyPI server for Python packages"
+    required: false
+    default: 'false'
+  deploy_external_argo:
+    description: "Deploy Argo Workflows externally in separate namespace"
+    required: false
+    default: 'false'
+  argo_namespace:
+    description: "Namespace for external Argo Workflows deployment"
+    required: false
+    default: 'argo'
+
+  # Existing KFP options
   pipeline_store:
     description: "Flag to deploy KFP with K8s Native API"
     default: 'database'
@@ -18,15 +50,6 @@ inputs:
     description: "If KFP should be deployed with cache enabled globally"
     required: false
     default: 'true'
-  image_tag:
-    required: true
-    description: "Provide the image tag your image was tagged with"
-  image_path:
-    required: true
-    description: "Path within github artifacts where your image tarball is stored"
-  image_registry:
-    required: true
-    description: "Image Registry address of the images"
   multi_user:
     description: "If KFP should be deployed in multi-user mode"
     required: false
@@ -35,6 +58,10 @@ inputs:
     description: "Enables artifact proxy"
     required: false
     default: 'false'
+  storage_backend:
+    description: "Storage backend to use (minio or seaweedfs)"
+    required: false
+    default: 'seaweedfs'
   argo_version:
     required: false
     description: "Argo version to use for the cluster"
@@ -50,15 +77,61 @@ inputs:
     description: "If KFP should be deployed with TLS pod-to-pod communication."
     required: false
     default: 'false'
+  namespace:
+    description: "Namespace for DSPA deployment"
+    required: false
+    default: 'kubeflow'
+  skip_operator_deployment:
+    description: "True if you do not want the deployment to use DSPO"
+    required: false
+    default: 'true'
+  deploy_external_db:
+    description: "Deploy DB externally instead of via DSPO"
+    required: false
+    default: 'false'
+  dspa_name:
+    description: "Name of the DSPA resource"
+    required: false
+    default: 'dspa-test'
+  operator_branch:
+    description: "Exact DSPO source branch. Defaults to the PR head branch or current branch with upstream fallback."
+    required: false
+    default: ''
+  skip_load_docker_images:
+    description: "Skip loading images to kind registry"
+    required: false
+    default: 'false'
+
   load_modelcar_fixture:
     description: "Load the prebuilt Modelcar test fixture image into Kind."
     required: false
     default: 'false'
 
+outputs:
+  deployment_name:
+    description: "Name of the KFP API server deployment/service"
+    value: ${{ steps.deploy-kfp.outputs.DEPLOYMENT_NAME }}
+  service_account_name:
+    description: "Name of the KFP API server service account"
+    value: ${{ steps.deploy-kfp.outputs.SERVICE_ACCOUNT_NAME }}
+  pipeline_runner_service_account:
+    description: "Service account for pipeline execution (may differ from API server SA)"
+    value: ${{ steps.deploy-kfp.outputs.PIPELINE_RUNNER_SERVICE_ACCOUNT }}
+  deployment_mode:
+    description: "Deployment mode used (operator or direct)"
+    value: ${{ steps.deploy-kfp.outputs.DEPLOYMENT_MODE }}
+  database_name:
+    description: "Name of the database deployment/service"
+    value: ${{ steps.deploy-kfp.outputs.DATABASE_NAME }}
+  frontend_service_name:
+    description: "Name of the Frontend UI service"
+    value: ${{ steps.deploy-kfp.outputs.FRONTEND_SERVICE_NAME }}
+
 runs:
   using: "composite"
   steps:
     - name: Wait for branch image artifacts
+      if: ${{ inputs.skip_load_docker_images != 'true' }}
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
@@ -66,40 +139,31 @@ runs:
 
     - name: Download Docker Images
       uses: ./.github/actions/download-artifact-with-retry
+      if: ${{ inputs.skip_load_docker_images != 'true' }}
       with:
         path: "images_${{ github.run_id }}"
         pattern: "!*.dockerbuild"
 
-    - name: Load Control Plane Images Into Kind
+    - name: Load Docker Images
       shell: bash
+      if: ${{ inputs.skip_load_docker_images != 'true' }}
       run: |
-        # These images are deployed directly by the CI manifests and use
-        # IfNotPresent in the CI install path, so loading the image archive
-        # into the Kind node is sufficient. Import two at a time: this overlaps
-        # decompression without flooding the single Kind node's containerd.
-        source .github/resources/scripts/ci-image-artifacts.sh
-        ARCHIVES=()
-        for app in "${CONTROL_PLANE_IMAGE_ARTIFACTS[@]}"; do
-          ARCHIVES+=("${{ inputs.image_path }}/$app/$app.tar")
+        ALL_APPS=("apiserver" "scheduledworkflow" "persistenceagent" "frontend" "viewer-crd-controller" "visualization-server" "cache-deployer" "cache-server" "driver" "launcher")
+        for app in "${ALL_APPS[@]}"; do
+          docker image load -i ${{ inputs.image_path }}/$app/$app.tar
+          docker tag ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }} localhost:5000/$app:${{ inputs.image_tag }}
+          docker tag ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }} localhost:5000/$app:ci
+          docker push localhost:5000/$app:${{ inputs.image_tag }}
+          docker push localhost:5000/$app:ci
+          rm ${{ inputs.image_path }}/$app/$app.tar
+          docker image rm ${{ inputs.image_registry }}/$app:${{ inputs.image_tag }}
+          docker image rm localhost:5000/$app:${{ inputs.image_tag }}
+          docker image rm localhost:5000/$app:ci
         done
-        ./.github/resources/scripts/load-kind-image-archives.sh \
-          "${{ inputs.cluster_name }}" 2 "${ARCHIVES[@]}"
-
-    - name: Load Driver and Launcher Images Into Kind
-      shell: bash
-      run: |
-        # Runtime-generated workflow pods inherit these refs from the API server
-        # environment. Tagging them away from `latest` makes Kubernetes default
-        # them to IfNotPresent, so they can also be loaded directly into Kind.
-        source .github/resources/scripts/ci-image-artifacts.sh
-        for app in "${RUNTIME_IMAGE_ARTIFACTS[@]}"; do
-          docker image load -i "${{ inputs.image_path }}/$app/$app.tar"
-          docker tag "${{ inputs.image_registry }}/$app:${{ inputs.image_tag }}" "${{ inputs.image_registry }}/$app:ci"
-          kind --name "${{ inputs.cluster_name }}" load docker-image "${{ inputs.image_registry }}/$app:ci"
-          rm "${{ inputs.image_path }}/$app/$app.tar"
-          docker image rm "${{ inputs.image_registry }}/$app:${{ inputs.image_tag }}"
-          docker image rm "${{ inputs.image_registry }}/$app:ci"
-        done
+        bash ./.github/resources/scripts/docker-pull-with-retry.sh python:3.11
+        bash ./.github/resources/scripts/docker-pull-with-retry.sh registry.access.redhat.com/ubi9/python-311:latest
+        kind load docker-image python:3.11 --name ${{ inputs.cluster_name }}
+        kind load docker-image registry.access.redhat.com/ubi9/python-311:latest --name ${{ inputs.cluster_name }}
 
     - name: Load Runtime Base Images Into Kind
       shell: bash
@@ -145,64 +209,80 @@ runs:
         CLUSTER_NAME: ${{ inputs.cluster_name }}
       run: ./.github/resources/tinyproxy/deploy-tinyproxy.sh
 
-    - name: Configure Args
+    - name: Install Python Dependencies
       shell: bash
-      id: configure
       run: |
-        ARGS=""
+        pip3 install pyyaml
 
-        if [ "${{ inputs.proxy }}" = "true" ]; then
-          echo "Enabling Proxy"
-          ARGS="${ARGS} --proxy"
-        fi
+    - name: Set up Go
+      uses: ./.github/actions/setup-go
 
-        if [ "${{inputs.cache_enabled }}" = "false" ]; then
-          echo "Disabling Cache"
-          ARGS="${ARGS} --cache-disabled"
-        fi
-
-        if [ "${{inputs.pipeline_store }}" = "kubernetes" ]; then
-          echo "Deploying in native K8s API Mode"
-          ARGS="${ARGS} --deploy-k8s-native"
-        fi
-
-        if [ "${{ inputs.multi_user }}" = "true" ]; then
-          echo "Deploying in Multi User Mode"
-          ARGS="${ARGS} --multi-user"
-        fi
-
-        if [ "${{ inputs.artifact_proxy }}" = "true" ]; then
-          echo "Enabling artifact proxy"
-          ARGS="${ARGS} --artifact-proxy"
-        fi
-
-        if [ -n "${{ inputs.argo_version }}" ]; then
-          echo "Deploying with argo version ${{ inputs.argo_version }}"
-          ARGS="${ARGS} --argo-version ${{ inputs.argo_version }}"
-        fi
-
-        if [ "${{inputs.pod_to_pod_tls_enabled }}" = "true" ]; then
-          ARGS="${ARGS} --tls-enabled"
-        fi
-
-        if [ -n "${{ inputs.db_type }}" ]; then
-          echo "Deploying with database type ${{ inputs.db_type }}"
-          ARGS="${ARGS} --db-type ${{ inputs.db_type }}"
-        fi
-
-        echo "ARGS=$ARGS" >> "$GITHUB_OUTPUT"
-
-    - name: Deploy KFP
+    - name: Deploy Data Science Pipelines
       id: deploy-kfp
-      if: ${{ steps.configure.outcome == 'success' }}
-      uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60
-      with:
-        max_attempts: 2
-        timeout_minutes: 15
-        command: ./.github/resources/scripts/deploy-kfp.sh ${{ steps.configure.outputs.ARGS }}
-
-    - name: Forward API port
-      id: forward-api-port
       shell: bash
-      if: ${{ steps.deploy-kfp.outcome == 'success' && inputs.forward_port == 'true'}}
-      run: ./.github/resources/scripts/forward-port.sh "kubeflow" "ml-pipeline" 8888 8888
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        OPERATOR_BRANCH: ${{ inputs.operator_branch || github.head_ref || github.ref_name }}
+        OPERATOR_BRANCH_REQUIRED: ${{ inputs.operator_branch != '' }}
+        OPERATOR_REPO_OWNER: ${{ github.event.pull_request.head.repo.owner.login || github.repository_owner }}
+        OPERATOR_UPSTREAM_OWNER: ${{ github.repository_owner == 'red-hat-data-services' && 'red-hat-data-services' || 'opendatahub-io' }}
+        IMAGE_TAG: ${{ inputs.image_tag }}
+        IMAGE_REGISTRY: ${{ inputs.image_registry }}
+        DEPLOY_PYPI_SERVER: ${{ inputs.deploy_pypi_server }}
+        DEPLOY_EXTERNAL_ARGO: ${{ inputs.deploy_external_argo }}
+        ARGO_NAMESPACE: ${{ inputs.argo_namespace }}
+        ARGO_VERSION: ${{ inputs.argo_version }}
+        PIPELINE_STORE: ${{ inputs.pipeline_store }}
+        DB_TYPE: ${{ inputs.db_type }}
+        PROXY: ${{ inputs.proxy }}
+        CACHE_ENABLED: ${{ inputs.cache_enabled }}
+        MULTI_USER: ${{ inputs.multi_user }}
+        ARTIFACT_PROXY: ${{ inputs.artifact_proxy }}
+        STORAGE_BACKEND: ${{ inputs.storage_backend }}
+        FORWARD_PORT: ${{ inputs.forward_port }}
+        POD_TO_POD_TLS_ENABLED: ${{ inputs.pod_to_pod_tls_enabled }}
+        NAMESPACE: ${{ inputs.namespace }}
+        SKIP_OPERATOR_DEPLOYMENT: ${{ inputs.skip_operator_deployment }}
+        IMAGE_PATH_PREFIX: ${{ inputs.image_path_prefix }}
+        DEPLOY_EXTERNAL_DB: ${{ inputs.deploy_external_db }}
+        DSPA_NAME: ${{ inputs.dspa_name }}
+        CLUSTER_NAME: ${{ inputs.cluster_name }}
+      run: |
+        # Apply defaults for empty values
+        PIPELINE_STORE="${PIPELINE_STORE:-database}"
+        STORAGE_BACKEND="${STORAGE_BACKEND:-seaweedfs}"
+        NAMESPACE="${NAMESPACE:-kubeflow}"
+        PROXY="${PROXY:-false}"
+        POD_TO_POD_TLS_ENABLED="${POD_TO_POD_TLS_ENABLED:-false}"
+        SKIP_OPERATOR_DEPLOYMENT="${SKIP_OPERATOR_DEPLOYMENT:-true}"
+        ARGO_NAMESPACE="${ARGO_NAMESPACE:-argo}"
+        DEPLOY_EXTERNAL_ARGO="${DEPLOY_EXTERNAL_ARGO:-false}"
+
+        python3 ./.github/actions/deploy/deploy.py \
+          --github-repository "$GITHUB_REPOSITORY" \
+          --operator-branch "$OPERATOR_BRANCH" \
+          --operator-branch-required "$OPERATOR_BRANCH_REQUIRED" \
+          --operator-repo-owner "$OPERATOR_REPO_OWNER" \
+          --operator-upstream-owner "$OPERATOR_UPSTREAM_OWNER" \
+          --cluster-name "$CLUSTER_NAME" \
+          --image-tag "$IMAGE_TAG" \
+          --image-registry "$IMAGE_REGISTRY" \
+          --deploy-pypi-server "$DEPLOY_PYPI_SERVER" \
+          --deploy-external-argo "$DEPLOY_EXTERNAL_ARGO" \
+          --argo-namespace "$ARGO_NAMESPACE" \
+          --argo-version "$ARGO_VERSION" \
+          --pipeline-store "$PIPELINE_STORE" \
+          --db-type "${DB_TYPE:-mysql}" \
+          --proxy "$PROXY" \
+          --cache-enabled "$CACHE_ENABLED" \
+          --multi-user "$MULTI_USER" \
+          --artifact-proxy "$ARTIFACT_PROXY" \
+          --storage-backend "$STORAGE_BACKEND" \
+          --forward-port "$FORWARD_PORT" \
+          --pod-to-pod-tls-enabled "$POD_TO_POD_TLS_ENABLED" \
+          --namespace "$NAMESPACE" \
+          --skip-operator-deployment "$SKIP_OPERATOR_DEPLOYMENT" \
+          --image-path-prefix "$IMAGE_PATH_PREFIX" \
+          --deploy-external-db "$DEPLOY_EXTERNAL_DB" \
+          --dspa-name "$DSPA_NAME"

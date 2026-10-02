@@ -66,11 +66,18 @@ const TokenAudienceRunPrefix string = "/runs/"
 const DefaultMetadataTLSEnabled = false
 
 const (
+	DefaultMetadataGrpcServiceServiceHost = "metadata-grpc-service"
+	DefaultMetadataGrpcServiceServicePort = "8080"
+)
+
+const (
 	DefaultPipelineRunnerServiceAccount = "pipeline-runner"
 	HasDefaultBucketEnvVar              = "HAS_DEFAULT_BUCKET"
 	DefaultBucketNameEnvVar             = "BUCKET_NAME"
 	ProjectIDEnvVar                     = "PROJECT_ID"
 )
+
+const DefaultSignedURLExpiryTimeSeconds = 15
 
 const (
 	MaxFileNameLength = 100

@@ -2,6 +2,8 @@ module github.com/kubeflow/pipelines
 
 go 1.27.0
 
+godebug fips140=on
+
 toolchain go1.27.1
 
 require (

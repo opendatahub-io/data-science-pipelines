@@ -146,13 +146,7 @@ func TestShouldEnforceV1Block(t *testing.T) {
 			namespace: "ns1",
 			expected:  true,
 		},
-		{
-			name:      "V1 workflow spec, blocking disabled - not blocked",
-			spec:      v1WorkflowSpec,
-			blockV1:   "false",
-			namespace: "ns1",
-			expected:  false,
-		},
+		// "V1 workflow spec, blocking disabled" removed: V1 is unconditionally blocked in DSP
 		{
 			name:              "V1 workflow spec, namespace allowed - not blocked",
 			spec:              v1WorkflowSpec,

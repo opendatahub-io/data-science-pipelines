@@ -77,7 +77,8 @@ var _ = Describe("Verify Spec Compilation to Workflow >", Label(POSITIVE, Workfl
 		},
 	}
 	for _, param := range testParams {
-		Context(fmt.Sprintf("Verify compiled workflow for a pipeline with compiler options cacheDisabled '%v' and env vars %v >", param.compilerOptions.CacheDisabled, param.envVars), Ordered, func() {
+		// Fixtures compile independently; one mismatch must not skip the rest.
+		Context(fmt.Sprintf("Verify compiled workflow for a pipeline with compiler options cacheDisabled '%v' and env vars %v >", param.compilerOptions.CacheDisabled, param.envVars), Ordered, ContinueOnFailure, func() {
 			// Set and cleanup env vars per spec execution
 			BeforeEach(func() {
 				for envVarName, envVarValue := range param.envVars {

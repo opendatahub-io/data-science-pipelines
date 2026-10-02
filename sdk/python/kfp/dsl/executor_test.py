@@ -2272,7 +2272,7 @@ class TestTaskConfigDeserialization(parameterized.TestCase):
             'resourceClaims': [{
                 'name': 'gpu',
                 'resourceClaimTemplateName': 'gpu-template'
-            },],
+            }],
         }
         config = TaskConfig(
             affinity=value.get('affinity'),

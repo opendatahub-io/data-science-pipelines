@@ -1,0 +1,6 @@
+# Dockerfiles excluded from Go version consistency check.
+# One path per line, relative to repo root. Comments (#) and blank lines are allowed.
+
+# Builds an external tool (build-machinery-go/commitchecker),
+# not tied to this repo's Go module.
+tools/commit_checker/Dockerfile

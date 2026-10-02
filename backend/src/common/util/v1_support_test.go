@@ -30,15 +30,15 @@ func TestIsV1PipelinesBlocked(t *testing.T) {
 		expected          bool
 	}{
 		{
-			name:      "Blocking disabled - not blocked",
+			name:      "Blocking disabled - still blocked in DSP",
 			blockV1:   "false",
 			namespace: "ns1",
-			expected:  false,
+			expected:  true,
 		},
 		{
-			name:      "Blocking not set - not blocked",
+			name:      "Blocking not set - blocked by default in DSP",
 			namespace: "ns1",
-			expected:  false,
+			expected:  true,
 		},
 		{
 			name:      "Blocking enabled, no allowed namespaces - blocked",

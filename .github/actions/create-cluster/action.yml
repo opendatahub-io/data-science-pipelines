@@ -53,6 +53,7 @@ runs:
         kubectl_version: ${{ inputs.k8s_version }}
         version: v0.32.0
         node_image: kindest/node:${{ inputs.k8s_version }}
+        registry: true
 
     - name: Retry Create k8s Kind Cluster
       uses: helm/kind-action@v1.15.0
@@ -64,6 +65,7 @@ runs:
         kubectl_version: ${{ inputs.k8s_version }}
         version: v0.32.0
         node_image: kindest/node:${{ inputs.k8s_version }}
+        registry: true
 
     - name: Remove kindnet CPU limit
       shell: bash

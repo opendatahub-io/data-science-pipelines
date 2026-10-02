@@ -334,6 +334,7 @@ func TestCreatePipelineVersionV1_NameTooLong(t *testing.T) {
 }
 
 func TestCreatePipelineVersionV1_YAML(t *testing.T) {
+	initEnvVars()
 	httpServer := getMockServer(t)
 	// Close the server when test finishes
 	defer httpServer.Close()
@@ -410,6 +411,7 @@ func TestCreatePipelineVersion_InvalidYAML(t *testing.T) {
 }
 
 func TestCreatePipelineVersion_Tarball(t *testing.T) {
+	initEnvVars()
 	httpServer := getMockServer(t)
 	// Close the server when test finishes
 	defer httpServer.Close()

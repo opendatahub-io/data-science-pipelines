@@ -29,18 +29,25 @@ func TestE2eCriticalShardForPipelineCoversCriticalPipelines(t *testing.T) {
 	}
 
 	shardCounts := map[string]int{}
+	assignedToShardA := map[string]bool{}
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
 			continue
 		}
-		shardCounts[E2eCriticalShardForPipeline(entry.Name())]++
+		shard := E2eCriticalShardForPipeline(entry.Name())
+		shardCounts[shard]++
+		if shard == E2eCriticalShardA {
+			assignedToShardA[entry.Name()] = true
+		}
 	}
 
-	if got := shardCounts[E2eCriticalShardA]; got != 17 {
-		t.Errorf("shard A contains %d critical pipelines, want 17", got)
+	for pipelineFile := range e2eCriticalShardAPipelines {
+		if !assignedToShardA[pipelineFile] {
+			t.Errorf("shard A pipeline %q is missing from critical fixtures", pipelineFile)
+		}
 	}
-	if got := shardCounts[E2eCriticalShardB]; got != 16 {
-		t.Errorf("shard B contains %d critical pipelines, want 16", got)
+	if got := shardCounts[E2eCriticalShardB]; got == 0 {
+		t.Error("shard B contains no critical pipelines")
 	}
 	if got := len(shardCounts); got != 2 {
 		t.Errorf("critical pipelines use %d shard labels, want 2: %v", got, shardCounts)

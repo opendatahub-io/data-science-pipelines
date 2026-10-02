@@ -2305,8 +2305,8 @@ def write_pipeline_spec_to_file(
         with open(package_path, 'w') as json_file:
             if has_platform_specific_features:
                 raise ValueError(
-                    f'Platform-specific features are only supported when serializing to YAML. Argument for {"package_path"!r} has file extension {".json"!r}.'
-                )
+                    'Platform-specific features are only supported when serializing to YAML. Argument for %r has file extension %r.'
+                    % ('package_path', '.json'))
             json.dump(pipeline_spec_dict, json_file, indent=2, sort_keys=True)
 
     elif package_path.endswith(('.yaml', '.yml')):

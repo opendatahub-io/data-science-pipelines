@@ -35,15 +35,20 @@ var (
 	AuthToken                     = flag.String("authToken", "", "The default auth token that will be injected to all your API request")
 	TLSEnabled                    = flag.Bool("tlsEnabled", false, "Set to true if mlpipeline API server and metadata server serve over TLS")
 	CaCertPath                    = flag.String("caCertPath", "", "The path to the CA certificate to trust on connections to the ML pipeline API server and metadata server")
+	CustomPipIndexURL             = flag.String("customPipIndexURL", "https://pypi.org/simple", "Pip index URL for installing Python packages")
+	CustomPipTrustedHost          = flag.String("customPipTrustedHost", "pypi.org", "Pip trusted host for the custom index URL")
+	CustomPipelineEnvVars         = flag.String("customConfigEnvVars", "ds-pipeline-custom-env-vars", "Config Map name to specify custom env vars like pypi index")
+	GpuVendor                     = flag.String("gpuVendor", "nvidia", "The GPU vendor to use i.e. nvidia, amd, both or all")
 )
 
 var (
-	REPO_NAME   = flag.String("repoName", "kubeflow/pipelines", "The name of the repository")
+	REPO_NAME   = flag.String("repoName", "opendatahub-io/data-science-pipelines", "The name of the repository")
 	PULL_NUMBER = flag.String("pullNumber", "", "The pull number")
 	BRANCH_NAME = flag.String("branchName", "master", "The branch name")
 	BaseImage   = flag.String("baseImage", "", "The base image for components to override with")
 )
 
+var DisconnectedCluster = flag.Bool("disconnectedCluster", false, "Whether the cluster is disconnected (air-gapped) with no internet access")
 var DebugMode = flag.Bool("debugMode", false, "Whether to enable debug mode. Debug mode will log more diagnostics messages.")
 var PodLogLimit = flag.Int64("podLogLimit", 50000000, "Limit the pod logs size to this limit")
 
@@ -63,3 +68,5 @@ var (
 var (
 	MLflowEnabled = flag.Bool("mlflowEnabled", false, "Whether MLflow is deployed and available for integration tests")
 )
+
+var ReportOutputDir = flag.String("reportOutputDir", "reports", "Directory for JUnit and JSON test reports")

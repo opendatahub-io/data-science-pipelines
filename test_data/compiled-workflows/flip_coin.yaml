@@ -5,7 +5,22 @@ metadata:
     workflows.argoproj.io/pod-name-format: v1
   generateName: conditional-execution-pipeline-
 spec:
-  arguments: {}
+  arguments:
+    parameters:
+    - name: kubernetes-comp-print-msg
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
+    - name: kubernetes-comp-print-msg-2
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
+    - name: kubernetes-comp-random-num
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
+    - name: kubernetes-comp-print-msg-3
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
+    - name: kubernetes-comp-print-msg-4
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
+    - name: kubernetes-comp-random-num-2
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
+    - name: kubernetes-comp-flip-coin
+      value: '{"configMapAsEnv":[{"configMapName":"ds-pipeline-custom-env-vars","configMapNameParameter":{"runtimeValue":{"constant":"ds-pipeline-custom-env-vars"}},"keyToEnv":[{"configMapKey":"pip_index_url","envVar":"PIP_INDEX_URL"},{"configMapKey":"pip_trusted_host","envVar":"PIP_TRUSTED_HOST"}],"optional":false}]}'
   entrypoint: entrypoint
   podMetadata:
     annotations:
@@ -293,6 +308,8 @@ spec:
             value: print-msg
           - name: parent-dag-task-id
             value: '{{inputs.parameters.parent-dag-task-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-print-msg}}'
         name: print-msg-driver
         template: system-container-driver
       - arguments:
@@ -319,6 +336,8 @@ spec:
             value: print-msg-2
           - name: parent-dag-task-id
             value: '{{inputs.parameters.parent-dag-task-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-print-msg-2}}'
         name: print-msg-2-driver
         template: system-container-driver
       - arguments:
@@ -516,6 +535,8 @@ spec:
             value: random-num
           - name: parent-dag-task-id
             value: '{{inputs.parameters.parent-dag-task-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-random-num}}'
         name: random-num-driver
         template: system-container-driver
       - arguments:
@@ -542,6 +563,8 @@ spec:
             value: print-msg-3
           - name: parent-dag-task-id
             value: '{{inputs.parameters.parent-dag-task-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-print-msg-3}}'
         name: print-msg-3-driver
         template: system-container-driver
       - arguments:
@@ -568,6 +591,8 @@ spec:
             value: print-msg-4
           - name: parent-dag-task-id
             value: '{{inputs.parameters.parent-dag-task-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-print-msg-4}}'
         name: print-msg-4-driver
         template: system-container-driver
       - arguments:
@@ -632,6 +657,8 @@ spec:
             value: random-num-2
           - name: parent-dag-task-id
             value: '{{inputs.parameters.parent-dag-task-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-random-num-2}}'
         name: random-num-2-driver
         template: system-container-driver
       - arguments:
@@ -696,6 +723,8 @@ spec:
             value: flip-coin
           - name: parent-dag-task-id
             value: '{{inputs.parameters.parent-dag-task-id}}'
+          - name: kubernetes-config
+            value: '{{workflow.parameters.kubernetes-comp-flip-coin}}'
         name: flip-coin-driver
         template: system-container-driver
       - arguments:

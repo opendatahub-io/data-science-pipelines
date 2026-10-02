@@ -29,9 +29,9 @@ def verify_dra_static():
 
 
 @dsl.pipeline(
-    name="dra-static-claim-check",
-    description=("Verifies a task with a static DRA ResourceClaim can schedule "
-                 "and complete using the dra-example-driver."),
+    name='dra-static-claim-check',
+    description=('Verifies a task with a static DRA ResourceClaim can schedule '
+                 'and complete using the dra-example-driver.'),
 )
 def dra_static_claim_check():
     task = verify_dra_static().set_caching_options(False)
@@ -41,8 +41,8 @@ def dra_static_claim_check():
         task, resource_claim_template_name='dra-test-claim-secondary')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     compiler.Compiler().compile(
         dra_static_claim_check,
-        package_path=__file__.replace(".py", ".yaml"),
+        package_path=__file__.replace('.py', '.yaml'),
     )

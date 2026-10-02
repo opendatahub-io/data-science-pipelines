@@ -188,6 +188,7 @@ jobs:
             NODE_VERSION=${{ steps.frontend_node.outputs.version }}
           tags: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
           outputs: type=docker,dest=${{ env.ARTIFACTS_PATH }}/${{ env.ARTIFACT_NAME }}.tar
+          network: host
 
       - name: Wait before rebuilding
         if: ${{ steps.save-image.outcome == 'failure' }}
@@ -209,6 +210,7 @@ jobs:
             NODE_VERSION=${{ steps.frontend_node.outputs.version }}
           tags: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
           outputs: type=docker,dest=${{ env.ARTIFACTS_PATH }}/${{ env.ARTIFACT_NAME }}.tar
+          network: host
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

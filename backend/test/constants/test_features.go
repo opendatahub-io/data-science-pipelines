@@ -20,6 +20,8 @@ const (
 	Smoke string = "smoke"
 	// Sanity - quality gate tag for sanity level testing
 	Sanity string = "sanity"
+	// Disconnected - quality gate tag for disconnected testing
+	Disconnected string = "disconnected"
 	// Integration - quality gate tag for integration testing with other components
 	Integration = "integration"
 	// E2eEssential - For pipelines that are essential for regression testing
@@ -35,6 +37,8 @@ const (
 	E2eParallelNested string = "E2EParallelNested"
 	// E2eProxy - For pipeline that runs with a proxy
 	E2eProxy string = "E2EProxy"
+	// E2eGpu - For pipelines that require GPU-capable clusters (accelerator workloads)
+	E2eGpu string = "gpu"
 	// E2eGpuSchedulingCheck - Schedule-only NVIDIA GPU checks (e.g. Kind + FGO fake);
 	// does not require CUDA / torch.cuda.
 	E2eGpuSchedulingCheck string = "gpu-scheduling-check"
@@ -66,4 +70,7 @@ const (
 	MLflowParallelLoop string = "MLflowParallelLoop"
 	// MLflowFailure — failed pipelines and RetryRun semantics with MLflow tracking.
 	MLflowFailure string = "MLflowFailure"
+
+	// FilteredTests is a skip-message marker that excludes a test from JUnit/JSON reports.
+	FilteredTests string = "[filtered]"
 )

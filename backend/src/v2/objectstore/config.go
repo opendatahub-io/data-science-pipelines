@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 // Package objectstore contains helper methods for using object stores.
 package objectstore
 
@@ -52,6 +53,7 @@ type Config struct {
 	BucketName  string
 	Prefix      string
 	QueryString string
+	SessionInfo *SessionInfo
 }
 
 type SessionInfo struct {

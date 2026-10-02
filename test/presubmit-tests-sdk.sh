@@ -16,6 +16,7 @@
 source_root=$(pwd)
 SETUP_ENV="${SETUP_ENV:-true}"
 PYTEST_PARALLEL_WORKERS="${PYTEST_PARALLEL_WORKERS:-2}"
+JUNIT_XML="${JUNIT_XML:-sdk-unit.xml}"
 
 if [ "${SETUP_ENV}" = "true" ]; then
   # Create a virtual environment and activate it
@@ -31,9 +32,11 @@ if [ "${SETUP_ENV}" = "true" ]; then
   python3 -m pip install pytest-xdist
   python3 -m pip install pytest
   python3 -m pip install google_cloud_pipeline_components
-  python3 -m pip install docker
+  python3 -m pip install docker==7.1.0
   python3 -m pip install --upgrade protobuf
   python3 -m pip install sdk/python
+  python3 -m pip install -e kubernetes_platform/python --force-reinstall
+  python3 -m pip install -e backend/api/v2beta1/python_http_client --force-reinstall
 
   # regenerate the kfp-pipeline-spec
   cd api/
@@ -49,7 +52,7 @@ else
   export KFP_PACKAGE_PATH="git+https://github.com/${REPO_NAME}@refs/pull/${PULL_NUMBER}/merge#egg=kfp&subdirectory=sdk/python"
 fi
 
-python -m pytest sdk/python/test -v -m regression --cov=kfp -n "${PYTEST_PARALLEL_WORKERS}"
+python -m pytest sdk/python/test -v -m regression --cov=kfp -n "${PYTEST_PARALLEL_WORKERS}" --junitxml="${JUNIT_XML}"
 
 if [ "${SETUP_ENV}" = "true" ]; then
   # Deactivate the virtual environment

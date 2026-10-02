@@ -24,7 +24,7 @@ ifneq ($(USE_PREBUILT_IMAGE),false)
 $(error USE_PREBUILT_IMAGE must be 'true' or 'false', got '$(USE_PREBUILT_IMAGE)')
 endif
 endif
-PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:master
+PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:release-2.17@sha256:28f1aaa56c2abefedecf162f5917843283253d2cd8d99bc53c18587033320370
 IMAGE_TAG=kfp-api-generator
 
 .PHONY: all

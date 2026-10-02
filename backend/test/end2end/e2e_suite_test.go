@@ -21,14 +21,17 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	apiserver "github.com/kubeflow/pipelines/backend/src/common/client/api_server/v2"
 	"github.com/kubeflow/pipelines/backend/test/config"
+	"github.com/kubeflow/pipelines/backend/test/constants"
 	"github.com/kubeflow/pipelines/backend/test/logger"
 	"github.com/kubeflow/pipelines/backend/test/testutil"
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/ginkgo/v2/reporters"
 	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes"
@@ -51,7 +54,6 @@ var (
 // Test Reporting Variables
 var (
 	testLogsDirectory   = "logs"
-	testReportDirectory = "reports"
 	junitReportFilename = "junit.xml"
 	jsonReportFilename  = "e2e.json"
 )
@@ -59,8 +61,8 @@ var (
 var _ = BeforeSuite(func() {
 	err := os.MkdirAll(testLogsDirectory, 0755)
 	Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating Logs Directory: %s", testLogsDirectory))
-	err = os.MkdirAll(testReportDirectory, 0755)
-	Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating Reports Directory: %s", testReportDirectory))
+	err = os.MkdirAll(*config.ReportOutputDir, 0755)
+	Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Error creating Reports Directory: %s", *config.ReportOutputDir))
 	var newPipelineClient func() (*apiserver.PipelineClient, error)
 	var newRunClient func() (*apiserver.RunClient, error)
 	var newExperimentClient func() (*apiserver.ExperimentClient, error)
@@ -74,6 +76,14 @@ var _ = BeforeSuite(func() {
 			log.Fatalf("Error getting TLS Config: %v", err)
 		}
 	}
+
+	testutil.CreateConfigMap(k8Client,
+		testutil.GetNamespace(),
+		*config.CustomPipelineEnvVars,
+		map[string]string{
+			"pip_index_url":    *config.CustomPipIndexURL,
+			"pip_trusted_host": *config.CustomPipTrustedHost,
+		})
 	if *config.KubeflowMode {
 		logger.Log("Creating API Clients for Kubeflow Mode")
 		newPipelineClient = func() (*apiserver.PipelineClient, error) {
@@ -154,13 +164,35 @@ var _ = ReportAfterEach(func(specReport types.SpecReport) {
 	}
 })
 
+// Custom reporter to filter out skipped tests
+var _ = ReportAfterSuite("Generate filtered JUnit report", func(report Report) {
+	filtered := report
+	filteredSpecs := make([]types.SpecReport, 0, len(report.SpecReports))
+	for _, spec := range report.SpecReports {
+		if (spec.State == types.SpecStateSkipped &&
+			(spec.Failure.Message == "" || strings.Contains(spec.Failure.Message, constants.FilteredTests))) ||
+			spec.LeafNodeType.Is(types.NodeTypesForSuiteLevelNodes) ||
+			spec.State == types.SpecStatePending {
+			continue
+		}
+		filteredSpecs = append(filteredSpecs, spec)
+	}
+	filtered.SpecReports = filteredSpecs
+
+	junitPath := filepath.Join(*config.ReportOutputDir, junitReportFilename)
+	err := reporters.GenerateJUnitReportWithConfig(filtered, junitPath, reporters.JunitReportConfig{})
+	Expect(err).NotTo(HaveOccurred(), "Failed to generate filtered JUnit report")
+
+	jsonPath := filepath.Join(*config.ReportOutputDir, jsonReportFilename)
+	err = reporters.GenerateJSONReport(filtered, jsonPath)
+	Expect(err).NotTo(HaveOccurred(), "Failed to generate filtered JSON report")
+})
+
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 	suiteConfigE2E, reporterConfigE2E := GinkgoConfiguration()
 	suiteConfigE2E.FailFast = false
 	reporterConfigE2E.ForceNewlines = true
 	reporterConfigE2E.SilenceSkips = true
-	reporterConfigE2E.JUnitReport = filepath.Join(testReportDirectory, junitReportFilename)
-	reporterConfigE2E.JSONReport = filepath.Join(testReportDirectory, jsonReportFilename)
-	RunSpecs(t, "E2E Tests Suite", suiteConfigE2E, reporterConfigE2E)
+	RunSpecs(t, "AIPipelinesE2ETests", suiteConfigE2E, reporterConfigE2E)
 }

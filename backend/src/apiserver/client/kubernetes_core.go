@@ -12,6 +12,7 @@ import (
 
 type KubernetesCoreInterface interface {
 	PodClient(namespace string) v1.PodInterface
+	SecretClient(namespace string) v1.SecretInterface
 	GetClientSet() kubernetes.Interface
 }
 
@@ -26,6 +27,10 @@ func (c *KubernetesCore) PodClient(namespace string) v1.PodInterface {
 
 func (c *KubernetesCore) GetClientSet() kubernetes.Interface {
 	return c.clientSet
+}
+
+func (c *KubernetesCore) SecretClient(namespace string) v1.SecretInterface {
+	return c.coreV1Client.Secrets(namespace)
 }
 
 func createKubernetesCore(clientParams util.ClientParameters) (KubernetesCoreInterface, error) {

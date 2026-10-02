@@ -10,6 +10,17 @@ WEBHOOK_PROXY_ENABLED ?= $(if $(filter mysql,$(DATABASE)),true,false)
 CERT_MANAGER_VERSION ?= v1.16.2
 DRA_DRIVER_NAMESPACE ?= dra-example-driver
 
+# TARGETARCH specifies the target architecture for the binary (amd64 or arm64).
+# Default is amd64.
+TARGETARCH ?= amd64
+
+# BUILDER_ARCH selects the builder stage platform in the Dockerfile (multiarch or arm64).
+# Default is multiarch for production builds on Linux.
+# Mac users must set BUILDER_ARCH=arm64 for local development because the
+# multiarch image segfaults under QEMU emulation on Apple Silicon.
+BUILDER_ARCH ?= multiarch
+
+PLATFORM_FLAG ?= --platform linux/$(TARGETARCH)
 # Validate DATABASE value
 VALID_DATABASES := mysql postgres
 ifeq ($(filter $(DATABASE),$(VALID_DATABASES)),)
@@ -70,25 +81,25 @@ image_all: image_apiserver image_persistence_agent image_cache image_swf image_v
 
 .PHONY: image_apiserver
 image_apiserver:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build --platform linux/amd64 -t ${IMG_REGISTRY}${IMG_TAG_APISERVER} -f backend/Dockerfile .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDER_ARCH=$(BUILDER_ARCH) -t ${IMG_REGISTRY}${IMG_TAG_APISERVER} -f backend/Dockerfile .
 .PHONY: image_persistence_agent
 image_persistence_agent:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build --platform linux/amd64 -t ${IMG_REGISTRY}${IMG_TAG_PERSISTENCEAGENT} -f backend/Dockerfile.persistenceagent .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDER_ARCH=$(BUILDER_ARCH) -t ${IMG_REGISTRY}${IMG_TAG_PERSISTENCEAGENT} -f backend/Dockerfile.persistenceagent .
 .PHONY: image_cache
 image_cache:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build --platform linux/amd64 -t ${IMG_REGISTRY}${IMG_TAG_CACHESERVER} -f backend/Dockerfile.cacheserver .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDER_ARCH=$(BUILDER_ARCH) -t ${IMG_REGISTRY}${IMG_TAG_CACHESERVER} -f backend/Dockerfile.cacheserver .
 .PHONY: image_swf
 image_swf:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build --platform linux/amd64 -t ${IMG_REGISTRY}${IMG_TAG_SCHEDULEDWORKFLOW} -f backend/Dockerfile.scheduledworkflow .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDER_ARCH=$(BUILDER_ARCH) -t ${IMG_REGISTRY}${IMG_TAG_SCHEDULEDWORKFLOW} -f backend/Dockerfile.scheduledworkflow .
 .PHONY: image_viewer
 image_viewer:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build --platform linux/amd64 -t ${IMG_REGISTRY}${IMG_TAG_VIEWERCONTROLLER} -f backend/Dockerfile.viewercontroller .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDER_ARCH=$(BUILDER_ARCH) -t ${IMG_REGISTRY}${IMG_TAG_VIEWERCONTROLLER} -f backend/Dockerfile.viewercontroller .
 .PHONY: image_visualization
 image_visualization:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build --platform linux/amd64 -t ${IMG_REGISTRY}${IMG_TAG_VISUALIZATION} -f backend/Dockerfile.visualization .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg BUILDER_ARCH=$(BUILDER_ARCH) -t ${IMG_REGISTRY}${IMG_TAG_VISUALIZATION} -f backend/Dockerfile.visualization .
 .PHONY: image_driver
 image_driver:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build --platform linux/amd64 -t ${IMG_REGISTRY}${IMG_TAG_DRIVER} -f backend/Dockerfile.driver .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDER_ARCH=$(BUILDER_ARCH) -t ${IMG_REGISTRY}${IMG_TAG_DRIVER} -f backend/Dockerfile.driver .
 .PHONY: image_driver_debug
 image_driver_debug:
 	cd $(MOD_ROOT) && sed -e '/RUN .*go mod download/a\
@@ -98,10 +109,10 @@ image_driver_debug:
 	COPY --from=builder /go/bin/dlv /bin/dlv\
 	EXPOSE 2345' \
 	backend/Dockerfile.driver > backend/Dockerfile.driver-debug
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build --platform linux/amd64 --build-arg GCFLAGS="all=-N -l" -t ${IMG_REGISTRY}${IMG_TAG_DRIVER}:debug -f backend/Dockerfile.driver-debug .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg GCFLAGS="all=-N -l" --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDER_ARCH=$(BUILDER_ARCH) -t ${IMG_REGISTRY}${IMG_TAG_DRIVER}:debug -f backend/Dockerfile.driver-debug .
 .PHONY: image_launcher
 image_launcher:
-	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build --platform linux/amd64 -t ${IMG_REGISTRY}${IMG_TAG_LAUNCHER} -f backend/Dockerfile.launcher .
+	cd $(MOD_ROOT) && ${CONTAINER_ENGINE} build $(PLATFORM_FLAG) --build-arg TARGETARCH=$(TARGETARCH) --build-arg BUILDER_ARCH=$(BUILDER_ARCH) -t ${IMG_REGISTRY}${IMG_TAG_LAUNCHER} -f backend/Dockerfile.launcher .
 
 .PHONY: install-cert-manager
 install-cert-manager:
@@ -166,6 +177,7 @@ dev-kind-cluster:
 	fi
 	kubectl -n kubeflow wait --for condition=Available --timeout=10m deployment/$(DB_DEPLOYMENT_NAME)
 	kubectl config set-context --current --namespace=kubeflow
+
 
 .PHONY: install-dra-driver
 install-dra-driver:

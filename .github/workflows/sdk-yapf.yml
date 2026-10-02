@@ -2,9 +2,11 @@ name: KFP SDK YAPF Tests
 
 on:
   push:
-    branches: [master]
-
-  pull_request:
+    branches:
+      - master
+      - main
+      - stable
+      - 'rhoai-*'
     paths:
       - 'api/**'
       - 'sdk/python/**'
@@ -13,6 +15,18 @@ on:
       - '.github/actions/setup-python-pip-cache/**'
       - '!**/*.md'
       - '!**/OWNERS'
+  pull_request:
+    branches:
+      - master
+      - main
+      - stable
+      - 'rhoai-*'
+    paths:
+      - 'sdk/python/**'
+      - 'test/presubmit-yapf-sdk.sh'
+      - '.github/workflows/sdk-yapf.yml'
+
+
 
 
 concurrency:

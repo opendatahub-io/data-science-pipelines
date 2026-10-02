@@ -16,6 +16,7 @@
 from pathlib import Path
 from pathlib import PurePosixPath
 import re
+import subprocess
 import unittest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -47,6 +48,16 @@ class DependabotConfigTest(unittest.TestCase):
         cls.config = DEPENDABOT_PATH.read_text(encoding='utf-8')
         cls.ci_scripts_workflow = CI_SCRIPTS_WORKFLOW_PATH.read_text(
             encoding='utf-8')
+        # Inventory the checkout, excluding local virtual environments and
+        # other ignored or untracked development files.
+        tracked_files = subprocess.check_output(['git', 'ls-files', '-z'],
+                                                cwd=REPOSITORY_ROOT,
+                                                text=True)
+        cls.tracked_paths = {
+            REPOSITORY_ROOT / relative_path
+            for relative_path in tracked_files.split('\0')
+            if relative_path
+        }
 
     def update_blocks(self) -> list[tuple[str, str]]:
         return re.findall(
@@ -148,7 +159,8 @@ class DependabotConfigTest(unittest.TestCase):
     def test_all_go_modules_are_covered(self):
         module_directories = {
             repository_directory(path)
-            for path in REPOSITORY_ROOT.rglob('go.mod')
+            for path in self.tracked_paths
+            if path.name == 'go.mod'
         }
 
         configured_directories = self.configured_directories('gomod')
@@ -164,8 +176,8 @@ class DependabotConfigTest(unittest.TestCase):
     def test_all_npm_projects_are_covered(self):
         npm_directories = {
             repository_directory(path)
-            for path in REPOSITORY_ROOT.rglob('package.json')
-            if 'node_modules' not in path.parts
+            for path in self.tracked_paths
+            if path.name == 'package.json'
         }
 
         configured_directories = self.configured_directories('npm')
@@ -179,9 +191,10 @@ class DependabotConfigTest(unittest.TestCase):
                 for npm_directory in npm_directories))
 
     def test_all_maintained_python_projects_are_covered(self):
-        python_manifests = set(REPOSITORY_ROOT.rglob('setup.py'))
-        python_manifests.update(REPOSITORY_ROOT.rglob('pyproject.toml'))
-        python_manifests.update(REPOSITORY_ROOT.rglob('requirements*.txt'))
+        python_manifests = {
+            path for path in self.tracked_paths if path.name in (
+                'setup.py', 'pyproject.toml') or path.match('requirements*.txt')
+        }
         python_directories = {
             repository_directory(path)
             for path in python_manifests
@@ -195,8 +208,9 @@ class DependabotConfigTest(unittest.TestCase):
         self.assertIn('/', configured_directories)
         action_directories = {
             repository_directory(path)
-            for path in (REPOSITORY_ROOT /
-                         '.github/actions').rglob('action.y*ml')
+            for path in self.tracked_paths
+            if path.is_relative_to(REPOSITORY_ROOT / '.github/actions') and
+            path.match('action.y*ml')
         }
 
         self.assertTrue(action_directories)

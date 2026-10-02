@@ -15,10 +15,8 @@
 package util
 
 import (
-	"strconv"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
@@ -31,18 +29,6 @@ const (
 )
 
 func IsV1PipelinesBlocked(namespace string) bool {
-	if !viper.IsSet(BlockV1Pipelines) {
-		return false
-	}
-	blockV1Value := viper.GetString(BlockV1Pipelines)
-	blockV1, err := strconv.ParseBool(blockV1Value)
-	if err != nil {
-		log.Fatalf("Failed converting %s value %q to bool: %v", BlockV1Pipelines, blockV1Value, err)
-	}
-	if !blockV1 {
-		return false
-	}
-
 	allowedNamespaces := viper.GetString(v1AllowedNamespaces)
 	if allowedNamespaces == "" {
 		return true

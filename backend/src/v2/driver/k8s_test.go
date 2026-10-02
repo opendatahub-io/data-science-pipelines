@@ -2164,10 +2164,10 @@ func Test_extendPodSpecPatch_SecurityContext(t *testing.T) {
 			},
 		},
 		{
-			"Valid - RunAsUser only",
+			"Valid - non-root RunAsUser only",
 			&kubernetesplatform.KubernetesExecutorConfig{
 				SecurityContext: &kubernetesplatform.SecurityContext{
-					RunAsUser: int64Ptr(0),
+					RunAsUser: int64Ptr(1000),
 				},
 			},
 			&k8score.PodSpec{
@@ -2175,7 +2175,7 @@ func Test_extendPodSpecPatch_SecurityContext(t *testing.T) {
 					{
 						Name: "main",
 						SecurityContext: &k8score.SecurityContext{
-							RunAsUser: int64Ptr(0),
+							RunAsUser: int64Ptr(1000),
 							Capabilities: &k8score.Capabilities{
 								Drop: []k8score.Capability{"ALL"},
 							},
@@ -2339,7 +2339,7 @@ func Test_extendPodSpecPatch_SecurityContext_AdminDefaultsNoUserOverride(t *test
 	assert.Equal(t, int64(1000), *got.Containers[0].SecurityContext.RunAsUser)
 }
 
-func Test_extendPodSpecPatch_SecurityContext_RootOnHardenedContainer(t *testing.T) {
+func Test_extendPodSpecPatch_SecurityContext_RootRejected(t *testing.T) {
 	rootUID := int64(0)
 	allowPrivEsc := false
 
@@ -2362,12 +2362,7 @@ func Test_extendPodSpecPatch_SecurityContext_RootOnHardenedContainer(t *testing.
 		nil,
 		nil,
 	)
-	// allowPrivilegeEscalation=false does not prevent root — it only blocks
-	// privilege escalation. runAsUser=0 is allowed here.
-	require.Nil(t, err)
-	require.NotNil(t, got)
-	require.Equal(t, rootUID, *got.Containers[0].SecurityContext.RunAsUser)
-	require.Equal(t, allowPrivEsc, *got.Containers[0].SecurityContext.AllowPrivilegeEscalation)
+	assert.ErrorContains(t, err, "runAsUser=0 (root) is not allowed")
 }
 
 func Test_extendPodSpecPatch_SecurityContext_AdminRunAsNonRoot(t *testing.T) {
@@ -2547,7 +2542,7 @@ func Test_extendPodSpecPatch_SecurityContext_RootRejectedWithUserRunAsNonRoot(t 
 	require.Contains(t, err.Error(), "runAsUser=0 (root) is not allowed")
 }
 
-func Test_extendPodSpecPatch_SecurityContext_RootAllowedWhenAdminRunAsNonRootFalseOverridesUser(t *testing.T) {
+func Test_extendPodSpecPatch_SecurityContext_RootRejectedWhenAdminRunAsNonRootFalseOverridesUser(t *testing.T) {
 	adminRunAsNonRoot := false
 	rootUID := int64(0)
 	userRunAsNonRoot := true
@@ -2570,14 +2565,11 @@ func Test_extendPodSpecPatch_SecurityContext_RootAllowedWhenAdminRunAsNonRootFal
 		nil,
 		nil,
 	)
-	// Admin explicitly allows root (runAsNonRoot=false) — user's runAsNonRoot=true
-	// is ignored (with warning) and runAsUser=0 must be allowed.
-	require.Nil(t, err)
-	require.Equal(t, rootUID, *got.Containers[0].SecurityContext.RunAsUser)
-	require.False(t, *got.Containers[0].SecurityContext.RunAsNonRoot)
+	// ODH rejects root workloads regardless of runAsNonRoot overrides.
+	require.ErrorContains(t, err, "runAsUser=0 (root) is not allowed")
 }
 
-func Test_extendPodSpecPatch_SecurityContext_RootAllowedWithUserRunAsNonRootFalse(t *testing.T) {
+func Test_extendPodSpecPatch_SecurityContext_RootRejectedWithUserRunAsNonRootFalse(t *testing.T) {
 	rootUID := int64(0)
 	userRunAsNonRoot := false
 
@@ -2596,10 +2588,8 @@ func Test_extendPodSpecPatch_SecurityContext_RootAllowedWithUserRunAsNonRootFals
 		nil,
 		nil,
 	)
-	// Component explicitly sets runAsNonRoot=false — root is allowed.
-	require.Nil(t, err)
-	require.Equal(t, rootUID, *got.Containers[0].SecurityContext.RunAsUser)
-	require.Equal(t, userRunAsNonRoot, *got.Containers[0].SecurityContext.RunAsNonRoot)
+	// ODH rejects root workloads regardless of runAsNonRoot overrides.
+	require.ErrorContains(t, err, "runAsUser=0 (root) is not allowed")
 }
 
 func Test_extendPodSpecPatch_ImagePullPolicy(t *testing.T) {
@@ -3582,11 +3572,7 @@ func Test_extendPodSpecPatch_DefaultHostUsersNil(t *testing.T) {
 	assert.Nil(t, podSpec.HostUsers)
 }
 
-// Test_extendPodSpecPatch_RootUserWithHostUsersNamespace verifies that a
-// customer workload container configured to run as UID 0 (root) in combination
-// with hostUsers:false is accepted. When the pod runs in a dedicated Linux user
-// namespace, the root identity inside that namespace does not correspond to root
-// on the host, providing defense-in-depth isolation.
+// ODH rejects root workloads even when a dedicated user namespace is configured.
 func Test_extendPodSpecPatch_RootUserWithHostUsersNamespace(t *testing.T) {
 	hostUsersInDedicatedNamespace := false
 	rootUserIdentifier := int64(0)
@@ -3608,18 +3594,7 @@ func Test_extendPodSpecPatch_RootUserWithHostUsersNamespace(t *testing.T) {
 		nil,
 		nil,
 	)
-	assert.Nil(t, err)
-	// hostUsers: false must be present on the pod spec.
-	assert.NotNil(t, podSpec.HostUsers)
-	assert.False(t, *podSpec.HostUsers)
-	// The root UID requested by the pipeline author must be applied, since there
-	// is no administrator-level runAsUser override in effect.
-	assert.NotNil(t, podSpec.Containers[0].SecurityContext)
-	assert.NotNil(t, podSpec.Containers[0].SecurityContext.RunAsUser)
-	assert.Equal(t, int64(0), *podSpec.Containers[0].SecurityContext.RunAsUser)
-	// Capabilities are always dropped as a defense-in-depth measure.
-	assert.Equal(t, &k8score.Capabilities{Drop: []k8score.Capability{"ALL"}},
-		podSpec.Containers[0].SecurityContext.Capabilities)
+	assert.ErrorContains(t, err, "runAsUser=0 (root) is not allowed")
 }
 
 // Test_extendPodSpecPatch_HostUsersAdminOverrideProtection verifies that the

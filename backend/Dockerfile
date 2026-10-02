@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ARG TARGETARCH
+
 # 1. Build api server application
 FROM golang:1.27.1-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS builder
 WORKDIR /go/src/github.com/kubeflow/pipelines
@@ -64,8 +66,11 @@ RUN set -e; \
     echo "Compiling: \"$pipeline_py\"" && python3 "$pipeline_py" && echo -n "Output: " && ls "$pipeline_py.yaml"; \
     done
 
-# 3. Start api web server
-FROM debian:stable-slim
+# 3. Start api web server with runtime dependencies for the target architecture
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:865c6a875328a1174ff7f17599574412edd327aa47812951b9bead902806dc53 AS ubi-minimal-amd64
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:da229086eb7881bb653e99ace537fc03512bbbfcf14024e7e447b48015d7cc8c AS ubi-minimal-arm64
+FROM ubi-minimal-${TARGETARCH} AS runtime
+RUN microdnf install -y ca-certificates wget && microdnf clean all
 
 ARG COMMIT_SHA=unknown
 ENV COMMIT_SHA=${COMMIT_SHA}
@@ -74,10 +79,6 @@ ENV TAG_NAME=${TAG_NAME}
 ENV LOG_LEVEL=info
 
 WORKDIR /bin
-
-# Adding CA certificate so API server can download pipeline through URL and wget is used for liveness/readiness probe command
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY backend/src/apiserver/config/ /config
 COPY --from=builder /bin/apiserver /bin/apiserver
@@ -88,6 +89,8 @@ RUN chmod +x /bin/apiserver
 # Pin sample doc links to the commit that built the backend image
 RUN sed -E "s#/(blob|tree)/master/#/\1/${COMMIT_SHA}/#g" -i /config/sample_config.json && \
     sed -E "s/%252Fmaster/%252F${COMMIT_SHA}/#g" -i /config/sample_config.json
+
+USER 1001
 
 # Expose apiserver port
 EXPOSE 8888

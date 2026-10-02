@@ -155,6 +155,19 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		}
 	})
 
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds on a Disconnected cluster>", FlakeAttempts(2), Label(Disconnected), func() {
+		var pipelineDir = "valid"
+		pipelineFiles := []string{
+			"essential/component_with_pip_index_urls.yaml",
+			"critical/flip_coin.yaml",
+		}
+		for _, pipelineFile := range pipelineFiles {
+			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
+				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
+			})
+		}
+	})
+
 	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(Sanity), func() {
 		var pipelineDir = "valid"
 		pipelineFiles := []string{
@@ -236,6 +249,21 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		}
 	})
 
+	// E2eGpu-labeled specs run even when the package has no --label-filter; see
+	// AGENTS.md (Local testing → Backend Ginkgo test suites → End-to-end tests).
+	Context("GPU component test >", Label(E2eGpu), func() {
+		var pipelineDir = "valid/gpu"
+		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
+		for _, pipelineFile := range pipelineFiles {
+			if !gpuPipelineFixtureSelected(pipelineFile) {
+				continue
+			}
+			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
+				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
+			})
+		}
+	})
+
 	// Schedule-only NVIDIA GPU check (Kind + FGO fake). Does not assert CUDA/torch.
 	// Filter with --label-filter=gpu-scheduling-check. Without a filter this also
 	// runs and needs a cluster that advertises nvidia.com/gpu (real or FGO fake).
@@ -267,6 +295,23 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		}
 	})
 })
+
+// gpuPipelineFixtureSelected returns whether to run an E2E for this IR fixture.
+// Fixtures are vendored from ods-ci (NVIDIA vs AMD); only one vendor typically matches the cluster.
+// "nvidia" → pytorch_nvidia_gpu_availability.yaml only;
+// "amd" → pytorch_amd_gpu_availability.yaml only;
+// "both" → all yaml in valid/gpu.
+func gpuPipelineFixtureSelected(pipelineFile string) bool {
+	vendor := *config.GpuVendor
+	switch vendor {
+	case "amd":
+		return strings.Contains(pipelineFile, "amd")
+	case "both", "all":
+		return true
+	default:
+		return strings.Contains(pipelineFile, "nvidia")
+	}
+}
 
 func validatePipelineRunSuccess(pipelineFile string, pipelineDir string, testContext *apitests.TestContext) string {
 	testutil.CheckIfSkipping(pipelineFile)

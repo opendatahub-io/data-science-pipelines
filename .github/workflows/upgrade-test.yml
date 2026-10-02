@@ -7,10 +7,12 @@ env:
   CLUSTER_NAME: "kfp"
   NAMESPACE: "kubeflow"
   PYTHON_VERSION: "3.9"
+  SKIP_OPERATOR_DEPLOYMENT: ${{ github.repository_owner != 'opendatahub-io' }}
 
 on:
   push:
-    branches: [master]
+    branches:
+      - master
 
   pull_request:
     paths:
@@ -18,7 +20,6 @@ on:
       - '.github/workflows/image-builds.yml'
       - '.github/actions/create-cluster/**'
       - '.github/actions/deploy/**'
-      - '.github/actions/test-and-report/**'
       - '.github/resources/**'
       - 'backend/api/v2beta1/**'
       - 'backend/src/**'
@@ -42,6 +43,7 @@ jobs:
   upgrade-test:
     # TODO(#14029): Re-enable once the MLMD-to-native migration and startup gate are implemented.
     if: ${{ vars.KFP_ENABLE_MLMD_UPGRADE_TESTS == 'true' }}
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -134,9 +136,9 @@ jobs:
         if: ${{ steps.create-cluster.outcome == 'success' }}
         id: deploy
         with:
-          image_path: images_${{ github.run_id }}
-          image_tag: latest
-          image_registry: kind-registry:5000
+          image_path: ${{ needs.build.outputs.IMAGE_PATH }}
+          image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
+          image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
           forward_port: 'true'
 
       - name: Verify Upgrade
