@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -47,6 +48,7 @@ import (
 
 	"github.com/kubeflow/pipelines/backend/src/common/util"
 	swfapi "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
+	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	"github.com/pkg/errors"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/spf13/viper"
@@ -134,7 +136,9 @@ func setupMLflowViperConfig(t *testing.T, endpoint string) {
 	})
 }
 
-type FakeBadObjectStore struct{}
+type FakeBadObjectStore struct {
+	readerOnlyObjectStore
+}
 
 func (m *FakeBadObjectStore) GetPipelineKey(pipelineID string) string {
 	return pipelineID
@@ -197,6 +201,14 @@ func (m *readerOnlyObjectStore) GetFileReader(ctx context.Context, filePath stri
 		return nil, util.NewInternalServerError(errors.New("not found"), "file not found")
 	}
 	return io.NopCloser(bytes.NewReader(content)), nil
+}
+
+func (m *readerOnlyObjectStore) GetSignedUrl(context.Context, *objectstore.Config, *corev1.Secret, time.Duration, string, url.Values) (string, error) {
+	return "", errors.New("signed URLs are not supported by the reader-only object store")
+}
+
+func (m *readerOnlyObjectStore) GetObjectSize(context.Context, *objectstore.Config, *corev1.Secret, string) (int64, error) {
+	return 0, errors.New("artifact sizes are not supported by the reader-only object store")
 }
 
 func createPipelineV1(name string) *model.Pipeline {

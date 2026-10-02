@@ -966,7 +966,7 @@ func (r *ResourceManager) ReconcileSwfCrs(ctx context.Context) error {
 			return failedToReconcileSwfCrsError(err)
 		}
 
-		newScheduledWorkflow, err := tmpl.ScheduledWorkflow(jobs[i])
+		newScheduledWorkflow, err := tmpl.ScheduledWorkflow(jobs[i], nil)
 		if err != nil {
 			return failedToReconcileSwfCrsError(err)
 		}
@@ -1773,11 +1773,11 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 		if r.pluginDispatcher.PluginsRegistered() {
 			// Plugin-enabled: create a lightweight SWF without inline workflow spec
 			// so the SWF controller calls the CreateRun API for per-run plugin logic.
-			scheduledWorkflow, err = template.NewGenericScheduledWorkflow(job)
+			scheduledWorkflow, err = template.NewGenericScheduledWorkflow(job, nil)
 		} else {
 			// TODO(gkcalat): consider changing the flow. Other resource UUIDs are assigned by their respective stores (DB).
 			// Convert modelJob into scheduledWorkflow.
-			scheduledWorkflow, err = tmpl.ScheduledWorkflow(job)
+			scheduledWorkflow, err = tmpl.ScheduledWorkflow(job, nil)
 		}
 		if err != nil {
 			return nil, util.Wrap(err, "Failed to create a recurring run during scheduled workflow creation")
@@ -1807,7 +1807,7 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 			return nil, util.Wrap(err, "Failed to fetch a template with an invalid pipeline spec manifest")
 		}
 
-		validatedScheduledWorkflow, err := tmpl.ScheduledWorkflow(job)
+		validatedScheduledWorkflow, err := tmpl.ScheduledWorkflow(job, nil)
 		if err != nil {
 			return nil, util.Wrap(err, "Failed to validate the input parameters on the latest pipeline version")
 		}
@@ -1817,7 +1817,7 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 			}
 		}
 
-		scheduledWorkflow, err = template.NewGenericScheduledWorkflow(job)
+		scheduledWorkflow, err = template.NewGenericScheduledWorkflow(job, nil)
 		if err != nil {
 			return nil, util.Wrap(err, "Failed to create a recurring run during scheduled workflow creation")
 		}

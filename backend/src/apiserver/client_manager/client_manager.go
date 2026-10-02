@@ -16,7 +16,6 @@ package clientmanager
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -126,7 +125,6 @@ type ClientManager struct {
 	k8sCoreClient             client.KubernetesCoreInterface
 	subjectAccessReviewClient client.SubjectAccessReviewInterface
 	tokenReviewClient         client.TokenReviewInterface
-	metadataClient            metadata.ClientInterface
 	logArchive                archive.LogArchiveInterface
 	time                      util.TimeInterface
 	uuid                      util.UUIDGeneratorInterface
@@ -223,10 +221,6 @@ func (c *ClientManager) SubjectAccessReviewClient() client.SubjectAccessReviewIn
 
 func (c *ClientManager) TokenReviewClient() client.TokenReviewInterface {
 	return c.tokenReviewClient
-}
-
-func (c *ClientManager) MetadataClient() metadata.ClientInterface {
-	return c.metadataClient
 }
 
 func (c *ClientManager) LogArchive() archive.LogArchiveInterface {
@@ -353,20 +347,6 @@ func (c *ClientManager) init(options *Options) error {
 	c.swfClient = client.NewScheduledWorkflowClientOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
 
 	c.k8sCoreClient = client.CreateKubernetesCoreOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
-
-	var tlsCfg *tls.Config
-	if common.GetMetadataTLSEnabled() {
-		tlsCfg, err = util.GetTLSConfig(options.CaCertPath)
-		if err != nil {
-			return err
-		}
-	}
-	newClient, err := metadata.NewClient(common.GetMetadataGrpcServiceServiceHost(), common.GetMetadataGrpcServiceServicePort(), tlsCfg)
-
-	if err != nil {
-		glog.Fatalf("Failed to create metadata client. Error: %v", err)
-	}
-	c.metadataClient = newClient
 
 	glog.Info("Initializing Object store client...")
 	objectStore, err := initBlobObjectStore(options.Context, common.GetDurationConfig(initConnectionTimeout))

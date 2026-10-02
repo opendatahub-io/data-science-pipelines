@@ -27,7 +27,6 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common/sql/dialect"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/storage"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
-	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
 	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	"gocloud.dev/blob/memblob"
 	v1 "k8s.io/api/core/v1"
@@ -55,7 +54,6 @@ type FakeClientManager struct {
 	KubernetesCoreClientFake      client.KubernetesCoreInterface
 	SubjectAccessReviewClientFake client.SubjectAccessReviewInterface
 	tokenReviewClientFake         client.TokenReviewInterface
-	metadataClient                metadata.ClientInterface
 	logArchive                    archive.LogArchiveInterface
 	time                          util.TimeInterface
 	uuid                          util.UUIDGeneratorInterface
@@ -94,7 +92,6 @@ func NewFakeClientManager(time util.TimeInterface, uuid util.UUIDGeneratorInterf
 		return nil, err
 	}
 
-	// TODO(neuromage): Pass in metadata.Store instance for tests as well.
 	return &FakeClientManager{
 		db:                            db,
 		experimentStore:               experimentStore,
@@ -114,7 +111,6 @@ func NewFakeClientManager(time util.TimeInterface, uuid util.UUIDGeneratorInterf
 		SubjectAccessReviewClientFake: client.NewFakeSubjectAccessReviewClient(),
 		tokenReviewClientFake:         client.NewFakeTokenReviewClient(),
 		logArchive:                    archive.NewLogArchive("/logs", "main.log"),
-		metadataClient:                metadata.NewFakeClient(),
 		time:                          time,
 		uuid:                          uuid,
 		AuthenticatorsFake:            auth.GetAuthenticators(client.NewFakeTokenReviewClient()),
@@ -228,10 +224,6 @@ func (f *FakeClientManager) SubjectAccessReviewClient() client.SubjectAccessRevi
 
 func (f *FakeClientManager) TokenReviewClient() client.TokenReviewInterface {
 	return f.tokenReviewClientFake
-}
-
-func (f *FakeClientManager) MetadataClient() metadata.ClientInterface {
-	return f.metadataClient
 }
 
 func (f *FakeClientManager) Authenticators() []auth.Authenticator {

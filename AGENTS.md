@@ -7,7 +7,7 @@
 
 ### Document metadata
 
-- Last updated: 2026-09-14
+- Last updated: 2026-10-02
 - Scope: KFP master branch (v2 engine), backend (Go), SDK (Python), frontend (React 19)
 
 ### Maintenance (agents and contributors)
@@ -330,6 +330,7 @@ The following files are generated; edit their sources and regenerate:
 
 - Backend API clients under `backend/api/{v1beta1,v2beta1}/go_client`, `go_http_client`, and `python_http_client`
   - Sources: `backend/api/{v1beta1,v2beta1}/*.proto`, Swagger specs, Python client templates, and root `VERSION`
+  - The v2beta1 artifact service is defined by `backend/api/v2beta1/artifact.proto`; the obsolete `artifacts.proto` and its generated outputs were removed.
   - Generate Go/Swagger: `make -C backend/api generate API_VERSION=v2beta1` (or `v1beta1`)
   - Generate Python clients: `make -C backend/api generate-kfp-server-api-package API_VERSION=v2beta1` (or `v1beta1`)
   - Use `USE_PREBUILT_IMAGE=false` to build the generator from its source when tool versions change.
