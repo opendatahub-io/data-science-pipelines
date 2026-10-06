@@ -22,6 +22,14 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+// Keep the acceptance contract independent of the verifier's condition list.
+var expectedAIPipelinesConditions = []string{
+	"Ready",
+	"ProvisioningSucceeded",
+	"DSPOReady",
+	"ArgoWorkflowsControllersReady",
+}
+
 func TestParseAIPipelinesModuleStatusHappyPath(t *testing.T) {
 	module := validAIPipelinesModuleUnstructured(3, "3.2.0", nil)
 	status, err := ParseAIPipelinesModuleStatus(module)
@@ -105,6 +113,80 @@ func TestParseAIPipelinesModuleStatusErrors(t *testing.T) {
 	}
 }
 
+func TestParseAIPipelinesModuleStatusDuplicateConditions(t *testing.T) {
+	for _, statuses := range [][2]string{{"False", "True"}, {"True", "False"}, {"True", "True"}} {
+		t.Run(statuses[0]+" then "+statuses[1], func(t *testing.T) {
+			conditions := conditionsSlice(allTrueConditions(3))
+			conditions[0].(map[string]any)["status"] = statuses[0]
+			conditions = append(conditions, map[string]any{
+				"type": "Ready", "status": statuses[1], "observedGeneration": int64(3),
+			})
+			module := validAIPipelinesModuleUnstructured(3, "3.2.0", map[string]any{
+				"conditions": conditions,
+			})
+			_, err := ParseAIPipelinesModuleStatus(module)
+			if err == nil || !strings.Contains(err.Error(), "duplicate condition Ready") {
+				t.Fatalf("expected duplicate condition Ready error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestVerifyAIPipelinesModuleStatusRequiredConditions(t *testing.T) {
+	for _, conditionType := range expectedAIPipelinesConditions {
+		for _, scenario := range []string{"missing", "False", "Unknown", "stale"} {
+			t.Run(conditionType+"/"+scenario, func(t *testing.T) {
+				conditions := allTrueConditions(3)
+				condition := conditions[conditionType]
+				want := "condition " + conditionType
+				switch scenario {
+				case "missing":
+					delete(conditions, conditionType)
+					want = "missing " + want
+				case "stale":
+					condition.ObservedGeneration = 2
+					conditions[conditionType] = condition
+					want += " observedGeneration"
+				default:
+					condition.Status = scenario
+					conditions[conditionType] = condition
+					want += " status"
+				}
+				status := AIPipelinesModuleStatus{
+					Generation: 3, ObservedGeneration: 3, Phase: AIPipelinesPhaseReady,
+					PlatformReleaseName: AIPipelinesReleasePlatform, PlatformVersion: "3.2.0",
+					Conditions: conditions,
+				}
+				if err := VerifyAIPipelinesModuleStatus(status, AIPipelinesUpgradeExpectations{}); err == nil || !strings.Contains(err.Error(), want) {
+					t.Fatalf("expected error containing %q, got %v", want, err)
+				}
+			})
+		}
+	}
+}
+
+func TestVerifyAIPipelinesModuleStatusWithoutVersionMatch(t *testing.T) {
+	for _, version := range []string{"", "3.1.0"} {
+		t.Run("version="+version, func(t *testing.T) {
+			status, err := ParseAIPipelinesModuleStatus(validAIPipelinesModuleUnstructured(3, version, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = VerifyAIPipelinesModuleStatus(status, AIPipelinesUpgradeExpectations{
+				ExpectedPlatformReleaseVersion: "3.2.0",
+				RequireReleaseVersionMatch:     false,
+			})
+			if version == "" {
+				if err == nil || !strings.Contains(err.Error(), "platform release version is empty") {
+					t.Fatalf("expected empty version error, got %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("nonempty version should not require an exact match: %v", err)
+			}
+		})
+	}
+}
+
 func TestVerifyAIPipelinesModuleStatusFailures(t *testing.T) {
 	fullConditions := allTrueConditions(3)
 
@@ -148,20 +230,6 @@ func TestVerifyAIPipelinesModuleStatusFailures(t *testing.T) {
 			want:         "platform release version is empty",
 		},
 		{
-			name: "missing DSPOReady condition",
-			status: AIPipelinesModuleStatus{
-				Generation: 3, ObservedGeneration: 3, Phase: AIPipelinesPhaseReady,
-				PlatformReleaseName: AIPipelinesReleasePlatform, PlatformVersion: "3.2.0",
-				Conditions: map[string]unstructuredCondition{
-					"Ready":                         {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
-					"ProvisioningSucceeded":         {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
-					"ArgoWorkflowsControllersReady": {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
-				},
-			},
-			expectations: AIPipelinesUpgradeExpectations{},
-			want:         "missing condition DSPOReady",
-		},
-		{
 			name: "condition not True includes message",
 			status: AIPipelinesModuleStatus{
 				Generation: 3, ObservedGeneration: 3, Phase: AIPipelinesPhaseReady,
@@ -175,21 +243,6 @@ func TestVerifyAIPipelinesModuleStatusFailures(t *testing.T) {
 			},
 			expectations: AIPipelinesUpgradeExpectations{},
 			want:         "still reconciling",
-		},
-		{
-			name: "condition observedGeneration mismatch",
-			status: AIPipelinesModuleStatus{
-				Generation: 3, ObservedGeneration: 3, Phase: AIPipelinesPhaseReady,
-				PlatformReleaseName: AIPipelinesReleasePlatform, PlatformVersion: "3.2.0",
-				Conditions: map[string]unstructuredCondition{
-					"Ready":                         {Status: string(metav1.ConditionTrue), ObservedGeneration: 2},
-					"ProvisioningSucceeded":         {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
-					"DSPOReady":                     {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
-					"ArgoWorkflowsControllersReady": {Status: string(metav1.ConditionTrue), ObservedGeneration: 3},
-				},
-			},
-			expectations: AIPipelinesUpgradeExpectations{},
-			want:         "condition Ready observedGeneration",
 		},
 	}
 	for _, testCase := range tests {
@@ -287,7 +340,7 @@ func moduleWithStatus(status map[string]interface{}) *unstructured.Unstructured 
 
 func allTrueConditions(generation int64) map[string]unstructuredCondition {
 	conditions := make(map[string]unstructuredCondition)
-	for _, conditionType := range aipipelinesUpgradeConditionTypes {
+	for _, conditionType := range expectedAIPipelinesConditions {
 		conditions[conditionType] = unstructuredCondition{
 			Status:             string(metav1.ConditionTrue),
 			ObservedGeneration: generation,
@@ -298,7 +351,7 @@ func allTrueConditions(generation int64) map[string]unstructuredCondition {
 
 func conditionsSlice(conditions map[string]unstructuredCondition) []interface{} {
 	slice := make([]interface{}, 0, len(conditions))
-	for _, conditionType := range aipipelinesUpgradeConditionTypes {
+	for _, conditionType := range expectedAIPipelinesConditions {
 		condition := conditions[conditionType]
 		slice = append(slice, map[string]interface{}{
 			"type":               conditionType,

@@ -122,6 +122,20 @@ jobs:
           pipeline_runner_service_account_name: ${{ steps.deploy-release.outputs.pipeline_runner_service_account }}
           deployment_mode: ${{ steps.deploy-release.outputs.deployment_mode }}
 
+      - name: Capture pod before upgrade
+        id: pre-upgrade-pod
+        if: ${{ steps.prepare-upgrade.outcome == 'success' }}
+        shell: bash
+        run: |
+          DEPLOYMENT_NAME="${{ steps.deploy-release.outputs.deployment_name }}"
+          NAMESPACE="${{ env.NAMESPACE }}"
+          OLD_POD_UID=$(kubectl get pod -l "app=$DEPLOYMENT_NAME" -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.uid}')
+          if [ -z "$OLD_POD_UID" ]; then
+            echo "ERROR: No API pod found before the upgrade"
+            exit 1
+          fi
+          echo "pod_uid=$OLD_POD_UID" >> "$GITHUB_OUTPUT"
+
       - name: Deploy from Branch
         uses: ./.github/actions/deploy
         if: ${{ steps.create-cluster.outcome == 'success' }}
@@ -143,17 +157,17 @@ jobs:
           DEPLOYMENT_NAME="${{ steps.deploy.outputs.deployment_name }}"
           NAMESPACE="${{ env.NAMESPACE }}"
 
-          OLD_POD_UID=$(kubectl get pod -l app=$DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.items[0].metadata.uid}')
-          echo "Current pod UID: $OLD_POD_UID"
+          OLD_POD_UID="${{ steps.pre-upgrade-pod.outputs.pod_uid }}"
+          echo "Pre-upgrade pod UID: $OLD_POD_UID"
 
           echo "Waiting for operator to roll the deployment..."
           for i in $(seq 1 36); do
-            NEW_POD_UID=$(kubectl get pod -l app=$DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.items[0].metadata.uid}' 2>/dev/null || echo "")
+            NEW_POD_UID=$(kubectl get pod -l "app=$DEPLOYMENT_NAME" -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.uid}' 2>/dev/null || echo "")
             if [ -n "$NEW_POD_UID" ] && [ "$NEW_POD_UID" != "$OLD_POD_UID" ]; then
               echo "New pod detected (UID: $NEW_POD_UID) after $((i * 5))s"
               break
             fi
-            if [ $i -eq 36 ]; then
+            if [ "$i" -eq 36 ]; then
               echo "ERROR: Pod UID did not change after 180s — operator did not roll the deployment"
               exit 1
             fi
@@ -161,10 +175,10 @@ jobs:
           done
 
           echo "Waiting for rollout to complete..."
-          kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE --timeout=300s
+          kubectl rollout status "deployment/$DEPLOYMENT_NAME" -n "$NAMESPACE" --timeout=300s
 
           echo "Waiting for pod to be ready..."
-          kubectl wait --for=condition=ready pod -l app=$DEPLOYMENT_NAME -n $NAMESPACE --timeout=120s --field-selector=status.phase=Running
+          kubectl wait --for=condition=ready pod -l "app=$DEPLOYMENT_NAME" -n "$NAMESPACE" --timeout=120s --field-selector=status.phase=Running
 
           echo "Killing stale port-forward processes..."
           pkill -f "kubectl port-forward.*8888" || true

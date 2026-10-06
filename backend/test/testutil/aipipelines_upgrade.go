@@ -52,7 +52,7 @@ var (
 // AIPipelinesUpgradeExpectations configures post-upgrade module verification.
 type AIPipelinesUpgradeExpectations struct {
 	ExpectedPlatformReleaseVersion string
-	RequireReleaseVersionMatch       bool
+	RequireReleaseVersionMatch     bool
 }
 
 // AIPipelinesModuleStatus is a snapshot of module status fields used in upgrade verification.
@@ -283,6 +283,9 @@ func conditionsFromStatus(status map[string]interface{}) (map[string]unstructure
 		conditionType, _, err := unstructured.NestedString(conditionMap, "type")
 		if err != nil {
 			return nil, fmt.Errorf("read condition type: %w", err)
+		}
+		if _, exists := conditions[conditionType]; exists {
+			return nil, fmt.Errorf("duplicate condition %s", conditionType)
 		}
 		conditionStatus, _, err := unstructured.NestedString(conditionMap, "status")
 		if err != nil {
