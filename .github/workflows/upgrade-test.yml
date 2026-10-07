@@ -204,3 +204,4 @@ jobs:
           deployment_service_account_name: ${{ steps.deploy.outputs.service_account_name }}
           pipeline_runner_service_account_name: ${{ steps.deploy.outputs.pipeline_runner_service_account }}
           deployment_mode: ${{ steps.deploy.outputs.deployment_mode }}
+          expected_platform_release_version: ${{ steps.deploy.outputs.expected_platform_release_version }}

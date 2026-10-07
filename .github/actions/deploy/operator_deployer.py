@@ -6,11 +6,10 @@ operator, and configuring it for external Argo.
 
 import os
 
-import yaml
-
 from deployment_manager import K8sDeploymentManager
 from deployment_manager import ResourceType
 from deployment_manager import WaitCondition
+import yaml
 
 
 class OperatorDeployer:
@@ -42,7 +41,8 @@ class OperatorDeployer:
         ref_result = self.deployment_manager.run_command([
             'git', 'ls-remote', '--exit-code', '--heads', operator_repo_url,
             f'refs/heads/{branch}'
-        ], check=False)
+        ],
+                                                         check=False)
         if ref_result.returncode != 0:
             return False
 
@@ -59,8 +59,8 @@ class OperatorDeployer:
                                      'data-science-pipelines-operator')
         operator_branch = self._operator_branch(self.target_branch)
         preferred_owner = getattr(self.args, 'operator_repo_owner', None)
-        upstream_owner = getattr(
-            self.args, 'operator_upstream_owner', None) or self.repo_owner
+        upstream_owner = getattr(self.args, 'operator_upstream_owner',
+                                 None) or self.repo_owner
         candidate_owners = []
         source_owners = ((upstream_owner,) if self.args.operator_branch_required
                          else (preferred_owner, upstream_owner))
@@ -69,9 +69,8 @@ class OperatorDeployer:
                 candidate_owners.append(owner)
 
         for owner in candidate_owners:
-            print(
-                f'🔍 Checking {owner}/data-science-pipelines-operator '
-                f'for branch {operator_branch}')
+            print(f'🔍 Checking {owner}/data-science-pipelines-operator '
+                  f'for branch {operator_branch}')
             if self._clone_from_branch(owner, operator_branch, operator_path):
                 break
         else:
@@ -123,7 +122,8 @@ class OperatorDeployer:
         self.deployment_manager.run_command([
             'kind', 'load', 'docker-image', operator_image, '--name',
             self.args.cluster_name
-        ], timeout=600)
+        ],
+                                            timeout=600)
         self.operator_image = operator_image
         return operator_image
 
@@ -174,10 +174,14 @@ class OperatorDeployer:
         params_env_path = os.path.join(self.operator_repo_path, 'config',
                                        'base', 'params.env')
         if not os.path.exists(params_env_path):
-            print(f'⚠️  params.env not found at {params_env_path}, skipping image patching')
+            print(
+                f'⚠️  params.env not found at {params_env_path}, skipping image patching'
+            )
             return
 
-        print('🔧 Patching params.env to use publicly accessible images for Kind...')
+        print(
+            '🔧 Patching params.env to use publicly accessible images for Kind...'
+        )
 
         replacements = {
             'registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9:latest':
@@ -238,8 +242,7 @@ class OperatorDeployer:
 
         print('🔧 Verifying DSPO ConfigMap creation...')
         configmap_names = [
-            'data-science-pipelines-operator-dspo-config',
-            'dspo-config'
+            'data-science-pipelines-operator-dspo-config', 'dspo-config'
         ]
 
         configmap_found = False
@@ -247,7 +250,8 @@ class OperatorDeployer:
             result = self.deployment_manager.run_command([
                 'kubectl', 'get', 'configmap', cm_name, '-n',
                 self.operator_namespace
-            ], check=False)
+            ],
+                                                         check=False)
 
             if result.returncode == 0:
                 print(f'✅ Found required ConfigMap: {cm_name}')
@@ -259,7 +263,8 @@ class OperatorDeployer:
             self.deployment_manager.run_command([
                 'kubectl', 'get', 'configmaps', '-n', self.operator_namespace,
                 '--no-headers', '-o', 'custom-columns=NAME:.metadata.name'
-            ], check=False)
+            ],
+                                                check=False)
 
         # Wait for operator readiness
         print(
@@ -294,9 +299,10 @@ class OperatorDeployer:
     def enable_modular_architecture(self):
         """Enable DSPO's modular AIPipelines CI fixture and wait for it.
 
-        The fixture supplies the platform handshake ConfigMap and the singleton
-        AIPipelines resource. It is intentionally opt-in because DSPO retains
-        legacy mode by default outside modular upgrade tests.
+        The fixture supplies the platform handshake ConfigMap and the
+        singleton AIPipelines resource. It is intentionally opt-in
+        because DSPO retains legacy mode by default outside modular
+        upgrade tests.
         """
         if not self.operator_repo_path:
             raise ValueError('Operator repository not cloned')
@@ -310,35 +316,56 @@ class OperatorDeployer:
         rendered_fixture = self.deployment_manager.run_command(
             ['kubectl', 'kustomize', fixture_path]).stdout
         fixture_resources = list(yaml.safe_load_all(rendered_fixture))
-        platform_config_found = False
+        platform_config = None
         for resource in fixture_resources:
             if (resource and resource.get('kind') == 'ConfigMap' and
-                    resource.get('metadata', {}).get('name') ==
-                    'odh-aipipelines-config'):
+                    resource.get('metadata',
+                                 {}).get('name') == 'odh-aipipelines-config'):
                 resource['metadata']['namespace'] = self.operator_namespace
-                platform_config_found = True
-        if not platform_config_found:
+                platform_config = resource
+                break
+        if platform_config is None:
             raise ValueError(
-                'Modular AIPipelines fixture has no odh-aipipelines-config ConfigMap')
+                'Modular AIPipelines fixture has no odh-aipipelines-config ConfigMap'
+            )
+        platform_data = platform_config.get('data') or {}
+        platform_version = str(platform_data.get('platformVersion', '')).strip()
+        if not platform_version:
+            raise ValueError(
+                'Modular AIPipelines fixture ConfigMap has no non-empty platformVersion'
+            )
         self.deployment_manager.apply_resource(
             manifest_content=yaml.safe_dump_all(
                 fixture_resources, sort_keys=False),
             description='modular AIPipelines CI fixture')
         self.deployment_manager.run_command([
-            'kubectl', 'set', 'env', '-n', self.operator_namespace,
+            'kubectl',
+            'set',
+            'env',
+            '-n',
+            self.operator_namespace,
             operator_deployment,
             'DSPO_ENABLEAIPIPELINESMODULECONTROLLER=true',
             f'APPLICATIONS_NAMESPACE={self.operator_namespace}',
         ])
         self.deployment_manager.run_command([
-            'kubectl', 'rollout', 'status', '-n', self.operator_namespace,
-            operator_deployment, '--timeout=300s',
+            'kubectl',
+            'rollout',
+            'status',
+            '-n',
+            self.operator_namespace,
+            operator_deployment,
+            '--timeout=300s',
         ])
         for condition in ('Ready=true', 'ProvisioningSucceeded=true'):
             self.deployment_manager.run_command([
-                'kubectl', 'wait', 'aipipelines/default-aipipelines',
-                f'--for=condition={condition}', '--timeout=300s',
+                'kubectl',
+                'wait',
+                'aipipelines/default-aipipelines',
+                f'--for=condition={condition}',
+                '--timeout=300s',
             ])
+        return platform_version
 
     def _configure_operator_for_external_argo(self):
         """Configure the deployed operator to use external Argo Workflows."""

@@ -104,6 +104,10 @@ inputs:
     description: "Whether MLflow is deployed and available for integration tests"
     required: false
     default: 'false'
+  expected_platform_release_version:
+    description: "Expected platform release version for modular AIPipelines upgrade verification"
+    required: false
+    default: ""
 
 
 runs:
@@ -256,6 +260,7 @@ runs:
         INPUT_API_URL: ${{ inputs.api_url }}
         INPUT_DEPLOYMENT_NAME: ${{ inputs.deployment_name }}
         INPUT_DEFAULT_NAMESPACE: ${{ inputs.default_namespace }}
+        EXPECTED_PLATFORM_RELEASE_VERSION: ${{ inputs.expected_platform_release_version }}
       run: |
         USE_PROXY=${{ inputs.proxy }}
         if [ -z "$USE_PROXY" ]; then

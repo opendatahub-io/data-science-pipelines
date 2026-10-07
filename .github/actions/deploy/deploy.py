@@ -37,6 +37,7 @@ class DSPDeployer:
         self.external_db_namespace = 'test-mariadb'
         self.skip_operator_deployment = False
         self.is_operator_deployment = None
+        self.expected_platform_release_version = ''
         self.tls_manager = None
         self.deployment_manager = K8sDeploymentManager()
 
@@ -79,7 +80,8 @@ class DSPDeployer:
 
         if self.args.skip_operator_deployment:
             self.skip_operator_deployment = self.args.skip_operator_deployment
-            print('Skipping deployment via operator and using direct deployment')
+            print(
+                'Skipping deployment via operator and using direct deployment')
 
         if self.args.github_repository:
             self.repo_owner = self.args.github_repository.split('/')[0]
@@ -117,18 +119,16 @@ class DSPDeployer:
             print('🔐 TLS certificate manager initialized for podToPodTLS')
 
         # Initialize sub-deployers
-        self.operator = OperatorDeployer(
-            self.args, self.deployment_manager, self.repo_owner,
-            self.target_branch, self.temp_dir, self.operator_namespace)
+        self.operator = OperatorDeployer(self.args, self.deployment_manager,
+                                         self.repo_owner, self.target_branch,
+                                         self.temp_dir, self.operator_namespace)
 
-        self.storage = StorageDeployer(
-            self.args, self.deployment_manager, self.deployment_namespace,
-            self.temp_dir)
+        self.storage = StorageDeployer(self.args, self.deployment_manager,
+                                       self.deployment_namespace, self.temp_dir)
 
-        self.infra = InfraDeployer(
-            self.args, self.deployment_manager, None,
-            self.deployment_namespace, self.dspa_name,
-            self.operator_namespace, self.temp_dir)
+        self.infra = InfraDeployer(self.args, self.deployment_manager, None,
+                                   self.deployment_namespace, self.dspa_name,
+                                   self.operator_namespace, self.temp_dir)
 
     def _init_deployers_after_clone(self):
         """Initialize deployers that depend on operator_repo_path."""
@@ -136,15 +136,15 @@ class DSPDeployer:
 
         self.infra.operator_repo_path = operator_repo_path
 
-        self.database = DatabaseDeployer(
-            self.args, self.deployment_manager, self.tls_manager,
-            operator_repo_path, self.deployment_namespace,
-            self.external_db_namespace)
+        self.database = DatabaseDeployer(self.args, self.deployment_manager,
+                                         self.tls_manager, operator_repo_path,
+                                         self.deployment_namespace,
+                                         self.external_db_namespace)
 
-        self.dspa = DSPADeployer(
-            self.args, self.deployment_manager, self.deployment_namespace,
-            self.dspa_name, self.external_db_namespace,
-            self.operator_namespace, self.temp_dir)
+        self.dspa = DSPADeployer(self.args, self.deployment_manager,
+                                 self.deployment_namespace, self.dspa_name,
+                                 self.external_db_namespace,
+                                 self.operator_namespace, self.temp_dir)
 
     def _should_use_operator_deployment(self) -> bool:
         """Determine whether to use DSPO (operator) or direct deployment."""
@@ -226,10 +226,11 @@ class DSPDeployer:
                         print(
                             f'🏷️  Pre-creating external DB namespace for TLS: {self.external_db_namespace}'
                         )
-                        self.deployment_manager.run_command(
-                            ['kubectl', 'create', 'namespace',
-                             self.external_db_namespace],
-                            check=False)
+                        self.deployment_manager.run_command([
+                            'kubectl', 'create', 'namespace',
+                            self.external_db_namespace
+                        ],
+                                                            check=False)
                     self.tls_manager.setup_tls_for_kind()
 
                 self.operator.deploy_operator()
@@ -238,7 +239,8 @@ class DSPDeployer:
                 self.infra.deploy_external_argo()
 
                 if self.args.enable_modular_architecture:
-                    self.operator.enable_modular_architecture()
+                    self.expected_platform_release_version = (
+                        self.operator.enable_modular_architecture())
 
                 self.infra.apply_webhooks()
                 self.infra.deploy_pypi_server()
@@ -254,9 +256,7 @@ class DSPDeployer:
                 self.infra.setup_service_account_rbac(is_operator=True)
 
             else:
-                print(
-                    '🔧 Using direct manifest deployment mode'
-                )
+                print('🔧 Using direct manifest deployment mode')
 
                 if self.args.deploy_pypi_server:
                     self.operator.clone_operator_repo()
@@ -292,16 +292,13 @@ class DSPDeployer:
         print(f'🔧 Setting V1_ALLOWED_NAMESPACES={namespace}')
         for deploy in deployments:
             self.deployment_manager.run_command([
-                'kubectl', 'set', 'env',
-                f'deployment/{deploy}',
-                f'V1_ALLOWED_NAMESPACES={namespace}',
-                '-n', namespace
+                'kubectl', 'set', 'env', f'deployment/{deploy}',
+                f'V1_ALLOWED_NAMESPACES={namespace}', '-n', namespace
             ])
         for deploy in deployments:
             self.deployment_manager.run_command([
-                'kubectl', 'rollout', 'status',
-                f'deployment/{deploy}',
-                '-n', namespace, '--timeout=120s'
+                'kubectl', 'rollout', 'status', f'deployment/{deploy}', '-n',
+                namespace, '--timeout=120s'
             ])
 
     def output_deployment_metadata(self):
@@ -311,14 +308,16 @@ class DSPDeployer:
         # Ensure dspa deployer is available
         if not self.dspa:
             self.dspa = DSPADeployer(
-                self.args, self.deployment_manager,
-                self.deployment_namespace or self.args.namespace,
-                self.dspa_name or self.args.dspa_name or 'dspa-test',
-                self.external_db_namespace,
-                self.operator_namespace or 'opendatahub',
-                self.temp_dir or '')
+                self.args, self.deployment_manager, self.deployment_namespace or
+                self.args.namespace, self.dspa_name or self.args.dspa_name or
+                'dspa-test', self.external_db_namespace,
+                self.operator_namespace or 'opendatahub', self.temp_dir or '')
 
-        metadata = self.dspa.output_deployment_metadata(is_operator=use_operator)
+        metadata = self.dspa.output_deployment_metadata(
+            is_operator=use_operator)
+        if self.expected_platform_release_version:
+            metadata['EXPECTED_PLATFORM_RELEASE_VERSION'] = (
+                self.expected_platform_release_version)
 
         for key, value in metadata.items():
             output_to_github_actions(key, value)
@@ -340,73 +339,90 @@ def main():
 
     # GitHub context
     parser.add_argument(
-        '--github-repository', required=True,
+        '--github-repository',
+        required=True,
         help='GitHub repository (owner/repo)')
     parser.add_argument(
         '--operator-branch', required=True, help='DSPO source branch')
     parser.add_argument(
-        '--operator-branch-required', required=True,
+        '--operator-branch-required',
+        required=True,
         help='Fail instead of falling back when DSPO source branch is absent')
     parser.add_argument(
-        '--operator-repo-owner', required=True,
+        '--operator-repo-owner',
+        required=True,
         help='Preferred DSPO repository owner for fork branch lookup')
     parser.add_argument(
-        '--operator-upstream-owner', required=True,
+        '--operator-upstream-owner',
+        required=True,
         help='Canonical DSPO repository owner for upstream fallback')
     parser.add_argument(
         '--cluster-name', required=True, help='Kind cluster name')
 
     # Image configuration
     parser.add_argument('--image-tag', required=True, help='Image tag')
-    parser.add_argument('--image-registry', required=True, help='Image registry')
     parser.add_argument(
-        '--image-path-prefix', required=False, default='',
+        '--image-registry', required=True, help='Image registry')
+    parser.add_argument(
+        '--image-path-prefix',
+        required=False,
+        default='',
         help='Image path prefix to add')
 
     # Deployment options
     parser.add_argument(
-        '--deploy-pypi-server', default='false',
+        '--deploy-pypi-server',
+        default='false',
         help='Deploy PyPI server and upload packages')
     parser.add_argument(
-        '--deploy-external-argo', default='false',
+        '--deploy-external-argo',
+        default='false',
         help='Deploy Argo Workflows externally in separate namespace')
     parser.add_argument(
-        '--skip-operator-deployment', default='false',
+        '--skip-operator-deployment',
+        default='false',
         help='Skip deployment via operator')
     parser.add_argument(
-        '--argo-namespace', default='argo',
+        '--argo-namespace',
+        default='argo',
         help='Namespace for external Argo Workflows deployment')
 
     # KFP options
     parser.add_argument(
-        '--pipeline-store', default='database',
-        choices=['database', 'kubernetes'], help='Pipeline store type')
+        '--pipeline-store',
+        default='database',
+        choices=['database', 'kubernetes'],
+        help='Pipeline store type')
     parser.add_argument('--proxy', default='false', help='Enable proxy')
     parser.add_argument('--cache-enabled', default='true', help='Enable cache')
-    parser.add_argument(
-        '--multi-user', default='false', help='Multi-user mode')
+    parser.add_argument('--multi-user', default='false', help='Multi-user mode')
     parser.add_argument(
         '--artifact-proxy', default='false', help='Enable artifact proxy')
     parser.add_argument(
-        '--storage-backend', default='seaweedfs',
-        choices=['seaweedfs', 'minio'], help='Storage backend')
+        '--storage-backend',
+        default='seaweedfs',
+        choices=['seaweedfs', 'minio'],
+        help='Storage backend')
     parser.add_argument('--argo-version', help='Argo version')
     parser.add_argument(
         '--forward-port', default='true', help='Forward API server port')
     parser.add_argument(
-        '--pod-to-pod-tls-enabled', default='false',
+        '--pod-to-pod-tls-enabled',
+        default='false',
         help='Enable pod-to-pod TLS')
     parser.add_argument(
-        '--namespace', default='kubeflow',
-        help='Namespace for DSPA deployment')
+        '--namespace', default='kubeflow', help='Namespace for DSPA deployment')
     parser.add_argument(
-        '--deploy-external-db', default=False,
+        '--deploy-external-db',
+        default=False,
         help='Deploy DB externally instead of via DSPO')
     parser.add_argument(
         '--dspa-name', default='dspa-test', help='Name of DSPA resource')
     parser.add_argument(
-        '--enable-modular-architecture', default='false',
-        help='Apply the modular AIPipelines CI fixture and enable its controller')
+        '--enable-modular-architecture',
+        default='false',
+        help='Apply the modular AIPipelines CI fixture and enable its controller'
+    )
     args = parser.parse_args()
 
     deployer = DSPDeployer(args)

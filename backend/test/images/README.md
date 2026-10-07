@@ -173,6 +173,9 @@ CRD or a stale handshake fails closed:
 export EXPECTED_PLATFORM_RELEASE_VERSION="<target platform version>"
 ```
 
+**GitHub Actions Kind CI:** the target `deploy` action exports the `platformVersion` from DSPO's modular
+AIPipelines fixture, and `UpgradeVerification` receives it through `expected_platform_release_version`.
+
 **Out of scope:** RHOAI downgrade paths are not exercised here; downgrade remains a manual / release-process concern.
 
 ## Test Labels Available
