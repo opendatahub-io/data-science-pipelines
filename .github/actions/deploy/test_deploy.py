@@ -16,6 +16,7 @@ class TestExpectedPlatformReleaseVersionOutput(unittest.TestCase):
             skip_operator_deployment=False,
             multi_user=False,
             proxy=False,
+            enable_modular_architecture=False,
         )
         deployer = DSPDeployer(args)
         deployer.dspa = MagicMock()
@@ -43,6 +44,41 @@ class TestExpectedPlatformReleaseVersionOutput(unittest.TestCase):
 
         output_keys = [call.args[0] for call in output_metadata.call_args_list]
         self.assertNotIn('EXPECTED_PLATFORM_RELEASE_VERSION', output_keys)
+
+
+class TestModularArchitectureModeSelection(unittest.TestCase):
+
+    def test_rejects_modular_architecture_for_direct_deployment_modes(self):
+        direct_modes = [
+            ('skip operator deployment', {
+                'skip_operator_deployment': True
+            }),
+            ('multi-user deployment', {
+                'multi_user': True
+            }),
+            ('proxy deployment', {
+                'proxy': True
+            }),
+        ]
+
+        for mode_name, mode_arguments in direct_modes:
+            with self.subTest(mode_name):
+                arguments = {
+                    'skip_operator_deployment': False,
+                    'multi_user': False,
+                    'proxy': False,
+                    'enable_modular_architecture': True,
+                }
+                arguments.update(mode_arguments)
+                args = SimpleNamespace(**arguments)
+                deployer = DSPDeployer(args)
+                deployer.skip_operator_deployment = (
+                    args.skip_operator_deployment)
+
+                with self.assertRaisesRegex(
+                        ValueError,
+                        'Modular AIPipelines requires operator deployment'):
+                    deployer._should_use_operator_deployment()
 
 
 if __name__ == '__main__':

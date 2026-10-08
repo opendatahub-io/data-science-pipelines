@@ -148,6 +148,12 @@ class DSPDeployer:
 
     def _should_use_operator_deployment(self) -> bool:
         """Determine whether to use DSPO (operator) or direct deployment."""
+        if self.args.enable_modular_architecture and (
+                self.skip_operator_deployment or self.args.multi_user
+                or self.args.proxy):
+            raise ValueError(
+                'Modular AIPipelines requires operator deployment mode; '
+                'disable skip_operator_deployment, multi_user, or proxy')
         if self.skip_operator_deployment:
             print(
                 '⚠️  User selected to skip DSPO deployment, using direct deployment'

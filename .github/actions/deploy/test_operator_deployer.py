@@ -266,6 +266,15 @@ metadata:
 data:
   platformVersion: ""
 ''',
+            'whitespace-only platform version':
+                '''apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odh-aipipelines-config
+  namespace: opendatahub
+data:
+  platformVersion: "   "
+''',
         }
 
         for fixture_name, rendered_fixture in invalid_fixtures.items():
@@ -278,6 +287,60 @@ data:
 
                 with self.assertRaisesRegex(ValueError,
                                             'no non-empty platformVersion'):
+                    deployer.enable_modular_architecture()
+                deployer.deployment_manager.apply_resource.assert_not_called()
+
+    def test_enable_modular_architecture_rejects_invalid_platform_version(
+            self):
+        invalid_fixtures = {
+            'null platform version':
+                '''apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odh-aipipelines-config
+  namespace: opendatahub
+data:
+  platformVersion: null
+''',
+            'non-string platform version':
+                '''apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odh-aipipelines-config
+  namespace: opendatahub
+data:
+  platformVersion: 3.2
+''',
+            'line feed in platform version':
+                '''apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odh-aipipelines-config
+  namespace: opendatahub
+data:
+  platformVersion: "kind-modular-ci\\nunexpected"
+''',
+            'carriage return in platform version':
+                '''apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odh-aipipelines-config
+  namespace: opendatahub
+data:
+  platformVersion: "kind-modular-ci\\runexpected"
+''',
+        }
+
+        for fixture_name, rendered_fixture in invalid_fixtures.items():
+            with self.subTest(fixture_name):
+                deployer = _make_deployer()
+                deployer.operator_repo_path = (
+                    '/tmp/test/data-science-pipelines-operator')
+                deployer.deployment_manager.run_command.return_value = (
+                    subprocess.CompletedProcess([], 0, stdout=rendered_fixture))
+
+                with self.assertRaisesRegex(ValueError,
+                                            'invalid platformVersion'):
                     deployer.enable_modular_architecture()
                 deployer.deployment_manager.apply_resource.assert_not_called()
 

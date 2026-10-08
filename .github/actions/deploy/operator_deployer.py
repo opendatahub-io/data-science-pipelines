@@ -329,7 +329,16 @@ class OperatorDeployer:
                 'Modular AIPipelines fixture has no odh-aipipelines-config ConfigMap'
             )
         platform_data = platform_config.get('data') or {}
-        platform_version = str(platform_data.get('platformVersion', '')).strip()
+        platform_version = platform_data.get('platformVersion', '')
+        if not isinstance(platform_version, str):
+            raise ValueError(
+                'Modular AIPipelines fixture has invalid platformVersion: '
+                'expected a string')
+        if '\r' in platform_version or '\n' in platform_version:
+            raise ValueError(
+                'Modular AIPipelines fixture has invalid platformVersion: '
+                'carriage returns and line feeds are not allowed')
+        platform_version = platform_version.strip()
         if not platform_version:
             raise ValueError(
                 'Modular AIPipelines fixture ConfigMap has no non-empty platformVersion'
