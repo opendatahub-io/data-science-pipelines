@@ -7,7 +7,7 @@
 
 ### Document metadata
 
-- Last updated: 2026-09-10
+- Last updated: 2026-10-07
 - Scope: KFP master branch (v2 engine), backend (Go), SDK (Python), frontend (React 19)
 
 ### Maintenance (agents and contributors)
@@ -541,6 +541,7 @@ When changing an effect-heavy frontend component, add or run the smallest releva
 
 - Kind-based clusters are provisioned via the `kfp-cluster` composite action, parameterized by `k8s_version`, `pipeline_store`, `proxy`, `cache_enabled`, and optional `argo_version`.
 - The `create-cluster` and `deploy` actions are used by newer suites; `kfp-k8s` installs SDK components from source inside jobs that execute Python-based tests.
+- `upgrade-test.yml` deploys the initial stable release in legacy mode and asserts that `default-aipipelines` is absent. It then enables the opt-in `enable_modular_architecture` deploy input only for the target deployment. That target handoff applies DSPO's modular AIPipelines fixture, enables `DSPO_ENABLEAIPIPELINESMODULECONTROLLER`, and waits for `default-aipipelines` to report `Ready` and `ProvisioningSucceeded`. The deploy action exports the fixture's platform version, and `UpgradeVerification` compares it to the module status.
 - The `deploy` action downloads and loads CI-built images before deploying optional Tinyproxy support, preloads runtime base images used by test pods and init containers, and waits for Tinyproxy readiness/endpoints in proxy lanes.
 - CI Docker-sensitive paths use shell retry wrappers with sleeps for image builds, Buildx bootstrap, and runtime base-image pulls; Kind node image bootstrap also falls back to `gcr.io/k8s-staging-kind/node` when Docker Hub flakes.
 - The `test-and-report` action port-forwards MLMD on port `8080` only when `ARGO_COMPATIBILITY_TESTS=true`, allowing the canonical Argo compatibility API job to validate execution/artifact metadata without adding another test lane.
