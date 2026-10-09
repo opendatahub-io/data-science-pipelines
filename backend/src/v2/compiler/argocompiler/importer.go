@@ -155,6 +155,7 @@ func (c *workflowCompiler) addImporterTemplate(downloadToWorkspace bool) string 
 		ConfigureCustomCABundle(importerTemplate)
 	}
 	applySecurityContextToTemplate(importerTemplate)
+	addSystemPodMetadata(importerTemplate, "importer", name)
 	c.templates[name] = importerTemplate
 	c.wf.Spec.Templates = append(c.wf.Spec.Templates, *importerTemplate)
 	return name

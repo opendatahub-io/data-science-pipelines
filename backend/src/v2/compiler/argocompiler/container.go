@@ -281,6 +281,7 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 	if setCABundle {
 		ConfigureCustomCABundle(template)
 	}
+	addSystemPodMetadata(template, "container-driver", name)
 	c.templates[name] = template
 	c.wf.Spec.Templates = append(c.wf.Spec.Templates, *template)
 	return name
@@ -569,6 +570,7 @@ func (c *workflowCompiler) addContainerExecutorTemplate(task *pipelinespec.Pipel
 		ConfigureCustomCABundle(executor)
 	}
 	applySecurityContextToExecutorTemplate(executor, c.defaultRunAsUser, c.defaultRunAsGroup, c.defaultRunAsNonRoot)
+	addSystemPodMetadata(executor, "container-executor", nameContainerImpl)
 
 	// If retry policy is set, add retryStrategy to executor and inject
 	// KFP_RETRY_INDEX so the launcher can resolve the per-attempt log path

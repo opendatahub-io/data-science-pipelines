@@ -650,6 +650,7 @@ func (c *workflowCompiler) addDAGDriverTemplate() string {
 	if setCABundle {
 		ConfigureCustomCABundle(template)
 	}
+	addSystemPodMetadata(template, "dag-driver", name)
 	c.templates[name] = template
 	c.wf.Spec.Templates = append(c.wf.Spec.Templates, *template)
 	return name

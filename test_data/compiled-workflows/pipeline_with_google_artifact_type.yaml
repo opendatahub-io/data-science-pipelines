@@ -123,6 +123,9 @@ spec:
     metadata:
       annotations:
         pipelines.kubeflow.org/runtime-role: launcher
+        pipelines.kubeflow.org/template-name: system-importer
+      labels:
+        pipelines.kubeflow.org/pod-role: importer
     name: system-importer
     outputs: {}
     securityContext:
@@ -217,6 +220,9 @@ spec:
     metadata:
       annotations:
         pipelines.kubeflow.org/runtime-role: driver
+        pipelines.kubeflow.org/template-name: system-container-driver
+      labels:
+        pipelines.kubeflow.org/pod-role: container-driver
     name: system-container-driver
     outputs:
       parameters:
@@ -326,6 +332,9 @@ spec:
     metadata:
       annotations:
         pipelines.kubeflow.org/runtime-role: launcher
+        pipelines.kubeflow.org/template-name: system-container-impl
+      labels:
+        pipelines.kubeflow.org/pod-role: container-executor
     name: system-container-impl
     outputs: {}
     podSpecPatch: '{{inputs.parameters.pod-spec-patch}}'
@@ -497,6 +506,9 @@ spec:
     metadata:
       annotations:
         pipelines.kubeflow.org/runtime-role: driver
+        pipelines.kubeflow.org/template-name: system-dag-driver
+      labels:
+        pipelines.kubeflow.org/pod-role: dag-driver
     name: system-dag-driver
     outputs:
       parameters:
