@@ -344,6 +344,27 @@ func (c *workflowCompiler) templateName(componentName string) string {
 }
 
 const (
+	systemPodRoleLabelKey           = "pipelines.kubeflow.org/pod-role"
+	systemTemplateNameAnnotationKey = "pipelines.kubeflow.org/template-name"
+)
+
+func addSystemPodMetadata(t *wfapi.Template, role, templateName string) {
+	if t == nil {
+		return
+	}
+	if t.Metadata.Labels == nil {
+		t.Metadata.Labels = make(map[string]string)
+	}
+	if t.Metadata.Annotations == nil {
+		t.Metadata.Annotations = make(map[string]string)
+	}
+	// Keep system pod identity in metadata so debugging does not depend on
+	// template names being embedded in the pod hostname.
+	t.Metadata.Labels[systemPodRoleLabelKey] = role
+	t.Metadata.Annotations[systemTemplateNameAnnotationKey] = templateName
+}
+
+const (
 	argumentsComponents     = "components-"
 	argumentsContainers     = "implementations-"
 	argumentsKubernetesSpec = "kubernetes-"

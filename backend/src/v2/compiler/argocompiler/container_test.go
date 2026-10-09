@@ -64,6 +64,8 @@ func TestAddContainerExecutorTemplate(t *testing.T) {
 			executorTemplate, exists := c.templates["system-container-impl"]
 			assert.True(t, exists, "Template should exist with the returned name")
 			assert.NotNil(t, executorTemplate, "Executor template should not be nil")
+			assert.Equal(t, "container-executor", executorTemplate.Metadata.Labels[systemPodRoleLabelKey])
+			assert.Equal(t, "system-container-impl", executorTemplate.Metadata.Annotations[systemTemplateNameAnnotationKey])
 
 		})
 	}
@@ -105,6 +107,8 @@ func TestContainerDriverTemplate_IncludesKFPPodNameEnv(t *testing.T) {
 	}
 	assert.True(t, foundKFPPodName,
 		"system-container-driver template must include KFP_POD_NAME env var to avoid hostname truncation for long pod names")
+	assert.Equal(t, "container-driver", tmpl.Metadata.Labels[systemPodRoleLabelKey])
+	assert.Equal(t, "system-container-driver", tmpl.Metadata.Annotations[systemTemplateNameAnnotationKey])
 }
 
 func Test_extendPodMetadata(t *testing.T) {
