@@ -13,16 +13,18 @@
 # limitations under the License.
 import base64
 import dataclasses
+import errno
 import gzip
 import inspect
 import io
 import itertools
+import os
 import pathlib
 import re
 import tarfile
 import textwrap
-from typing import (Any, Callable, Dict, List, Mapping, Optional, Tuple, Type,
-                    Union)
+import typing
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 import warnings
 
 import docstring_parser
@@ -94,12 +96,10 @@ def make_index_url_options(pip_index_urls: Optional[List[str]],
             - '--index-url url ' if pip_index_urls contains 1 URL.
             - The above followed by '--extra-index-url url ' for each additional URL in pip_index_urls
             if pip_index_urls contains more than 1 URL.
-            - If pip_trusted_hosts is None:
-                - The above followed by '--trusted-host url ' for each URL in pip_index_urls.
-            - If pip_trusted_hosts is an empty List.
-                - No --trusted-host information will be added
-            - If pip_trusted_hosts contains any URLs:
-                - The above followed by '--trusted-host url ' for each URL in pip_trusted_hosts.
+            - If pip_trusted_hosts is None or an empty List:
+                - No --trusted-host information will be added.
+            - If pip_trusted_hosts contains any hosts:
+                - The above followed by '--trusted-host host ' for each host in pip_trusted_hosts.
     Note:
         In case pip_index_urls is not empty, the returned string will contain a space at the end.
     """
@@ -113,11 +113,7 @@ def make_index_url_options(pip_index_urls: Optional[List[str]],
     options.extend(f'--extra-index-url {extra_index_url}'
                    for extra_index_url in extra_index_urls)
 
-    if pip_trusted_hosts is None:
-        options.extend([f'--trusted-host {index_url}'])
-        options.extend(f'--trusted-host {extra_index_url}'
-                       for extra_index_url in extra_index_urls)
-    elif len(pip_trusted_hosts) > 0:
+    if pip_trusted_hosts:
         options.extend(f'--trusted-host {trusted_host}'
                        for trusted_host in pip_trusted_hosts)
 
@@ -172,11 +168,8 @@ def _get_packages_to_install_command(
     index_url_options = make_index_url_options(pip_index_urls,
                                                pip_trusted_hosts)
 
-    # Install packages before KFP. This allows us to
-    # control where we source kfp-pipeline-spec.
-    # This is particularly useful for development and
-    # CI use-case when you want to install the spec
-    # from source.
+    # Install explicit user packages before the SDK, which may be installed
+    # without dependencies for lightweight component execution.
     if packages_to_install:
         user_packages_pip_install_command = make_pip_install_command(
             install_parts=packages_to_install,
@@ -190,8 +183,12 @@ def _get_packages_to_install_command(
         if use_venv:
             pip_install_strings.append(_use_venv_script_template)
         if kfp_package_path:
+            install_parts = [kfp_package_path]
+            if (os.path.exists(kfp_package_path) or
+                    '@refs/pull/' in kfp_package_path):
+                install_parts.append('--no-deps')
             kfp_pip_install_command = make_pip_install_command(
-                install_parts=[kfp_package_path],
+                install_parts=install_parts,
                 index_url_options=index_url_options,
             )
         else:
@@ -347,18 +344,6 @@ def get_name_to_specs(
             name_to_output_specs[maybe_make_unique(
                 name,
                 list(name_to_output_specs))] = make_output_spec(annotation)
-    # is deprecated dict returns style
-    elif isinstance(return_ann, dict):
-        warnings.warn(
-            'The ability to specify multiple outputs using the dict syntax'
-            ' has been deprecated. It will be removed soon after release'
-            ' 0.1.32. Please use typing.NamedTuple to declare multiple'
-            ' outputs.', DeprecationWarning)
-        for output_name, output_type_annotation in return_ann.items():
-            output_type = type_utils._annotation_to_type_struct(
-                output_type_annotation)
-            name_to_output_specs[maybe_make_unique(
-                output_name, list(name_to_output_specs))] = output_type
     # is the simple single return case (can be `-> <param>` or `-> Artifact`)
     # treated the same way, since processing is done in inner functions
     else:
@@ -436,8 +421,8 @@ def extract_component_interface(
 ) -> structures.ComponentSpec:
 
     def assign_descriptions(
-        inputs_or_outputs: Mapping[str, Union[structures.InputSpec,
-                                              structures.OutputSpec]],
+        inputs_or_outputs: typing.Mapping[str, Union[structures.InputSpec,
+                                                     structures.OutputSpec]],
         docstring_params: List[docstring_parser.DocstringParam],
     ) -> None:
         """Assigns descriptions to InputSpec or OutputSpec for each component
@@ -503,6 +488,73 @@ CONTAINERIZED_PYTHON_COMPONENT_COMMAND = [
 ]
 
 
+def _safe_add_to_tar(
+    tar: tarfile.TarFile,
+    root: pathlib.Path,
+    arcname: str = '.',
+) -> None:
+    """Add a file or directory to a tar archive with controlled symlink
+    resolution.
+
+    Resolves the top-level *root* path, then walks its contents:
+    - Regular files are added directly.
+    - In-tree file symlinks are dereferenced (archived as regular files).
+    - Dangling symlinks raise ``ValueError``.
+    - Files whose resolved path escapes the artifact tree raise
+      ``ValueError``.
+    - Directory symlinks are rejected unconditionally.
+
+    This helper operates on trusted local input and does not attempt to
+    enforce source-tree immutability against concurrent modification.
+    """
+    resolved_root = root.resolve()
+
+    if resolved_root.is_file():
+        tar.add(str(resolved_root), arcname=arcname)
+        return
+
+    if not resolved_root.is_dir():
+        raise ValueError(f'Embedded artifact path does not exist or is not a '
+                         f'file/directory: {root}')
+
+    def _walk(
+        current: pathlib.Path,
+        arc_prefix: str,
+    ) -> None:
+        try:
+            resolved = current.resolve(strict=True)
+        except RuntimeError:
+            raise ValueError(f'Symlink cycle detected at: {current}')
+        except OSError as e:
+            if e.errno == errno.ELOOP:
+                raise ValueError(f'Symlink cycle detected at: {current}')
+            if e.errno in (errno.ENOENT, errno.ENOTDIR):
+                raise ValueError(f'Dangling symlink: {current}')
+            raise
+
+        if resolved.is_dir():
+            if current != resolved:
+                raise ValueError(
+                    f'Directory symlinks are not supported: {current}')
+
+            tar.add(str(resolved), arcname=arc_prefix, recursive=False)
+            for child in sorted(resolved.iterdir()):
+                child_arc = (f'{arc_prefix}/{child.name}'
+                             if arc_prefix != '.' else child.name)
+                _walk(child, child_arc)
+        elif resolved.is_file():
+            try:
+                resolved.relative_to(resolved_root)
+            except ValueError:
+                raise ValueError(
+                    f'Path escapes artifact tree: {current} -> {resolved}')
+            tar.add(str(resolved), arcname=arc_prefix)
+        else:
+            raise ValueError(f'Unsupported file type: {current}')
+
+    _walk(resolved_root, arcname)
+
+
 def _get_command_and_args_for_lightweight_component(
     func: Callable,
     additional_funcs: Optional[List[Callable]] = None,
@@ -514,7 +566,10 @@ def _get_command_and_args_for_lightweight_component(
         'from kfp import dsl',
         'from kfp.dsl import *',
         'from typing import *',
-    ] + custom_artifact_types.get_custom_artifact_type_import_statements(func)
+    ] + custom_artifact_types.get_custom_artifact_type_import_statements(
+        func
+    ) + custom_artifact_types.get_pydantic_basemodel_type_import_statements(
+        func)
 
     func_source = _get_function_source_definition(func)
     additional_funcs_source = ''
@@ -534,9 +589,9 @@ def _get_command_and_args_for_lightweight_component(
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode='w') as tar:
             if asset_path.is_dir():
-                tar.add(asset_path, arcname='.')
+                _safe_add_to_tar(tar, asset_path, arcname='.')
             else:
-                tar.add(asset_path, arcname=asset_path.name)
+                _safe_add_to_tar(tar, asset_path, arcname=asset_path.name)
 
         archive_bytes = buf.getvalue()
 
@@ -662,7 +717,9 @@ def create_notebook_component_from_func(
     # Resolve default packages for notebooks when not specified
     if packages_to_install is None:
         packages_to_install = [
-            'nbclient>=0.10,<1', 'ipykernel>=6,<7', 'jupyter_client>=7,<9'
+            'nbclient>=0.10,<1',
+            'ipykernel>=6',
+            'jupyter_client>=7,<9',
         ]
 
     # Validate notebook path and determine relpath
@@ -693,10 +750,9 @@ def create_notebook_component_from_func(
         notebook_relpath = nb_path.name
 
     # Build the helper source template with a placeholder for the embedded archive
-    from kfp.dsl.templates.notebook_executor import \
-        get_notebook_executor_source
-    helper_template = get_notebook_executor_source('{embedded_archive}',
-                                                   notebook_relpath)
+    from kfp.dsl.templates import notebook_executor
+    helper_template = notebook_executor.get_notebook_executor_source(
+        '{embedded_archive}', notebook_relpath)
 
     # Delegate to the common component creation using the embedded artifact path
     return create_component_from_func(

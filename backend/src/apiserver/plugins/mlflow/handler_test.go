@@ -811,6 +811,7 @@ func TestBuildRunURL(t *testing.T) {
 
 func TestShouldSyncNestedRun(t *testing.T) {
 	t.Run("terminal mode syncs non-terminal statuses", func(t *testing.T) {
+<<<<<<< HEAD
 		assert.True(t, shouldSyncNestedRun(apiserverPlugins.RunSyncModeTerminal, "RUNNING"))
 		assert.True(t, shouldSyncNestedRun(apiserverPlugins.RunSyncModeTerminal, "SCHEDULED"))
 		assert.True(t, shouldSyncNestedRun(apiserverPlugins.RunSyncModeTerminal, "PENDING"))
@@ -825,6 +826,22 @@ func TestShouldSyncNestedRun(t *testing.T) {
 		assert.True(t, shouldSyncNestedRun(apiserverPlugins.RunSyncModeRetry, "KILLED"))
 		assert.False(t, shouldSyncNestedRun(apiserverPlugins.RunSyncModeRetry, "RUNNING"))
 		assert.False(t, shouldSyncNestedRun(apiserverPlugins.RunSyncModeRetry, "FINISHED"))
+=======
+		assert.True(t, commonmlflow.IsOpenRunStatus("RUNNING"))
+		assert.True(t, commonmlflow.IsOpenRunStatus("SCHEDULED"))
+		assert.True(t, commonmlflow.IsOpenRunStatus("PENDING"))
+		assert.True(t, commonmlflow.IsOpenRunStatus(""))
+		assert.False(t, commonmlflow.IsOpenRunStatus("FINISHED"))
+		assert.False(t, commonmlflow.IsOpenRunStatus("FAILED"))
+		assert.False(t, commonmlflow.IsOpenRunStatus("KILLED"))
+	})
+
+	t.Run("retry mode syncs only failed and killed", func(t *testing.T) {
+		assert.True(t, shouldReopenNestedRun("FAILED"))
+		assert.True(t, shouldReopenNestedRun("KILLED"))
+		assert.False(t, shouldReopenNestedRun("RUNNING"))
+		assert.False(t, shouldReopenNestedRun("FINISHED"))
+>>>>>>> upstream/master
 	})
 }
 

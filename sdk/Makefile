@@ -12,22 +12,65 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 # Contact one of chensun, HumairAK if this remote image needs an update.
 # Pin off :master so CI does not rewrite generated files (protoc-gen-go v1.36.11).
 PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:release-2.17@sha256:28f1aaa56c2abefedecf162f5917843283253d2cd8d99bc53c18587033320370
+=======
+# Pre-built images for faster development (default: enabled for speed)
+# Set USE_PREBUILT_IMAGE=false when:
+# - Dockerfile dependencies have been updated
+# - CI validation fails due to tool version mismatches
+# - Working on API generation toolchain changes
+USE_PREBUILT_IMAGE ?= true
+# Validate USE_PREBUILT_IMAGE value
+ifneq ($(USE_PREBUILT_IMAGE),true)
+ifneq ($(USE_PREBUILT_IMAGE),false)
+$(error USE_PREBUILT_IMAGE must be 'true' or 'false', got '$(USE_PREBUILT_IMAGE)')
+endif
+endif
+PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:master
+IMAGE_TAG=kfp-api-generator
+UV_VERSION=0.10.3
+>>>>>>> upstream/master
 
+ifeq ($(USE_PREBUILT_IMAGE),true)
+GENERATOR_IMAGE=$(PREBUILT_REMOTE_IMAGE)
+else
+GENERATOR_IMAGE=$(IMAGE_TAG)
+endif
+
+.PHONY: generate-python
+generate-python:
+	$(MAKE) -C ../api python
+	$(MAKE) -C ../kubernetes_platform python
+	$(MAKE) -C ../backend/api API_VERSION=v2beta1 generate-kfp-server-api-package
+
+# Build Python package using either pre-built image (fast) or source build (accurate).
+# Use USE_PREBUILT_IMAGE=false to build from source for guaranteed accuracy.
 .PHONY: python
-python: python
+python: generate-python
 	docker run --interactive --rm \
 		--user $$(id -u):$$(id -g) \
 		-e HOME=/tmp \
 		-v "$$(pwd)/..":"/go/src/github.com/kubeflow/pipelines":z \
-		$(PREBUILT_REMOTE_IMAGE) \
-		sh -c 'cd /go/src/github.com/kubeflow/pipelines/sdk/python && \
-			python3 setup.py sdist && pip wheel --no-deps dist/*.tar.gz -w dist'
+		$(GENERATOR_IMAGE) \
+		sh -c 'cd /go/src/github.com/kubeflow/pipelines && \
+			pip install --user --break-system-packages uv==$(UV_VERSION) && \
+			~/.local/bin/uv build --package kfp --out-dir sdk/python/dist'
+
+# Build Python package by building api-generator image from source.
+.PHONY: python-from-source
+python-from-source:
+	$(MAKE) USE_PREBUILT_IMAGE=false python
 
 .PHONY: clean-python
 clean-python:
 	rm -rf python/build
 	rm -rf python/dist
 	rm -rf python/kfp.egg-info
+
+# Build the API generator image via the canonical target in backend/api
+.PHONY: ensure-api-generator-image
+ensure-api-generator-image:
+	$(MAKE) -C ../backend/api image

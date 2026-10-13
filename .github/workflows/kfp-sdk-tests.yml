@@ -9,11 +9,15 @@ on:
       - 'rhoai-*'
   pull_request:
     paths:
+      - '**/pyproject.toml'
+      - 'uv.lock'
       - 'api/**'
       - 'sdk/**'
       - 'test_data/sdk_compiled_pipelines/**'
-      - './test/presubmit-tests-sdk.sh'
+      - 'test_data/component_migration_test.py'
+      - 'test/presubmit-tests-sdk.sh'
       - '.github/workflows/kfp-sdk-tests.yml'
+      - '.github/actions/setup-python/**'
       - '!**/*.md'
       - '!**/OWNERS'
 
@@ -27,35 +31,20 @@ jobs:
     timeout-minutes: 50
     strategy:
       matrix:
-        python-version: ['3.9', '3.13']
+        python-version: ['3.11', '3.13']
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
-    - name: Set up Python
-      uses: actions/setup-python@v6
+    - name: Setup Python with uv
+      uses: ./.github/actions/setup-python
       with:
         python-version: ${{ matrix.python-version }}
-        cache: 'pip'
 
-    - name: Install protobuf dependencies & kfp-pipeline-spec
+    - name: Install protobuf dependencies & generate proto files
       id: install-protobuf-deps
       uses: ./.github/actions/protobuf
-
-    - name: Install kfp & kfp-kubernetes from source
-      id: install-kfp-k8s-deps
-      uses: ./.github/actions/kfp-k8s
-
-    - name: Install Test dependencies
-      run: |
-        pip install -r sdk/python/requirements-dev.txt
-        pip install pytest
-        pip install docker
-        pip install pytest-cov
-        pip install pytest-xdist
-        pip install google_cloud_pipeline_components
-        pip install requests==2.28.1
 
     - name: Run SDK Tests
       id: run-tests
@@ -70,6 +59,7 @@ jobs:
         PIP_TRUSTED_HOST: "pypi.org"
       run: |
         ./test/presubmit-tests-sdk.sh
+<<<<<<< HEAD
         echo "JUNIT_XML=$JUNIT_XML" >> "$GITHUB_OUTPUT"
 
     - name: Publish Junit Summary
@@ -79,3 +69,10 @@ jobs:
       with:
         xml_files: ${{ steps.run-tests.outputs.JUNIT_XML }}
       continue-on-error: true
+=======
+
+    - name: Compile shared container fixtures without legacy YAML
+      run: |
+        # Source-tree Google Cloud components are outside this migration's scope.
+        python -m pytest -q test_data/component_migration_test.py
+>>>>>>> upstream/master

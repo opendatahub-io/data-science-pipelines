@@ -15,6 +15,7 @@
 package testutil
 
 import (
+	"fmt"
 	"math/rand"
 	"slices"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	api_server "github.com/kubeflow/pipelines/backend/src/common/client/api_server/v2"
 	"github.com/kubeflow/pipelines/backend/test/logger"
 
+	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 )
 
@@ -83,21 +85,30 @@ func GetPipelineRun(runClient *api_server.RunClient, pipelineRunID *string) *run
 	for attempt := 1; attempt <= 3; attempt++ {
 		pipelineRun, runError = runClient.Get(&run_params.RunServiceGetRunParams{
 			RunID: *pipelineRunID,
+<<<<<<< HEAD
+=======
+			View:  strPTR("FULL"),
+>>>>>>> upstream/master
 		})
 		if runError == nil {
 			break
 		}
 		if !IsRetriableLocalAPIError(runError) || attempt == 3 {
+<<<<<<< HEAD
 			break
 		}
 		logger.Log("Transient localhost API error while getting run %s (attempt %d/3): %v", *pipelineRunID, attempt, runError)
 		time.Sleep(2 * time.Second)
+=======
+			gomega.Expect(runError).NotTo(gomega.HaveOccurred())
+		}
+>>>>>>> upstream/master
 	}
 	gomega.Expect(runError).NotTo(gomega.HaveOccurred(), "Failed to get run with id="+*pipelineRunID)
 	return pipelineRun
 }
 
-func WaitForRunToBeInState(runClient *api_server.RunClient, pipelineRunID *string, expectedStates []run_model.V2beta1RuntimeState, timeout *time.Duration) {
+func WaitForRunToBeInState(runClient *api_server.RunClient, pipelineRunID *string, expectedStates []run_model.V2beta1RuntimeState, timeout *time.Duration, checks ...func() error) {
 	logger.Log("Waiting for pipeline run with id=%s to be in one of '%s'", *pipelineRunID, expectedStates)
 	maxTimeToWait := time.Duration(300)
 	pollTime := time.Duration(5)
@@ -114,9 +125,16 @@ func WaitForRunToBeInState(runClient *api_server.RunClient, pipelineRunID *strin
 				logger.Log("Pipeline run with id=%s reached expected state %s", *pipelineRunID, *currentPipelineRunState)
 				return
 			}
-
+		}
+		for _, check := range checks {
+			if err := check(); err != nil {
+				ginkgo.Fail(fmt.Sprintf("Pipeline run with id=%s: %v", *pipelineRunID, err), 1)
+				return
+			}
+		}
+		if currentPipelineRunState != nil {
 			if time.Now().After(deadline) {
-				logger.Log("Pipeline run with id=%s is in %s state, did not reach one of '%s' ", *pipelineRunID, *currentPipelineRunState, expectedStates)
+				ginkgo.Fail(fmt.Sprintf("Pipeline run with id=%s did not reach one of %v within timeout, current state: %s", *pipelineRunID, expectedStates, *currentPipelineRunState), 1)
 				return
 			}
 			logger.Log("Pipeline run with id=%s is in %s state, waiting...", *pipelineRunID, *currentPipelineRunState)
@@ -166,4 +184,8 @@ func GetPipelineRunTimeInputs(pipelineSpecFile string) map[string]interface{} {
 	}
 	logger.Log("Returning pipeline run time inputs %v", pipelineInputMap)
 	return pipelineInputMap
+}
+
+func strPTR(s string) *string {
+	return &s
 }

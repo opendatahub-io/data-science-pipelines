@@ -6,9 +6,13 @@ env:
   NUMBER_OF_PARALLEL_NODES: 15
   CLUSTER_NAME: "kfp"
   NAMESPACE: "kubeflow"
+<<<<<<< HEAD
   PYTHON_VERSION: "3.9"
   # Keep direct-deployment conditionals intact; removing them is follow-up work.
   SKIP_OPERATOR_DEPLOYMENT: 'false'
+=======
+  PYTHON_VERSION: "3.11"
+>>>>>>> upstream/master
 
 on:
   push:
@@ -17,16 +21,23 @@ on:
 
   pull_request:
     paths:
+      - '**/pyproject.toml'
+      - 'uv.lock'
       - '.github/workflows/upgrade-test.yml'
       - '.github/workflows/image-builds.yml'
       - '.github/actions/create-cluster/**'
       - '.github/actions/deploy/**'
+      - '.github/actions/download-artifact-with-retry/**'
+      - '.github/actions/test-and-report/**'
       - '.github/resources/**'
       - 'backend/api/v2beta1/**'
       - 'backend/src/**'
+<<<<<<< HEAD
       - 'backend/metadata_writer/**'
       - 'backend/test/config/**'
       - 'backend/test/constants/**'
+=======
+>>>>>>> upstream/master
       - 'backend/test/v2/api/**'
       - 'backend/test/testutil/**'
       - 'manifests/kustomize/**'
@@ -41,28 +52,38 @@ concurrency:
 
 jobs:
   build:
+    # TODO(#14029): Remove this checked-in pause once the MLMD-to-native migration and startup gate are implemented.
+    if: ${{ false }}
     uses: ./.github/workflows/image-builds.yml
 
   upgrade-test:
-    needs: build
+    # TODO(#14029): Remove this checked-in pause once the MLMD-to-native migration and startup gate are implemented.
+    if: ${{ false }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     strategy:
       matrix:
+<<<<<<< HEAD
         k8s_version: [ "v1.35.0" ]
         tls_enabled : [ "true" ]
+=======
+        k8s_version: [ "v1.36.1" ]
+>>>>>>> upstream/master
     name: KFP upgrade tests - K8s ${{ matrix.k8s_version }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Go
         uses: ./.github/actions/setup-go
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
-          python-version: 3.9
+          python-version: 3.11
 
       - name: Create cluster
         uses: ./.github/actions/create-cluster
@@ -144,6 +165,7 @@ jobs:
         if: ${{ steps.create-cluster.outcome == 'success' }}
         id: deploy
         with:
+<<<<<<< HEAD
           image_path: ${{ needs.build.outputs.IMAGE_PATH }}
           image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
           image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
@@ -189,6 +211,12 @@ jobs:
 
           echo "Re-establishing port-forward..."
           ./.github/resources/scripts/forward-port.sh "$NAMESPACE" "$DEPLOYMENT_NAME" 8888 8888
+=======
+          image_path: images_${{ github.run_id }}
+          image_tag: latest
+          image_registry: kind-registry:5000
+          forward_port: 'true'
+>>>>>>> upstream/master
 
       - name: Verify Upgrade
         uses: ./.github/actions/test-and-report

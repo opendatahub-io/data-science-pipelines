@@ -31,19 +31,35 @@ def verify_dra_json():
 
 
 @dsl.pipeline(
+<<<<<<< HEAD
     name='dra-json-input-check',
     description=('Verifies a task with a runtime-resolved DRA ResourceClaim '
                  '(via pipeline parameter) can schedule and complete.'),
 )
 def dra_json_input_check(resource_claim: Dict[str, Any] = {
     'resourceClaimTemplateName': 'dra-test-claim'
+=======
+    name="dra-json-input-check",
+    description=("Verifies a task with a runtime-resolved DRA ResourceClaim "
+                 "(via pipeline parameter) can schedule and complete."),
+)
+def dra_json_input_check(resource_claim: Dict[str, Any] = {
+    "resourceClaimTemplateName": "dra-test-claim"
+>>>>>>> upstream/master
 },):
     task = verify_dra_json().set_caching_options(False)
     kubernetes.add_resource_claim_json(task, resource_claim_json=resource_claim)
 
 
+<<<<<<< HEAD
 if __name__ == '__main__':
     compiler.Compiler().compile(
         dra_json_input_check,
         package_path=__file__.replace('.py', '.yaml'),
+=======
+if __name__ == "__main__":
+    compiler.Compiler().compile(
+        dra_json_input_check,
+        package_path=__file__.replace(".py", ".yaml"),
+>>>>>>> upstream/master
     )

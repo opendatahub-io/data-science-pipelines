@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	workflowapi "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 	swfapi "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -96,6 +96,9 @@ type ExecutionSpec interface {
 
 	// Get ServiceAccountName
 	ServiceAccount() string
+
+	// ServiceAccounts returns every service account the execution can use.
+	ServiceAccounts(allowCompilerPodSpecPatch bool) ([]string, error)
 
 	// Get ExecutionStatus which can be used to
 	// access status related information

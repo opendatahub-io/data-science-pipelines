@@ -18,8 +18,8 @@ import (
 	"context"
 	"time"
 
-	argoclient "github.com/argoproj/argo-workflows/v3/pkg/client/clientset/versioned"
-	argoinformer "github.com/argoproj/argo-workflows/v3/pkg/client/informers/externalversions"
+	argoclient "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned"
+	argoinformer "github.com/argoproj/argo-workflows/v4/pkg/client/informers/externalversions"
 	"github.com/cenkalti/backoff"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
@@ -54,8 +54,8 @@ type ExecutionInformer interface {
 	// Use Lister interface to get a specific ExecutionSpec under a namespace
 	// second return value indicates if no ExecutionSpec is found
 	Get(namespace string, name string) (ExecutionSpec, bool, error)
-	// List all ExecutionSpecs that match the label selector
-	List(labels *labels.Selector) (ExecutionSpecList, error)
+	// List all ExecutionSpecs in the given namespace that match the label selector
+	List(namespace string, labels *labels.Selector) (ExecutionSpecList, error)
 	// Start initializes the informer.
 	InformerFactoryStart(stopCh <-chan struct{})
 }

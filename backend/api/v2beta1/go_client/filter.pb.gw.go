@@ -42,15 +42,24 @@ func request_DummyFilterService_GetFilter_0(ctx context.Context, marshaler runti
 		protoReq Filter
 		metadata runtime.ServerMetadata
 	)
+<<<<<<< HEAD
 	if req.Body != nil {
 		_, _ = io.Copy(io.Discard, req.Body)
 	}
+=======
+>>>>>>> upstream/master
 	if err := req.ParseForm(); err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_DummyFilterService_GetFilter_0); err != nil {
 		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
+<<<<<<< HEAD
+=======
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+>>>>>>> upstream/master
 	msg, err := client.GetFilter(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
 }

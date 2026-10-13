@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-// import './CSSReset';
 import 'src/build/tailwind.output.css';
 import '@xyflow/react/dist/style.css';
 import React, { StrictMode } from 'react';
 import { ThemeProvider, StyledEngineProvider } from '@mui/material/styles';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { HashRouter, useLocation } from 'react-router-dom';
+import { HashRouter } from 'react-router';
 import { cssRule } from 'typestyle';
-import { ErrorBoundary } from './atoms/ErrorBoundary';
+import { NavigationErrorBoundary } from './atoms/NavigationErrorBoundary';
 import Router from './components/Router';
 import { fonts, theme } from './Css';
 import { initFeatures } from './features';
@@ -36,11 +35,6 @@ import {
 } from './lib/KubeflowClient';
 import { BuildInfoProvider } from './lib/BuildInfo';
 // TODO: license headers
-
-function LocationKeyedErrorBoundary({ children }: React.PropsWithChildren) {
-  const location = useLocation();
-  return <ErrorBoundary key={location.key}>{children}</ErrorBoundary>;
-}
 
 if (KFP_FLAGS.DEPLOYMENT === Deployments.KUBEFLOW) {
   initKfClient();
@@ -66,9 +60,9 @@ const app = (
         <BuildInfoProvider>
           <GkeMetadataProvider>
             <HashRouter>
-              <LocationKeyedErrorBoundary>
+              <NavigationErrorBoundary>
                 <Router />
-              </LocationKeyedErrorBoundary>
+              </NavigationErrorBoundary>
             </HashRouter>
           </GkeMetadataProvider>
         </BuildInfoProvider>

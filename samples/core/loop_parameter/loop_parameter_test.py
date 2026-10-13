@@ -19,13 +19,13 @@ import unittest
 from kfp.samples.test.utils import KfpTask
 from kfp.samples.test.utils import run_pipeline_func
 from kfp.samples.test.utils import TestCase
-import kfp_server_api
+import kfp.server_api
 from loop_parameter import my_pipeline
 
 
-def verify(t: unittest.TestCase, run: kfp_server_api.ApiRun,
+def verify(t: unittest.TestCase, run: kfp.server_api.V2beta1Run,
            tasks: dict[str, KfpTask], **kwargs):
-    t.assertEqual(run.status, 'Succeeded')
+    t.assertEqual(run.state, 'SUCCEEDED')
     # assert DAG structure
     t.assertCountEqual(['generate-op', 'print-op', 'for-loop-1'], tasks.keys())
     # assert all iteration outputs

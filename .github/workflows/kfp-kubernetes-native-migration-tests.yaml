@@ -10,9 +10,13 @@ on:
 
   pull_request:
     paths:
+      - "**/pyproject.toml"
+      - "uv.lock"
       - ".github/workflows/kfp-kubernetes-native-migration-tests.yaml"
+      - ".github/actions/setup-python/**"
       - ".github/workflows/image-builds.yml"
       - ".github/actions/deploy/**"
+      - ".github/actions/download-artifact-with-retry/**"
       - ".github/resources/**"
       - "tools/k8s-native/**"
       - "test/kfp-kubernetes-native-migration-tests/**"
@@ -29,20 +33,21 @@ jobs:
 
   kfp-kubernetes-native-migration-tests:
     runs-on: ubuntu-24.04
-    needs: build
+    permissions:
+      actions: read
+      contents: read
     strategy:
       matrix:
-        k8s_version: ["v1.31.14", "v1.35.0"]
+        k8s_version: ["v1.33.12", "v1.36.1"]
     name: KFP Kubernetes Native Migration Tests - K8s ${{ matrix.k8s_version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Setup Python with uv
+        uses: ./.github/actions/setup-python
         with:
-          python-version: "3.9"
-          cache: 'pip'
+          python-version: "3.11"
 
       - name: Create KFP cluster
         id: create-kfp-cluster
@@ -56,9 +61,9 @@ jobs:
         uses: ./.github/actions/deploy
         if: ${{ steps.create-kfp-cluster.outcome == 'success' }}
         with:
-          image_path: ${{ needs.build.outputs.IMAGE_PATH }}
-          image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
-          image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
+          image_path: images_${{ github.run_id }}
+          image_tag: latest
+          image_registry: kind-registry:5000
           pod_to_pod_tls_enabled: 'false'
 
       - name: Install protobuf dependencies & kfp-pipeline-spec
@@ -71,15 +76,10 @@ jobs:
         id: install-kfp-k8s-deps
         uses: ./.github/actions/kfp-k8s
 
-      - name: Install requirements
-        id: install-requirements
-        if: ${{ steps.install-kfp-k8s-deps.outcome == 'success' }}
-        run: pip install -r ./test/kfp-kubernetes-native-migration-tests/requirements.txt
-
       - name: Create test pipelines in DB mode
-        if: ${{ steps.install-requirements.outcome == 'success' }}
+        if: ${{ steps.install-kfp-k8s-deps.outcome == 'success' }}
         id: create-test-pipelines
-        run: python ./test/kfp-kubernetes-native-migration-tests/create_test_pipelines.py
+        run: uv run python ./test/kfp-kubernetes-native-migration-tests/create_test_pipelines.py
         continue-on-error: true
 
       - name: Run DB mode migration tests
@@ -89,7 +89,7 @@ jobs:
           PULL_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           KFP_ENDPOINT: "http://localhost:8888"
-        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v
+        run: uv run pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v
         continue-on-error: true
 
       - name: Install cert-manager
@@ -172,7 +172,7 @@ jobs:
           PULL_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           KFP_ENDPOINT: "http://localhost:8888"
-        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_k8s_mode_migration_tests.py -v
+        run: uv run pytest ./test/kfp-kubernetes-native-migration-tests/kfp_k8s_mode_migration_tests.py -v
         continue-on-error: true
 
       - name: Collect failed logs
@@ -184,7 +184,7 @@ jobs:
           exit 1
 
       - name: Collect test results
-        if: always()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: kfp-kubernetes-native-migration-tests-artifacts-k8s-${{ matrix.k8s_version }}

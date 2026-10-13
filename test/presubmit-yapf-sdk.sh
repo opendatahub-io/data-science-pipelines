@@ -15,8 +15,9 @@
 
 source_root=$(pwd)
 
-python3 -m pip install --upgrade pip
-python3 -m pip install $(grep 'yapf==' sdk/python/requirements-dev.txt)
-python3 -m pip install pre_commit_hooks
-python3 -m pre_commit_hooks.string_fixer $(find sdk/python/kfp/**/*.py -type f)
-yapf --recursive --diff "${source_root}/sdk/python/"
+# Dependencies are already installed via 'uv sync' in CI
+# Run string fixer to normalize quotes
+uv run python -m pre_commit_hooks.string_fixer $(find sdk/python/kfp -type f -name '*.py' ! -name '*_pb2.py' ! -path '*/server_api/*') || true
+
+# Run yapf check
+uv run yapf --recursive --diff --exclude '**/server_api/**' --exclude '**/*_pb2.py' "${source_root}/sdk/python/"

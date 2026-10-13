@@ -8,7 +8,7 @@ exports[`SideNav > display the correct GKE metadata 1`] = `
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870"
@@ -16,6 +16,7 @@ exports[`SideNav > display the correct GKE metadata 1`] = `
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -97,6 +98,7 @@ exports[`SideNav > display the correct GKE metadata 1`] = `
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -175,6 +177,7 @@ exports[`SideNav > display the correct GKE metadata 1`] = `
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -215,6 +218,7 @@ exports[`SideNav > display the correct GKE metadata 1`] = `
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -255,6 +259,7 @@ exports[`SideNav > display the correct GKE metadata 1`] = `
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -294,46 +299,6 @@ exports[`SideNav > display the correct GKE metadata 1`] = `
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -440,6 +405,7 @@ exports[`SideNav > display the correct GKE metadata 1`] = `
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -462,7 +428,7 @@ exports[`SideNav > display the correct GKE metadata 1`] = `
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Cluster name: some-cluster-name, Project ID: some-project-id"
@@ -525,7 +491,7 @@ exports[`SideNav > populates the display build information using the default pro
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870"
@@ -533,6 +499,7 @@ exports[`SideNav > populates the display build information using the default pro
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -614,6 +581,7 @@ exports[`SideNav > populates the display build information using the default pro
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -692,6 +660,7 @@ exports[`SideNav > populates the display build information using the default pro
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -732,6 +701,7 @@ exports[`SideNav > populates the display build information using the default pro
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -772,6 +742,7 @@ exports[`SideNav > populates the display build information using the default pro
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -811,46 +782,6 @@ exports[`SideNav > populates the display build information using the default pro
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -957,6 +888,7 @@ exports[`SideNav > populates the display build information using the default pro
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -979,7 +911,7 @@ exports[`SideNav > populates the display build information using the default pro
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -1025,7 +957,7 @@ exports[`SideNav > renders Pipelines as active page 1`] = `
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870"
@@ -1033,6 +965,7 @@ exports[`SideNav > renders Pipelines as active page 1`] = `
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -1114,6 +1047,7 @@ exports[`SideNav > renders Pipelines as active page 1`] = `
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -1192,6 +1126,7 @@ exports[`SideNav > renders Pipelines as active page 1`] = `
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -1232,6 +1167,7 @@ exports[`SideNav > renders Pipelines as active page 1`] = `
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -1272,6 +1208,7 @@ exports[`SideNav > renders Pipelines as active page 1`] = `
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -1311,46 +1248,6 @@ exports[`SideNav > renders Pipelines as active page 1`] = `
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -1457,6 +1354,7 @@ exports[`SideNav > renders Pipelines as active page 1`] = `
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -1479,7 +1377,7 @@ exports[`SideNav > renders Pipelines as active page 1`] = `
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -1525,7 +1423,7 @@ exports[`SideNav > renders Pipelines as active when on PipelineDetails page 1`] 
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870"
@@ -1533,6 +1431,7 @@ exports[`SideNav > renders Pipelines as active when on PipelineDetails page 1`] 
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -1614,6 +1513,7 @@ exports[`SideNav > renders Pipelines as active when on PipelineDetails page 1`] 
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -1692,6 +1592,7 @@ exports[`SideNav > renders Pipelines as active when on PipelineDetails page 1`] 
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -1732,6 +1633,7 @@ exports[`SideNav > renders Pipelines as active when on PipelineDetails page 1`] 
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -1772,6 +1674,7 @@ exports[`SideNav > renders Pipelines as active when on PipelineDetails page 1`] 
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -1811,46 +1714,6 @@ exports[`SideNav > renders Pipelines as active when on PipelineDetails page 1`] 
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -1957,6 +1820,7 @@ exports[`SideNav > renders Pipelines as active when on PipelineDetails page 1`] 
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -1979,7 +1843,7 @@ exports[`SideNav > renders Pipelines as active when on PipelineDetails page 1`] 
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -2025,7 +1889,7 @@ exports[`SideNav > renders collapsed state 1`] = `
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870"
@@ -2033,6 +1897,7 @@ exports[`SideNav > renders collapsed state 1`] = `
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -2114,6 +1979,7 @@ exports[`SideNav > renders collapsed state 1`] = `
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -2192,6 +2058,7 @@ exports[`SideNav > renders collapsed state 1`] = `
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -2232,6 +2099,7 @@ exports[`SideNav > renders collapsed state 1`] = `
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -2272,6 +2140,7 @@ exports[`SideNav > renders collapsed state 1`] = `
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -2311,46 +2180,6 @@ exports[`SideNav > renders collapsed state 1`] = `
               class="collapsedLabel_fnu5k6u label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d collapsedButton_f52z2lz css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="collapsedLabel_fnu5k6u label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -2457,6 +2286,7 @@ exports[`SideNav > renders collapsed state 1`] = `
         class="separator_furuwhr collapsedSeparator_f1umkwuk"
       />
       <button
+        aria-label="Expand navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj collapsedChevron_f18a0vkk css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -2525,7 +2355,7 @@ exports[`SideNav > renders expanded state 1`] = `
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870"
@@ -2533,6 +2363,7 @@ exports[`SideNav > renders expanded state 1`] = `
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -2614,6 +2445,7 @@ exports[`SideNav > renders expanded state 1`] = `
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -2692,6 +2524,7 @@ exports[`SideNav > renders expanded state 1`] = `
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -2732,6 +2565,7 @@ exports[`SideNav > renders expanded state 1`] = `
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -2772,6 +2606,7 @@ exports[`SideNav > renders expanded state 1`] = `
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -2811,46 +2646,6 @@ exports[`SideNav > renders expanded state 1`] = `
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -2957,6 +2752,7 @@ exports[`SideNav > renders expanded state 1`] = `
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -2979,7 +2775,7 @@ exports[`SideNav > renders expanded state 1`] = `
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -3025,7 +2821,7 @@ exports[`SideNav > renders experiments as active page 1`] = `
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -3033,6 +2829,7 @@ exports[`SideNav > renders experiments as active page 1`] = `
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -3114,6 +2911,7 @@ exports[`SideNav > renders experiments as active page 1`] = `
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -3192,6 +2990,7 @@ exports[`SideNav > renders experiments as active page 1`] = `
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -3232,6 +3031,7 @@ exports[`SideNav > renders experiments as active page 1`] = `
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -3272,6 +3072,7 @@ exports[`SideNav > renders experiments as active page 1`] = `
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -3311,46 +3112,6 @@ exports[`SideNav > renders experiments as active page 1`] = `
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -3457,6 +3218,7 @@ exports[`SideNav > renders experiments as active page 1`] = `
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -3479,7 +3241,7 @@ exports[`SideNav > renders experiments as active page 1`] = `
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -3525,7 +3287,7 @@ exports[`SideNav > renders experiments as active page when on AllRuns page 1`] =
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -3533,6 +3295,7 @@ exports[`SideNav > renders experiments as active page when on AllRuns page 1`] =
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -3614,6 +3377,7 @@ exports[`SideNav > renders experiments as active page when on AllRuns page 1`] =
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -3692,6 +3456,7 @@ exports[`SideNav > renders experiments as active page when on AllRuns page 1`] =
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -3732,6 +3497,7 @@ exports[`SideNav > renders experiments as active page when on AllRuns page 1`] =
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -3772,6 +3538,7 @@ exports[`SideNav > renders experiments as active page when on AllRuns page 1`] =
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -3811,46 +3578,6 @@ exports[`SideNav > renders experiments as active page when on AllRuns page 1`] =
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -3957,6 +3684,7 @@ exports[`SideNav > renders experiments as active page when on AllRuns page 1`] =
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -3979,7 +3707,7 @@ exports[`SideNav > renders experiments as active page when on AllRuns page 1`] =
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -4025,7 +3753,7 @@ exports[`SideNav > renders experiments as active page when on Compare page 1`] =
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -4033,6 +3761,7 @@ exports[`SideNav > renders experiments as active page when on Compare page 1`] =
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -4114,6 +3843,7 @@ exports[`SideNav > renders experiments as active page when on Compare page 1`] =
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -4192,6 +3922,7 @@ exports[`SideNav > renders experiments as active page when on Compare page 1`] =
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -4232,6 +3963,7 @@ exports[`SideNav > renders experiments as active page when on Compare page 1`] =
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -4272,6 +4004,7 @@ exports[`SideNav > renders experiments as active page when on Compare page 1`] =
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -4311,46 +4044,6 @@ exports[`SideNav > renders experiments as active page when on Compare page 1`] =
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -4457,6 +4150,7 @@ exports[`SideNav > renders experiments as active page when on Compare page 1`] =
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -4479,7 +4173,7 @@ exports[`SideNav > renders experiments as active page when on Compare page 1`] =
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -4525,7 +4219,7 @@ exports[`SideNav > renders experiments as active page when on NewExperiment page
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -4533,6 +4227,7 @@ exports[`SideNav > renders experiments as active page when on NewExperiment page
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -4614,6 +4309,7 @@ exports[`SideNav > renders experiments as active page when on NewExperiment page
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -4692,6 +4388,7 @@ exports[`SideNav > renders experiments as active page when on NewExperiment page
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -4732,6 +4429,7 @@ exports[`SideNav > renders experiments as active page when on NewExperiment page
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -4772,6 +4470,7 @@ exports[`SideNav > renders experiments as active page when on NewExperiment page
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -4811,46 +4510,6 @@ exports[`SideNav > renders experiments as active page when on NewExperiment page
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -4957,6 +4616,7 @@ exports[`SideNav > renders experiments as active page when on NewExperiment page
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -4979,7 +4639,7 @@ exports[`SideNav > renders experiments as active page when on NewExperiment page
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -5025,7 +4685,7 @@ exports[`SideNav > renders experiments as active page when on NewRun page 1`] = 
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -5033,6 +4693,7 @@ exports[`SideNav > renders experiments as active page when on NewRun page 1`] = 
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -5114,6 +4775,7 @@ exports[`SideNav > renders experiments as active page when on NewRun page 1`] = 
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -5192,6 +4854,7 @@ exports[`SideNav > renders experiments as active page when on NewRun page 1`] = 
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -5232,6 +4895,7 @@ exports[`SideNav > renders experiments as active page when on NewRun page 1`] = 
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -5272,6 +4936,7 @@ exports[`SideNav > renders experiments as active page when on NewRun page 1`] = 
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -5311,46 +4976,6 @@ exports[`SideNav > renders experiments as active page when on NewRun page 1`] = 
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -5457,6 +5082,7 @@ exports[`SideNav > renders experiments as active page when on NewRun page 1`] = 
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -5479,7 +5105,7 @@ exports[`SideNav > renders experiments as active page when on NewRun page 1`] = 
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -5525,7 +5151,7 @@ exports[`SideNav > renders experiments as active page when on RecurringRunDetail
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -5533,6 +5159,7 @@ exports[`SideNav > renders experiments as active page when on RecurringRunDetail
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -5614,6 +5241,7 @@ exports[`SideNav > renders experiments as active page when on RecurringRunDetail
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -5692,6 +5320,7 @@ exports[`SideNav > renders experiments as active page when on RecurringRunDetail
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -5732,6 +5361,7 @@ exports[`SideNav > renders experiments as active page when on RecurringRunDetail
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -5772,6 +5402,7 @@ exports[`SideNav > renders experiments as active page when on RecurringRunDetail
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -5811,46 +5442,6 @@ exports[`SideNav > renders experiments as active page when on RecurringRunDetail
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -5957,6 +5548,7 @@ exports[`SideNav > renders experiments as active page when on RecurringRunDetail
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -5979,7 +5571,7 @@ exports[`SideNav > renders experiments as active page when on RecurringRunDetail
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -6025,7 +5617,7 @@ exports[`SideNav > renders experiments as active page when on RunDetails page 1`
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -6033,6 +5625,7 @@ exports[`SideNav > renders experiments as active page when on RunDetails page 1`
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -6114,6 +5707,7 @@ exports[`SideNav > renders experiments as active page when on RunDetails page 1`
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -6192,6 +5786,7 @@ exports[`SideNav > renders experiments as active page when on RunDetails page 1`
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -6232,6 +5827,7 @@ exports[`SideNav > renders experiments as active page when on RunDetails page 1`
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -6272,6 +5868,7 @@ exports[`SideNav > renders experiments as active page when on RunDetails page 1`
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -6311,46 +5908,6 @@ exports[`SideNav > renders experiments as active page when on RunDetails page 1`
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -6457,6 +6014,7 @@ exports[`SideNav > renders experiments as active page when on RunDetails page 1`
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -6479,7 +6037,7 @@ exports[`SideNav > renders experiments as active page when on RunDetails page 1`
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -6525,7 +6083,7 @@ exports[`SideNav > renders experiments as active when on ExperimentDetails page 
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -6533,6 +6091,7 @@ exports[`SideNav > renders experiments as active when on ExperimentDetails page 
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -6614,6 +6173,7 @@ exports[`SideNav > renders experiments as active when on ExperimentDetails page 
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -6692,6 +6252,7 @@ exports[`SideNav > renders experiments as active when on ExperimentDetails page 
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -6732,6 +6293,7 @@ exports[`SideNav > renders experiments as active when on ExperimentDetails page 
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -6772,6 +6334,7 @@ exports[`SideNav > renders experiments as active when on ExperimentDetails page 
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -6811,46 +6374,6 @@ exports[`SideNav > renders experiments as active when on ExperimentDetails page 
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -6957,6 +6480,7 @@ exports[`SideNav > renders experiments as active when on ExperimentDetails page 
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -6979,7 +6503,7 @@ exports[`SideNav > renders experiments as active when on ExperimentDetails page 
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -7025,7 +6549,7 @@ exports[`SideNav > renders jobs as active page when on JobDetails page 1`] = `
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -7033,6 +6557,7 @@ exports[`SideNav > renders jobs as active page when on JobDetails page 1`] = `
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -7114,6 +6639,7 @@ exports[`SideNav > renders jobs as active page when on JobDetails page 1`] = `
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -7192,6 +6718,7 @@ exports[`SideNav > renders jobs as active page when on JobDetails page 1`] = `
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -7232,6 +6759,7 @@ exports[`SideNav > renders jobs as active page when on JobDetails page 1`] = `
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -7272,6 +6800,7 @@ exports[`SideNav > renders jobs as active page when on JobDetails page 1`] = `
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -7311,46 +6840,6 @@ exports[`SideNav > renders jobs as active page when on JobDetails page 1`] = `
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -7457,6 +6946,7 @@ exports[`SideNav > renders jobs as active page when on JobDetails page 1`] = `
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -7479,7 +6969,7 @@ exports[`SideNav > renders jobs as active page when on JobDetails page 1`] = `
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -7525,7 +7015,7 @@ exports[`SideNav > renders recurring runs as active page 1`] = `
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -7533,6 +7023,7 @@ exports[`SideNav > renders recurring runs as active page 1`] = `
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -7614,6 +7105,7 @@ exports[`SideNav > renders recurring runs as active page 1`] = `
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -7692,6 +7184,7 @@ exports[`SideNav > renders recurring runs as active page 1`] = `
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -7732,6 +7225,7 @@ exports[`SideNav > renders recurring runs as active page 1`] = `
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -7772,6 +7266,7 @@ exports[`SideNav > renders recurring runs as active page 1`] = `
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -7811,46 +7306,6 @@ exports[`SideNav > renders recurring runs as active page 1`] = `
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -7957,6 +7412,7 @@ exports[`SideNav > renders recurring runs as active page 1`] = `
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -7979,7 +7435,7 @@ exports[`SideNav > renders recurring runs as active page 1`] = `
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"
@@ -8025,7 +7481,7 @@ exports[`SideNav > show jupyterhub link if accessible 1`] = `
     id="sideNav"
   >
     <div
-      style="flex-grow: 1;"
+      style="flex-grow: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; position: relative;"
     >
       <div
         class="indicator_f1itm870 indicatorHidden_fnu5k6u"
@@ -8033,6 +7489,7 @@ exports[`SideNav > show jupyterhub link if accessible 1`] = `
       <a
         aria-label="Pipeline List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/pipelines"
         id="pipelinesBtn"
@@ -8114,6 +7571,7 @@ exports[`SideNav > show jupyterhub link if accessible 1`] = `
       <a
         aria-label="Experiment List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/experiments"
         id="experimentsBtn"
@@ -8192,6 +7650,7 @@ exports[`SideNav > show jupyterhub link if accessible 1`] = `
       <a
         aria-label="Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/runs"
         id="runsBtn"
@@ -8232,6 +7691,7 @@ exports[`SideNav > show jupyterhub link if accessible 1`] = `
       <a
         aria-label="Recurring Runs List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/recurringruns"
         id="recurringRunsBtn"
@@ -8272,6 +7732,7 @@ exports[`SideNav > show jupyterhub link if accessible 1`] = `
       <a
         aria-label="Artifacts List"
         class="unstyled_f1ikaigl"
+        data-discover="true"
         data-mui-internal-clone-element="true"
         href="/artifacts"
         id="artifactsBtn"
@@ -8311,46 +7772,6 @@ exports[`SideNav > show jupyterhub link if accessible 1`] = `
               class="label_f15zusur"
             >
               Artifacts
-            </span>
-          </div>
-          <span
-            class="MuiTouchRipple-root css-8je8zh-MuiTouchRipple-root"
-          />
-        </button>
-      </a>
-      <div
-        class="indicator_f1itm870 indicatorHidden_fnu5k6u"
-      />
-      <a
-        aria-label="Executions List"
-        class="unstyled_f1ikaigl"
-        data-mui-internal-clone-element="true"
-        href="/executions"
-        id="executionsBtn"
-      >
-        <button
-          class="MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit button_f17w3f2d css-1y942vo-MuiButtonBase-root-MuiButton-root"
-          tabindex="0"
-          type="button"
-        >
-          <div
-            class="flex flex-row flex-shrink-0"
-          >
-            <svg
-              aria-hidden="true"
-              class="MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-i4bv87-MuiSvgIcon-root"
-              data-testid="PlayArrowIcon"
-              focusable="false"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M8 5v14l11-7z"
-              />
-            </svg>
-            <span
-              class="label_f15zusur"
-            >
-              Executions
             </span>
           </div>
           <span
@@ -8508,6 +7929,7 @@ exports[`SideNav > show jupyterhub link if accessible 1`] = `
         class="separator_furuwhr"
       />
       <button
+        aria-label="Collapse navigation"
         class="MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeLarge chevron_f1eaw8uj css-mf1cb5-MuiButtonBase-root-MuiIconButton-root"
         data-testid="chevron-toggle"
         tabindex="0"
@@ -8530,7 +7952,7 @@ exports[`SideNav > show jupyterhub link if accessible 1`] = `
       </button>
     </div>
     <div
-      class="infoVisible_f9kvncf"
+      class="infoVisible_f4qpich"
     >
       <div
         aria-label="Build date: 10/23/2018, Commit hash: 0a7b9e3"

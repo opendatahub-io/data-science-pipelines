@@ -14,38 +14,99 @@
 
 import { vi, describe, it, expect, afterAll, afterEach, beforeEach, MockInstance } from 'vitest';
 import * as minio from 'minio';
-import { PassThrough } from 'stream';
+import { PassThrough, Readable } from 'stream';
 import requests from 'supertest';
 import { UIServer } from '../app.js';
 import { loadConfigs } from '../configs.js';
 import { commonSetup } from './test-helper.js';
+import { getConfigMap } from '../k8s-helper.js';
+import * as serverInfo from '../helpers/server-info.js';
+import { TEST_ONLY as launcherConfigTestOnly } from '../helpers/launcher-config.js';
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 
 const MinioClient = minio.Client;
 vi.mock('minio');
-vi.mock('../k8s-helper.js');
+vi.mock('@aws-sdk/credential-providers');
+vi.mock('../k8s-helper.js', () => ({
+  getArgoWorkflow: vi.fn(),
+  getConfigMap: vi.fn().mockResolvedValue([undefined, { message: 'not found' }]),
+  getK8sSecret: vi.fn(),
+  getPod: vi.fn(),
+  getPodLogs: vi.fn(),
+  getServerNamespace: vi.fn(),
+}));
+
+vi.mock('../gcs-helper.js', () => ({
+  DEFAULT_GCS_UNIVERSE_DOMAIN: 'googleapis.com',
+  getGCSClient: () => Promise.resolve({}),
+  listGCSObjectNames: ({ bucket, prefix }: { bucket: string; prefix: string }) =>
+    bucket === 'ml-pipeline' && prefix === 'hello/world.txt'
+      ? Promise.resolve(['hello/world.txt'])
+      : Promise.resolve([]),
+  downloadGCSObjectStream: () => {
+    const s = new PassThrough();
+    s.end('hello world');
+    return Promise.resolve(s);
+  },
+}));
+
+const mockedValidateArtifactNamespace = vi.fn();
+vi.mock('../helpers/artifact-validator.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../helpers/artifact-validator.js')>()),
+  validateArtifactNamespace: (...args: unknown[]) => mockedValidateArtifactNamespace(...args),
+}));
 
 const mockedFetch = vi.fn();
 vi.stubGlobal('fetch', mockedFetch);
+
+function toWebStream(content: string): ReadableStream<Uint8Array> {
+  const stream = new PassThrough();
+  stream.end(content);
+  return Readable.toWeb(stream) as ReadableStream<Uint8Array>;
+}
 
 describe('/artifacts authorization', () => {
   let app: UIServer;
   const { argv } = commonSetup();
 
+  beforeEach(() => {
+    launcherConfigTestOnly.clearLauncherConfigurationCache();
+    vi.mocked(getConfigMap).mockResolvedValue([undefined, { message: 'not found' }]);
+    vi.mocked(fromNodeProviderChain).mockReturnValue(async () => ({
+      accessKeyId: 'test-access-key',
+      secretAccessKey: 'test-secret-key',
+    }));
+  });
+
   const artifactContent = 'hello world';
 
   beforeEach(() => {
+    // Isolate each test from prior call records.
+    mockedValidateArtifactNamespace.mockClear();
+    mockedFetch.mockClear();
+
+    // Default: ArtifactService validation passes (artifact belongs to claimed namespace)
+    mockedValidateArtifactNamespace.mockResolvedValue({ valid: true });
+
     const mockedMinioClient = MinioClient as any;
     mockedMinioClient.mockImplementation(function () {
       return {
         getObject: async (bucket: string, key: string) => {
           const objStream = new PassThrough();
           objStream.end(artifactContent);
-          if (bucket === 'ml-pipeline' && key === 'hello/world.txt') {
+          if (
+            (bucket === 'ml-pipeline' && key === 'hello/world.txt') ||
+            (bucket === 'ml-pipeline' && key === 'root dir/artifact.txt') ||
+            (bucket === 'ml-pipeline' && key === 'café/model.txt') ||
+            (bucket === 'ml-pipeline' && key === '100%complete/output.txt') ||
+            (bucket === 'mlpipeline' && key === 'v2/artifacts/hello/world.txt')
+          ) {
             return objStream;
           } else {
             throw new Error(`Unable to retrieve ${bucket}/${key} artifact.`);
           }
         },
+        listObjectsV2Query: vi.fn(),
       };
     });
   });
@@ -74,7 +135,7 @@ describe('/artifacts authorization', () => {
 
       const request = requests(app.app);
       await request
-        .get('/artifacts/get?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt')
+        .get('/artifacts/get?source=minio&bucket=mlpipeline&key=v2%2Fartifacts%2Fhello%2Fworld.txt')
         .expect(200, artifactContent);
     });
 
@@ -95,6 +156,22 @@ describe('/artifacts authorization', () => {
           '/artifacts/get?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=any-namespace',
         )
         .expect(200, artifactContent);
+    });
+
+    it('rejects a noncanonical launcher key before an auth-disabled preview read', async () => {
+      const configurations = loadConfigs(argv, {
+        MINIO_ACCESS_KEY: 'minio',
+        MINIO_HOST: 'minio-service',
+        MINIO_NAMESPACE: 'kubeflow',
+        MINIO_PORT: '9000',
+        MINIO_SECRET_KEY: 'minio123',
+        MINIO_SSL: 'false',
+      });
+      app = new UIServer(configurations);
+
+      await requests(app.app)
+        .get('/artifacts/get?source=minio&bucket=ml-pipeline&key=root%2F%2573ecret&keyEncoding=uri')
+        .expect(400);
     });
   });
 
@@ -150,6 +227,61 @@ describe('/artifacts authorization', () => {
       expect(response.text).toContain('Authentication required');
     });
 
+    it.each([
+      'source',
+      'bucket',
+      'key',
+      'keyEncoding',
+      'uriKey',
+      'download',
+      'artifactUriQuery',
+      'providerInfo',
+      'namespace',
+      'peek',
+    ])('rejects duplicate %s parameters before authorization', async (parameterName) => {
+      const configurations = loadConfigs(argv, {
+        MINIO_ACCESS_KEY: 'minio',
+        MINIO_HOST: 'minio-service',
+        MINIO_NAMESPACE: 'kubeflow',
+        MINIO_PORT: '9000',
+        MINIO_SECRET_KEY: 'minio123',
+        MINIO_SSL: 'false',
+        ML_PIPELINE_SERVICE_HOST: 'localhost',
+        ML_PIPELINE_SERVICE_PORT: '8888',
+        KUBEFLOW_USERID_HEADER: 'kubeflow-userid',
+        KUBEFLOW_USERID_PREFIX: '',
+      });
+
+      configurations.auth.enabled = true;
+
+      app = new UIServer(configurations);
+
+      const request = requests(app.app);
+      const query = new URLSearchParams({
+        source: 'minio',
+        bucket: 'ml-pipeline',
+        key: 'hello/world.txt',
+        keyEncoding: 'storage',
+        uriKey: 'hello/world.txt',
+        download: 'true',
+        artifactUriQuery: 'region=first',
+        providerInfo: '{}',
+        namespace: 'my-namespace',
+        peek: '10',
+      });
+      query.append(parameterName, 'duplicate');
+      const response = await request
+        .get(`/artifacts/get?${query.toString()}`)
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(400);
+      expect(response.text).toContain(`${parameterName} must be a single string value`);
+      expect(response.headers['content-type']).toMatch(/^text\/plain/);
+      expect(response.headers['content-disposition']).toBe('attachment');
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
+      expect(mockedFetch).not.toHaveBeenCalled();
+      expect(mockedValidateArtifactNamespace).not.toHaveBeenCalled();
+    });
+
     it('rejects requests with invalid namespace format', async () => {
       mockedFetch.mockResolvedValue({
         ok: true,
@@ -191,7 +323,7 @@ describe('/artifacts authorization', () => {
         ok: false,
         status: 403,
         statusText: 'Forbidden',
-        url: '/apis/v1beta1/auth',
+        url: '/apis/v2beta1/auth',
         json: () =>
           Promise.resolve({
             error: 'User is not authorized to GET VIEWERS in namespace other-namespace',
@@ -290,11 +422,11 @@ describe('/artifacts authorization', () => {
       app = new UIServer(configurations);
 
       const request = requests(app.app);
+      const canonicalXssKey = encodeURI('<script>alert(1)</script>') + 'a'.repeat(1025);
       await request
         .get(
           '/artifacts/get?source=s3&namespace=my-namespace&bucket=ml-pipeline&key=' +
-            '<script>alert(1)</script>' +
-            'a'.repeat(1025),
+            encodeURIComponent(canonicalXssKey),
         )
         .set('kubeflow-userid', 'user@example.com')
         .expect(500, 'Object key too long');
@@ -333,11 +465,15 @@ describe('/artifacts authorization', () => {
       expect(response.text).toContain('Authentication required');
     });
 
-    it('fails for secret-backed provider when RBAC denies secret access', async () => {
-      // When providerInfo.Params.fromEnv === 'false', the handler calls
-      // getK8sSecret() to retrieve credentials from a Kubernetes secret.
-      // Since ml-pipeline-ui ClusterRole no longer has secrets:get/list,
-      // getK8sSecret() is rejected by RBAC and the request fails with 500.
+    it('ignores secret-backed provider info for a customer namespace and never reads the Secret', async () => {
+      // When providerInfo.Params.fromEnv === 'false', the pipeline names a
+      // Kubernetes Secret to source object-store credentials from. The
+      // ml-pipeline-ui service account may only read Secrets from its own
+      // namespace, so for a customer namespace the provider info must be
+      // ignored entirely (never calling getK8sSecret). Credential resolution
+      // falls back to the server's own environment credentials (SeaweedFS in
+      // the kubeflow namespace) or, when enabled, the per-namespace artifact
+      // proxy. See: https://github.com/kubeflow/pipelines/pull/12860
       mockedFetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -345,17 +481,17 @@ describe('/artifacts authorization', () => {
         text: () => Promise.resolve(''),
       });
 
-      // Mock getK8sSecret to simulate RBAC denial
       const k8sHelper = await import('../k8s-helper.js');
-      (k8sHelper.getK8sSecret as any) = vi
-        .fn()
-        .mockRejectedValue(new Error('secrets "mlpipeline-minio-artifact" is forbidden'));
+      const getK8sSecretMock = k8sHelper.getK8sSecret as unknown as MockInstance;
+      getK8sSecretMock.mockClear();
 
       const configurations = loadConfigs(argv, {
+        MINIO_ACCESS_KEY: 'minio',
         MINIO_HOST: 'minio-service',
         MINIO_NAMESPACE: 'kubeflow',
         MINIO_PORT: '9000',
         MINIO_SSL: 'false',
+        MINIO_SECRET_KEY: 'minio123',
         ML_PIPELINE_SERVICE_HOST: 'localhost',
         ML_PIPELINE_SERVICE_PORT: '8888',
         KUBEFLOW_USERID_HEADER: 'kubeflow-userid',
@@ -381,11 +517,694 @@ describe('/artifacts authorization', () => {
       const request = requests(app.app);
       const response = await request
         .get(
-          `/artifacts/get?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace&providerInfo=${encodeURIComponent(JSON.stringify(providerInfo))}`,
+          `/artifacts/get?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace&providerInfo=${encodeURIComponent(
+            JSON.stringify(providerInfo),
+          )}`,
         )
         .set('kubeflow-userid', 'user@example.com')
-        .expect(500);
-      expect(response.text).toContain('Failed to initialize Minio Client');
+        .expect(200);
+      expect(response.text).toContain(artifactContent);
+      expect(getK8sSecretMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('IDOR prevention (cross-namespace artifact access via namespace swap)', () => {
+    const authEnabledConfigs = () => {
+      const configurations = loadConfigs(argv, {
+        MINIO_ACCESS_KEY: 'minio',
+        MINIO_HOST: 'minio-service',
+        MINIO_NAMESPACE: 'kubeflow',
+        MINIO_PORT: '9000',
+        MINIO_SECRET_KEY: 'minio123',
+        MINIO_SSL: 'false',
+        ML_PIPELINE_SERVICE_HOST: 'localhost',
+        ML_PIPELINE_SERVICE_PORT: '8888',
+        KUBEFLOW_USERID_HEADER: 'kubeflow-userid',
+        KUBEFLOW_USERID_PREFIX: '',
+      });
+      configurations.auth.enabled = true;
+      return configurations;
+    };
+
+    // Mock auth to pass (user has access to the claimed namespace)
+    const mockAuthPass = () => {
+      mockedFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve(''),
+      });
+    };
+
+    const authEnabledHttpConfigs = () => {
+      const configurations = authEnabledConfigs();
+      configurations.artifacts.http.baseUrl = 'allowed.host/root/';
+      configurations.artifacts.http.auth = {
+        key: 'Authorization',
+        defaultValue: 'shared-http-token',
+      };
+      configurations.artifacts.allowedDomain = '^(allowed|cdn)\\.host$';
+      return configurations;
+    };
+
+    const mockHttpRedirect = (firstUrl: string, location: string) => {
+      mockedFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({}),
+          text: () => Promise.resolve(''),
+        })
+        .mockImplementationOnce((url: string) => {
+          expect(url).toBe(firstUrl);
+          return Promise.resolve({
+            status: 302,
+            headers: new Map([['location', location]]),
+            body: toWebStream(''),
+          });
+        });
+    };
+
+    const httpArtifactRequest =
+      '/artifacts/get?source=http&bucket=storage-bucket' +
+      '&key=private-artifacts%2Fmy-namespace%2Frun%2Foutput.txt&namespace=my-namespace';
+    const firstHttpArtifactUrl =
+      'http://allowed.host/root/storage-bucket/private-artifacts/my-namespace/run/output.txt';
+
+    it('returns a controlled error when proxied HTTP serving lacks a shared base URL', async () => {
+      mockAuthPass();
+      const configurations = authEnabledConfigs();
+      configurations.artifacts.proxy.enabled = true;
+      app = new UIServer(configurations);
+
+      await requests(app.app)
+        .get(httpArtifactRequest)
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(
+          400,
+          'HTTP artifact base URL is not configured. Set HTTP_BASE_URL to an approved artifact base.',
+        );
+
+      expect(mockedFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects artifact access when ArtifactService shows namespace mismatch', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({
+        valid: false,
+        actualNamespace: 'victim-namespace',
+        reason: 'namespace-mismatch',
+      });
+
+      app = new UIServer(authEnabledConfigs());
+
+      const request = requests(app.app);
+      const response = await request
+        .get(
+          '/artifacts/get?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403);
+      expect(response.text).toContain('does not belong to the requested namespace');
+    });
+
+    it('allows artifact access when ArtifactService confirms namespace matches', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({ valid: true });
+
+      app = new UIServer(authEnabledConfigs());
+
+      const request = requests(app.app);
+      await request
+        .get(
+          '/artifacts/get?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(200, artifactContent);
+    });
+
+    it('rejects direct volume access before reading a shared UI pod mount', async () => {
+      mockAuthPass();
+      const getHostPodSpy = vi.spyOn(serverInfo, 'getHostPod');
+
+      app = new UIServer(authEnabledConfigs());
+
+      const response = await requests(app.app)
+        .get(
+          '/artifacts/get?source=volume&bucket=config-volume&key=viewer-pod-template.json&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403);
+
+      expect(response.text).toContain(
+        'Volume artifacts require a namespace-isolated artifact service',
+      );
+      expect(getHostPodSpy).not.toHaveBeenCalled();
+      expect(mockedValidateArtifactNamespace).not.toHaveBeenCalled();
+    });
+
+    it('rejects incomplete artifact coordinates before ownership validation', async () => {
+      mockAuthPass();
+
+      app = new UIServer(authEnabledConfigs());
+
+      const response = await requests(app.app)
+        .get('/artifacts/get?source=minio&namespace=my-namespace')
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403);
+
+      expect(response.text).toContain('Artifact source, bucket, and key are required');
+      expect(mockedValidateArtifactNamespace).not.toHaveBeenCalled();
+    });
+
+    it('does not trust query coordinates on an unrecognized artifact route', async () => {
+      mockAuthPass();
+
+      app = new UIServer(authEnabledConfigs());
+
+      const response = await requests(app.app)
+        .get(
+          '/artifacts/unrecognized?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403);
+
+      expect(response.text).toContain('Artifact source, bucket, and key are required');
+      expect(mockedValidateArtifactNamespace).not.toHaveBeenCalled();
+    });
+
+    it('rejects unsupported storage sources before ownership validation', async () => {
+      mockAuthPass();
+
+      app = new UIServer(authEnabledConfigs());
+
+      const response = await requests(app.app)
+        .get(
+          '/artifacts/get?source=unsupported&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403);
+
+      expect(response.text).toContain('must use a supported storage source');
+      expect(mockedValidateArtifactNamespace).not.toHaveBeenCalled();
+    });
+
+    it('rejects when any artifact with same URI belongs to different namespace', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({
+        valid: false,
+        actualNamespace: 'other-namespace',
+        reason: 'namespace-mismatch',
+      });
+
+      app = new UIServer(authEnabledConfigs());
+
+      const request = requests(app.app);
+      const response = await request
+        .get(
+          '/artifacts/get?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403);
+      expect(response.text).toContain('does not belong to the requested namespace');
+    });
+
+    it('rejects when an artifact has no ownership evidence', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({
+        valid: false,
+        reason: 'artifact-not-found',
+      });
+
+      app = new UIServer(authEnabledConfigs());
+
+      const request = requests(app.app);
+      const response = await request
+        .get(
+          '/artifacts/get?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403);
+      expect(response.text).toContain('does not belong to the requested namespace');
+    });
+
+    it('fails closed when ArtifactService is unreachable', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({
+        valid: false,
+        reason: 'artifact-api-unavailable',
+      });
+
+      app = new UIServer(authEnabledConfigs());
+
+      const request = requests(app.app);
+      const response = await request
+        .get(
+          '/artifacts/get?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403);
+      expect(response.text).toContain('does not belong to the requested namespace');
+    });
+
+    it('rejects http source artifact when namespace ownership mismatches', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({
+        valid: false,
+        actualNamespace: 'victim-namespace',
+        reason: 'namespace-mismatch',
+      });
+
+      app = new UIServer(authEnabledConfigs());
+
+      const request = requests(app.app);
+      const response = await request
+        .get(
+          '/artifacts/get?source=http&bucket=internal.example.com&key=victim%2Fsecret.txt&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403);
+      expect(response.text).toContain('does not belong to the requested namespace');
+
+      expect(mockedValidateArtifactNamespace).toHaveBeenCalledWith(
+        expect.any(String),
+        'http://internal.example.com/victim/secret.txt',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+    });
+
+    it('rejects a same-origin redirect to another namespace before fetching it', async () => {
+      const victimUrl =
+        'http://allowed.host/root/storage-bucket/private-artifacts/victim-namespace/run/secret.txt';
+      mockHttpRedirect(firstHttpArtifactUrl, victimUrl);
+      app = new UIServer(authEnabledHttpConfigs());
+
+      await requests(app.app)
+        .get(httpArtifactRequest)
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403, 'Redirected artifact is outside the requested namespace');
+
+      expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(mockedFetch).not.toHaveBeenCalledWith(victimUrl, expect.anything());
+    });
+
+    it('follows a canonical same-origin redirect within the namespace', async () => {
+      const targetUrl =
+        'http://allowed.host/root/storage-bucket/private-artifacts/my-namespace/run/other.txt?signature=abc';
+      mockHttpRedirect(firstHttpArtifactUrl, targetUrl);
+      mockedFetch.mockResolvedValueOnce({
+        status: 200,
+        headers: new Map(),
+        body: toWebStream('same namespace artifact'),
+      });
+      app = new UIServer(authEnabledHttpConfigs());
+
+      await requests(app.app)
+        .get(httpArtifactRequest)
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(200, 'same namespace artifact');
+
+      expect(mockedFetch).toHaveBeenNthCalledWith(3, targetUrl, {
+        headers: { Authorization: 'shared-http-token' },
+        redirect: 'manual',
+      });
+    });
+
+    it.each([
+      [
+        'normalized parent segment',
+        'http://allowed.host/root/storage-bucket/private-artifacts/my-namespace/../victim-namespace/secret.txt',
+      ],
+      [
+        'encoded separator alias',
+        'http://allowed.host/root/storage-bucket/private-artifacts/my-namespace/..%2Fvictim-namespace/secret.txt',
+      ],
+      [
+        'encoded backslash separator',
+        'http://allowed.host/root/storage-bucket/private-artifacts/my-namespace/run%5C..%5Cvictim-namespace/secret.txt',
+      ],
+    ])('rejects a same-origin redirect with a %s', async (_description, targetUrl) => {
+      mockHttpRedirect(firstHttpArtifactUrl, targetUrl);
+      app = new UIServer(authEnabledHttpConfigs());
+
+      await requests(app.app)
+        .get(httpArtifactRequest)
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403, 'Redirected artifact is outside the requested namespace');
+
+      expect(mockedFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('rechecks the namespace after each same-origin redirect hop', async () => {
+      const intermediateUrl =
+        'http://allowed.host/root/storage-bucket/private-artifacts/my-namespace/run/intermediate.txt';
+      const victimUrl =
+        'http://allowed.host/root/storage-bucket/private-artifacts/victim-namespace/run/secret.txt';
+      mockHttpRedirect(firstHttpArtifactUrl, intermediateUrl);
+      mockedFetch.mockResolvedValueOnce({
+        status: 302,
+        headers: new Map([['location', victimUrl]]),
+        body: toWebStream(''),
+      });
+      app = new UIServer(authEnabledHttpConfigs());
+
+      await requests(app.app)
+        .get(httpArtifactRequest)
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403, 'Redirected artifact is outside the requested namespace');
+
+      expect(mockedFetch).toHaveBeenCalledTimes(3);
+      expect(mockedFetch).not.toHaveBeenCalledWith(victimUrl, expect.anything());
+    });
+
+    it('rejects cross-origin signed redirects in authenticated mode', async () => {
+      const signedUrl = 'https://cdn.host/signed/opaque-object?signature=abc';
+      mockHttpRedirect(firstHttpArtifactUrl, signedUrl);
+      app = new UIServer(authEnabledHttpConfigs());
+
+      await requests(app.app)
+        .get(httpArtifactRequest)
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403, 'Cross-origin HTTP artifact redirects are not allowed');
+
+      expect(mockedFetch).toHaveBeenCalledTimes(2);
+      expect(mockedFetch).not.toHaveBeenCalledWith(signedUrl, expect.anything());
+    });
+
+    it('passes the correct URI to ArtifactService validation for an s3 source', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({ valid: true });
+
+      app = new UIServer(authEnabledConfigs());
+
+      const request = requests(app.app);
+      await request
+        .get(
+          '/artifacts/get?source=s3&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(200);
+
+      expect(mockedValidateArtifactNamespace).toHaveBeenCalledWith(
+        expect.any(String),
+        's3://ml-pipeline/hello/world.txt',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+    });
+
+    it('validates the complete stored URI before rejecting customer endpoint authority', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({ valid: true });
+
+      app = new UIServer(authEnabledConfigs());
+
+      await requests(app.app)
+        .get(
+          '/artifacts/get?source=s3&bucket=ml-pipeline&key=hello%2Fworld.txt&artifactUriQuery=endpoint%3Dhttps%253A%252F%252Fceph.example%26region%3Dceph&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(400)
+        .expect(/namespace-isolated artifact proxy/);
+
+      expect(mockedValidateArtifactNamespace).toHaveBeenCalledWith(
+        expect.any(String),
+        's3://ml-pipeline/hello/world.txt?endpoint=https%3A%2F%2Fceph.example&region=ceph',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+    });
+
+    it('passes the correct URI to ArtifactService validation for a gcs source', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({ valid: true });
+
+      app = new UIServer(authEnabledConfigs());
+
+      const request = requests(app.app);
+      await request
+        .get(
+          '/artifacts/get?source=gcs&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(200, `${artifactContent}\n`);
+
+      expect(mockedValidateArtifactNamespace).toHaveBeenCalledWith(
+        expect.any(String),
+        'gs://ml-pipeline/hello/world.txt',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+    });
+
+    it('validates the path-based download route, not query parameters', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({ valid: true });
+
+      app = new UIServer(authEnabledConfigs());
+
+      const request = requests(app.app);
+      await request
+        .get('/artifacts/minio/ml-pipeline/hello/world.txt?namespace=my-namespace')
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(200, artifactContent);
+
+      expect(mockedValidateArtifactNamespace).toHaveBeenCalledWith(
+        expect.any(String),
+        'minio://ml-pipeline/hello/world.txt',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+    });
+
+    it('validates an encoded download against the canonical escaped artifact URI', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({ valid: true });
+
+      app = new UIServer(authEnabledConfigs());
+
+      await requests(app.app)
+        .get('/artifacts/minio/ml-pipeline/root%20dir/artifact.txt?namespace=my-namespace')
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(200, artifactContent);
+
+      expect(mockedValidateArtifactNamespace).toHaveBeenCalledWith(
+        expect.any(String),
+        'minio://ml-pipeline/root%20dir/artifact.txt',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+    });
+
+    it.each([
+      ['space', 'root%20dir/artifact.txt'],
+      ['Unicode', 'caf%C3%A9/model.txt'],
+      ['literal percent', '100%25complete/output.txt'],
+    ])(
+      'preserves canonical %s escapes through preview query transport',
+      async (_description, uriKey) => {
+        mockAuthPass();
+        app = new UIServer(authEnabledConfigs());
+
+        await requests(app.app)
+          .get(
+            '/artifacts/get?source=minio&bucket=ml-pipeline&namespace=my-namespace&key=' +
+              encodeURIComponent(uriKey) +
+              '&keyEncoding=uri',
+          )
+          .set('kubeflow-userid', 'user@example.com')
+          .expect(200, artifactContent);
+
+        expect(mockedValidateArtifactNamespace).toHaveBeenCalledWith(
+          expect.any(String),
+          `minio://ml-pipeline/${uriKey}`,
+          'my-namespace',
+          { 'kubeflow-userid': 'user@example.com' },
+        );
+      },
+    );
+
+    it('authorizes the exact persisted URI while reading its decoded storage key', async () => {
+      mockAuthPass();
+      app = new UIServer(authEnabledConfigs());
+      const exactUriKey = 'caf%c3%a9/model.txt';
+
+      await requests(app.app)
+        .get(
+          '/artifacts/get?source=minio&bucket=ml-pipeline&namespace=my-namespace' +
+            `&key=${encodeURIComponent('café/model.txt')}` +
+            `&keyEncoding=storage&uriKey=${encodeURIComponent(exactUriKey)}`,
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(200, artifactContent);
+
+      await requests(app.app)
+        .get(
+          '/artifacts/minio/ml-pipeline/caf%C3%A9/model.txt?namespace=my-namespace' +
+            `&uriKey=${encodeURIComponent(exactUriKey)}`,
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(200, artifactContent);
+
+      expect(mockedValidateArtifactNamespace).toHaveBeenNthCalledWith(
+        1,
+        expect.any(String),
+        'minio://ml-pipeline/caf%c3%a9/model.txt',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+      expect(mockedValidateArtifactNamespace).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        'minio://ml-pipeline/caf%c3%a9/model.txt',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+    });
+
+    it('does not canonicalize a raw persisted artifact URI during preview authorization', async () => {
+      mockAuthPass();
+      app = new UIServer(authEnabledConfigs());
+      const rawKey = 'root dir/artifact.txt';
+
+      await requests(app.app)
+        .get(
+          '/artifacts/get?source=minio&bucket=ml-pipeline&namespace=my-namespace' +
+            `&key=${encodeURIComponent(rawKey)}` +
+            `&keyEncoding=storage&uriKey=${encodeURIComponent(rawKey)}`,
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(200, artifactContent);
+
+      expect(mockedValidateArtifactNamespace).toHaveBeenCalledWith(
+        expect.any(String),
+        'minio://ml-pipeline/root dir/artifact.txt',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+    });
+
+    it('authorizes a trailing-slash identity while reading the trimmed storage key', async () => {
+      mockAuthPass();
+      app = new UIServer(authEnabledConfigs());
+
+      await requests(app.app)
+        .get(
+          '/artifacts/get?source=minio&bucket=ml-pipeline&namespace=my-namespace' +
+            `&key=${encodeURIComponent('hello/world.txt')}` +
+            '&keyEncoding=storage' +
+            `&uriKey=${encodeURIComponent('hello/world.txt/')}`,
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(200, artifactContent);
+
+      expect(mockedValidateArtifactNamespace).toHaveBeenCalledWith(
+        expect.any(String),
+        'minio://ml-pipeline/hello/world.txt/',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+    });
+
+    it.each([
+      ['encoded literal alias', 'root/%73ecret'],
+      ['encoded query delimiter', 'root/query%3Fkey'],
+      ['encoded fragment delimiter', 'root/fragment%23key'],
+    ])('rejects %s before artifact ownership validation', async (_description, uriKey) => {
+      mockAuthPass();
+      app = new UIServer(authEnabledConfigs());
+
+      await requests(app.app)
+        .get(
+          '/artifacts/get?source=s3&bucket=shared&namespace=attacker-namespace&key=' +
+            encodeURIComponent(uriKey) +
+            '&keyEncoding=uri',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(400);
+
+      expect(mockedValidateArtifactNamespace).not.toHaveBeenCalled();
+    });
+
+    it('rejects escaped traversal identity before namespace-prefix fallback', async () => {
+      mockAuthPass();
+      app = new UIServer(authEnabledConfigs());
+
+      await requests(app.app)
+        .get(
+          '/artifacts/get?source=minio&bucket=ml-pipeline&namespace=my-namespace' +
+            `&key=${encodeURIComponent('private-artifacts/my-namespace/../../victim/secret')}` +
+            '&keyEncoding=storage' +
+            `&uriKey=${encodeURIComponent(
+              'private-artifacts/my-namespace/%2E%2E/%2E%2E/victim/secret',
+            )}`,
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(400);
+
+      expect(mockedValidateArtifactNamespace).not.toHaveBeenCalled();
+    });
+
+    it('rejects path-based route even if query params point to a valid artifact', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({
+        valid: false,
+        actualNamespace: 'victim-namespace',
+        reason: 'namespace-mismatch',
+      });
+
+      app = new UIServer(authEnabledConfigs());
+
+      const request = requests(app.app);
+      const response = await request
+        .get(
+          '/artifacts/minio/ml-pipeline/hello/world.txt?source=minio&bucket=safe-bucket&key=safe-key&namespace=my-namespace',
+        )
+        .set('kubeflow-userid', 'user@example.com')
+        .expect(403);
+      expect(response.text).toContain('does not belong to the requested namespace');
+
+      expect(mockedValidateArtifactNamespace).toHaveBeenCalledWith(
+        expect.any(String),
+        'minio://ml-pipeline/hello/world.txt',
+        'my-namespace',
+        { 'kubeflow-userid': 'user@example.com' },
+      );
+    });
+
+    it('logs IDOR attempt with attacker and victim namespace details', async () => {
+      mockAuthPass();
+      mockedValidateArtifactNamespace.mockResolvedValue({
+        valid: false,
+        actualNamespace: 'secret-namespace',
+        reason: 'namespace-mismatch',
+      });
+
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        app = new UIServer(authEnabledConfigs());
+
+        const request = requests(app.app);
+        await request
+          .get(
+            '/artifacts/get?source=minio&bucket=ml-pipeline&key=hello%2Fworld.txt&namespace=attacker-namespace',
+          )
+          .set('kubeflow-userid', 'attacker@example.com')
+          .expect(403);
+
+        const idorLog = consoleSpy.mock.calls.find(
+          (call) => call[0] && call[0].includes('IDOR blocked'),
+        );
+        expect(idorLog).toBeDefined();
+        if (idorLog) {
+          expect(idorLog[0]).toContain('attacker@example.com');
+          expect(idorLog[0]).toContain('attacker-namespace');
+          expect(idorLog[0]).toContain('secret-namespace');
+        }
+      } finally {
+        consoleSpy.mockRestore();
+      }
     });
   });
 
@@ -406,7 +1225,7 @@ describe('/artifacts authorization', () => {
         ok: false,
         status: 403,
         statusText: 'Forbidden',
-        url: '/apis/v1beta1/auth',
+        url: '/apis/v2beta1/auth',
         json: () =>
           Promise.resolve({
             error: 'User is not authorized to GET VIEWERS in namespace unauthorized-ns',

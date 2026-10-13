@@ -18,8 +18,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+<<<<<<< HEAD
 	"fmt"
 	"net/http"
+=======
+>>>>>>> upstream/master
 	"os"
 	"testing"
 	"time"
@@ -44,7 +47,15 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
+const (
+	// defaultCleanupTimeout is the timeout for waiting for runs and recurring runs to be deleted in cleanup functions
+	defaultCleanupTimeout = 60 * time.Second
+	// pipelineVersionCleanupTimeout is the timeout for waiting for pipeline versions to be deleted
+	pipelineVersionCleanupTimeout = 5 * time.Second
+)
+
 func WaitForReady(initializeTimeout time.Duration) error {
+<<<<<<< HEAD
 	var httpClient *http.Client
 	scheme := "http"
 	if *config.TLSEnabled {
@@ -63,22 +74,28 @@ func WaitForReady(initializeTimeout time.Duration) error {
 	healthzURL := fmt.Sprintf("%s://localhost:8888/apis/v2beta1/healthz", scheme)
 	operation := func() error {
 		response, err := httpClient.Get(healthzURL)
+=======
+	var tlsConfig *tls.Config
+	var err error
+	if *config.TLSEnabled {
+		tlsConfig, err = GetTLSConfig(*config.CaCertPath)
+>>>>>>> upstream/master
 		if err != nil {
-			return err
+			return errors.Wrap(err, "Failed to configure API readiness TLS")
 		}
-
-		// If we get a 503 service unavailable, it's a non-retriable error.
-		if response.StatusCode == 503 {
-			return backoff.Permanent(errors.Wrapf(
-				err, "Waiting for ml pipeline API server failed with non retriable error."))
-		}
-
-		return nil
+	}
+	client, err := api_server.NewHealthzClient(GetClientConfig(*config.Namespace), *config.DebugMode, tlsConfig)
+	if err != nil {
+		return errors.Wrap(err, "Failed to create API readiness client")
+	}
+	operation := func() error {
+		_, err := client.GetHealthz()
+		return err
 	}
 
 	b := backoff.NewExponentialBackOff()
 	b.MaxElapsedTime = initializeTimeout
-	err := backoff.Retry(operation, b)
+	err = backoff.Retry(operation, b)
 	return errors.Wrapf(err, "Waiting for ml pipeline API server failed after all attempts.")
 }
 
@@ -147,8 +164,40 @@ func ListAllRuns(client *api_server.RunClient, namespace string) ([]*run_model.V
 func DeleteAllRuns(client *api_server.RunClient, namespace string, t *testing.T) {
 	runs, _, _, err := ListAllRuns(client, namespace)
 	assert.Nil(t, err)
-	for _, r := range runs {
-		assert.Nil(t, client.Delete(&run_params.RunServiceDeleteRunParams{RunID: r.RunID}))
+	for _, run := range runs {
+		err := client.Delete(&run_params.RunServiceDeleteRunParams{RunID: run.RunID})
+		// In some cases, the run may have been deleted by other tests.
+		// We can ignore the not found error.
+		if err != nil {
+			assert.Contains(t, err.Error(), "not found")
+		}
+	}
+	// Wait for runs to be deleted.
+	// Increased timeout for local dev environment where cleanup can be slow
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(defaultCleanupTimeout))
+	defer cancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			remainingRuns, _, _, _ := ListAllRuns(client, namespace)
+			var remainingRunNames []string
+			for _, r := range remainingRuns {
+				remainingRunNames = append(remainingRunNames, r.DisplayName)
+			}
+			require.FailNowf(t, "Runs were not deleted after "+defaultCleanupTimeout.String(), "Remaining runs: %v", remainingRunNames)
+		default:
+			remainingRuns, _, _, err := ListAllRuns(client, namespace)
+			if err != nil {
+				glog.Errorf("Error listing runs, will retry: %v", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			if len(remainingRuns) == 0 {
+				return
+			}
+			time.Sleep(1 * time.Second)
+		}
 	}
 }
 
@@ -166,8 +215,40 @@ func ListAllRecurringRuns(client *api_server.RecurringRunClient, namespace strin
 func DeleteAllRecurringRuns(client *api_server.RecurringRunClient, namespace string, t *testing.T) {
 	recurringRuns, _, _, err := ListAllRecurringRuns(client, namespace)
 	assert.Nil(t, err)
-	for _, r := range recurringRuns {
-		assert.Nil(t, client.Delete(&recurring_run_params.RecurringRunServiceDeleteRecurringRunParams{RecurringRunID: r.RecurringRunID}))
+	for _, recurringRun := range recurringRuns {
+		err := client.Delete(&recurring_run_params.RecurringRunServiceDeleteRecurringRunParams{RecurringRunID: recurringRun.RecurringRunID})
+		// In some cases, the recurring run may have been deleted by other tests.
+		// We can ignore the not found error.
+		if err != nil {
+			assert.Contains(t, err.Error(), "not found")
+		}
+	}
+	// Wait for recurring runs to be deleted.
+	// Increased timeout for local dev environment where cleanup can be slow
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(defaultCleanupTimeout))
+	defer cancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			remainingRuns, _, _, _ := ListAllRecurringRuns(client, namespace)
+			var remainingRunNames []string
+			for _, r := range remainingRuns {
+				remainingRunNames = append(remainingRunNames, r.DisplayName)
+			}
+			require.FailNowf(t, "Recurring runs were not deleted after "+defaultCleanupTimeout.String(), "Remaining recurring runs: %v", remainingRunNames)
+		default:
+			remainingRuns, _, _, err := ListAllRecurringRuns(client, namespace)
+			if err != nil {
+				glog.Errorf("Error listing recurring runs, will retry: %v", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			if len(remainingRuns) == 0 {
+				return
+			}
+			time.Sleep(1 * time.Second)
+		}
 	}
 }
 
@@ -194,21 +275,21 @@ func DeleteAllPipelineVersions(client *api_server.PipelineClient, t *testing.T, 
 
 	// Wait for pipeline versions to be deleted. In Kubernetes mode, there can be a slight delay before the cache is
 	// updated.
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(pipelineVersionCleanupTimeout))
 	defer cancel()
 
 	for {
 		select {
 		case <-ctx.Done():
 			// This should be a ContextDeadlineExceeded error and causes the test to fail.
-			require.Nil(t, ctx.Err(), "Pipeline versions have not been deleted after 5 seconds")
+			require.Nil(t, ctx.Err(), "Pipeline versions have not been deleted after "+pipelineVersionCleanupTimeout.String())
 
 			return
 		default:
 			pipelineVersions, _, _, err = ListPipelineVersions(client, pipelineId)
 			if err != nil {
 				glog.Errorf("Error listing pipeline versions, will retry: %v", err)
-
+				time.Sleep(500 * time.Millisecond)
 				continue
 			}
 

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Agent Guide: Kubeflow Pipelines (KFP) Monorepo
 
 ## Purpose
@@ -696,3 +697,24 @@ docformatter --check --recursive sdk/python/ --exclude "compiler_test.py"
   regenerate `package-lock.json`, and commit the result.
 - CI image-build jobs fail while pulling `moby/buildkit`, `kindest/node`, `python:3.11`, or `alpine:3.23`: treat these as registry flakes first; current CI retries those pulls/builds automatically, and Kind node bootstrap falls back to `gcr.io/k8s-staging-kind/node`.
 - Runtime component imports SDK-only modules: `_KFP_RUNTIME=true` disables many SDK imports; avoid importing SDK-only modules in task code.
+=======
+# Kubeflow Pipelines
+
+Kubeflow Pipelines is a monorepo for compiling, running, and managing machine-learning pipelines on Kubernetes.
+
+Read the guide relevant to the files or task you are changing:
+
+- [Conventions](docs/agents/conventions.md)
+- [Architecture and runtime](docs/agents/architecture.md)
+- [Development and deployment](docs/agents/development.md)
+- [Testing and formatting](docs/agents/testing.md)
+- [Generated code and APIs](docs/agents/generation.md)
+- [Frontend](docs/agents/frontend.md)
+- [CI and workflows](docs/agents/ci.md)
+- [Dependency updates](docs/agents/dependabot.md)
+- [Go version policy](docs/agents/go-version-policy.md) when changing compiler,
+  module, setup-action, or builder-image pins
+- [Domain documentation](docs/agents/domain.md) when exploring domain behavior or architecture decisions
+- [GitHub issue tracking](docs/agents/issue-tracker.md) for issue or pull-request work
+- [Triage labels](docs/agents/triage-labels.md) for issue triage
+>>>>>>> upstream/master

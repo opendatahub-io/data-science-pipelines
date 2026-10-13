@@ -430,7 +430,11 @@ func resolveBearerSecretCredentials(
 	if err != nil {
 		return commonmlflow.MLflowCredentials{}, err
 	}
+<<<<<<< HEAD
 	token, err := readRequiredSecretKey(secret, namespace, ref.TokenKey)
+=======
+	token, err := readRequiredSecretKey(secret, namespace, ref.TokenKey, "bearer token")
+>>>>>>> upstream/master
 	if err != nil {
 		return commonmlflow.MLflowCredentials{}, err
 	}
@@ -465,11 +469,19 @@ func resolveBasicAuthSecretCredentials(
 	if err != nil {
 		return commonmlflow.MLflowCredentials{}, err
 	}
+<<<<<<< HEAD
 	username, err := readRequiredSecretKey(secret, namespace, ref.UsernameKey)
 	if err != nil {
 		return commonmlflow.MLflowCredentials{}, err
 	}
 	password, err := readRequiredSecretKey(secret, namespace, ref.PasswordKey)
+=======
+	username, err := readRequiredSecretKey(secret, namespace, ref.UsernameKey, "username")
+	if err != nil {
+		return commonmlflow.MLflowCredentials{}, err
+	}
+	password, err := readRequiredSecretKey(secret, namespace, ref.PasswordKey, "password")
+>>>>>>> upstream/master
 	if err != nil {
 		return commonmlflow.MLflowCredentials{}, err
 	}
@@ -502,6 +514,7 @@ func getMLflowCredentialSecret(ctx context.Context, clientSet kubernetes.Interfa
 }
 
 // readRequiredSecretKey returns the trimmed value for key from secret, returning
+<<<<<<< HEAD
 // an error if the key is missing or resolves to an empty value.
 func readRequiredSecretKey(secret *corev1.Secret, namespace, key string) (string, error) {
 	valueBytes, ok := secret.Data[key]
@@ -511,15 +524,33 @@ func readRequiredSecretKey(secret *corev1.Secret, namespace, key string) (string
 			commonmlflow.CredentialSecretName,
 			namespace,
 			key,
+=======
+// an error that identifies the credential role if the key is missing or empty.
+func readRequiredSecretKey(secret *corev1.Secret, namespace, key, credentialRole string) (string, error) {
+	valueBytes, ok := secret.Data[key]
+	if !ok {
+		return "", util.NewInvalidInputError(
+			"secret %q in namespace %q does not contain a value for the required MLflow %s credential",
+			commonmlflow.CredentialSecretName,
+			namespace,
+			credentialRole,
+>>>>>>> upstream/master
 		)
 	}
 	value := strings.TrimSpace(string(valueBytes))
 	if value == "" {
 		return "", util.NewInvalidInputError(
+<<<<<<< HEAD
 			"secret %q in namespace %q has an empty value for key %q",
 			commonmlflow.CredentialSecretName,
 			namespace,
 			key,
+=======
+			"secret %q in namespace %q has an empty value for the required MLflow %s credential",
+			commonmlflow.CredentialSecretName,
+			namespace,
+			credentialRole,
+>>>>>>> upstream/master
 		)
 	}
 	return value, nil

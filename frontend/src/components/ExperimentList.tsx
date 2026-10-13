@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
+import { NavigationProps } from 'src/lib/Navigation';
 import CustomTable, { Column, CustomRendererProps, Row, ExpandState } from './CustomTable';
 import * as React from 'react';
-import { Link, RouteComponentProps } from 'react-router-dom';
+import { Link } from 'react-router';
 import {
   V2beta1ListExperimentsResponse,
   V2beta1Experiment,
@@ -29,10 +30,10 @@ import { Apis, ExperimentSortKeys, ListRequest } from 'src/lib/Apis';
 import { V2beta1RunStorageState } from 'src/apisv2beta1/run';
 import { V2beta1Filter, V2beta1PredicateOperation } from 'src/apisv2beta1/filter';
 import RunList from 'src/pages/RunList';
-import immerProduce from 'immer';
+import { produce as immerProduce } from 'immer';
 import { Tooltip } from '@mui/material';
 
-export interface ExperimentListProps extends RouteComponentProps {
+export interface ExperimentListProps extends NavigationProps {
   namespace?: string;
   storageState?: V2beta1ExperimentStorageState;
   onError: (message: string, error: Error) => void;
@@ -122,7 +123,7 @@ export class ExperimentList extends React.PureComponent<ExperimentListProps, Exp
   };
 
   protected async _loadExperiments(request: ListRequest): Promise<string> {
-    let nextPageToken = '';
+    let nextPageToken: string;
     let displayExperiments: DisplayExperiment[];
 
     if (this.props.storageState) {

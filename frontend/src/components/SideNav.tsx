@@ -19,11 +19,9 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import JupyterhubIcon from '@mui/icons-material/Code';
 import DescriptionIcon from '@mui/icons-material/Description';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import ExecutionsIcon from '@mui/icons-material/PlayArrow';
 import DirectionsRun from '@mui/icons-material/DirectionsRun';
 import * as React from 'react';
-import { RouterProps } from 'react-router';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { classes, stylesheet } from 'typestyle';
 import { ExternalLinks, RoutePage, RoutePrefix } from '../components/Router';
 import { commonCss, fontsize } from '../Css';
@@ -145,6 +143,7 @@ export const css = stylesheet({
     height: 0,
   },
   infoVisible: {
+    flexShrink: 0,
     opacity: 'initial',
     transition: 'opacity 0.2s',
     transitionDelay: '0.3s',
@@ -187,7 +186,7 @@ interface DisplayBuildInfo {
   tagName: string;
 }
 
-interface SideNavProps extends RouterProps {
+interface SideNavProps {
   page: string;
 }
 
@@ -280,7 +279,15 @@ export class SideNav extends React.Component<SideNavInternalProps, SideNavState>
           collapsed && css.collapsedRoot,
         )}
       >
-        <div style={{ flexGrow: 1 }}>
+        <div
+          style={{
+            flexGrow: 1,
+            minHeight: 0,
+            overflowX: 'hidden',
+            overflowY: 'auto',
+            position: 'relative',
+          }}
+        >
           {KFP_FLAGS.DEPLOYMENT === Deployments.MARKETPLACE && (
             <>
               <div
@@ -469,34 +476,6 @@ export class SideNav extends React.Component<SideNavInternalProps, SideNavState>
               </SideNavButton>
             </Link>
           </Tooltip>
-          <div
-            className={classes(
-              css.indicator,
-              !this._highlightExecutionsButton(page) && css.indicatorHidden,
-            )}
-          />
-          <Tooltip
-            title={'Executions List'}
-            enterDelay={300}
-            placement={'right-start'}
-            disableFocusListener={!collapsed}
-            disableHoverListener={!collapsed}
-            disableTouchListener={!collapsed}
-          >
-            <Link id='executionsBtn' to={RoutePage.EXECUTIONS} className={commonCss.unstyled}>
-              <SideNavButton
-                collapsed={collapsed}
-                className={this._highlightExecutionsButton(page) ? css.active : undefined}
-              >
-                <div className={tailwindcss.sideNavItem}>
-                  <ExecutionsIcon />
-                  <span className={classes(collapsed && css.collapsedLabel, css.label)}>
-                    Executions
-                  </span>
-                </div>
-              </SideNavButton>
-            </Link>
-          </Tooltip>
           {this.state.jupyterHubAvailable && (
             <Tooltip
               title={'Open Jupyter Notebook'}
@@ -544,6 +523,7 @@ export class SideNav extends React.Component<SideNavInternalProps, SideNavState>
           <IconButton
             className={classes(css.chevron, collapsed && css.collapsedChevron)}
             onClick={this._toggleNavClicked.bind(this)}
+            aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
             data-testid='chevron-toggle'
             size='large'
           >
@@ -644,10 +624,6 @@ export class SideNav extends React.Component<SideNavInternalProps, SideNavState>
 
   private _highlightArtifactsButton(page: string): boolean {
     return page.startsWith(RoutePrefix.ARTIFACT);
-  }
-
-  private _highlightExecutionsButton(page: string): boolean {
-    return page.startsWith(RoutePrefix.EXECUTION);
   }
 
   private _toggleNavClicked(): void {

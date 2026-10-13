@@ -1,8 +1,11 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
+  annotations:
+    workflows.argoproj.io/pod-name-format: v1
   generateName: conditional-execution-pipeline-
 spec:
+<<<<<<< HEAD
   arguments:
     parameters:
     - name: kubernetes-comp-print-msg
@@ -91,6 +94,9 @@ spec:
       value: '{"dag":{"tasks":{"condition-1":{"componentRef":{"name":"comp-condition-1"},"dependentTasks":["flip-coin"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"flip-coin"}}}},"taskInfo":{"name":"condition-1"},"triggerPolicy":{"condition":"inputs.parameter_values[''pipelinechannel--flip-coin-Output'']
         == ''heads''"}},"condition-4":{"componentRef":{"name":"comp-condition-4"},"dependentTasks":["flip-coin"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"flip-coin"}}}},"taskInfo":{"name":"condition-4"},"triggerPolicy":{"condition":"inputs.parameter_values[''pipelinechannel--flip-coin-Output'']
         == ''tails''"}},"flip-coin":{"cachingOptions":{},"componentRef":{"name":"comp-flip-coin"},"taskInfo":{"name":"flip-coin"}}}}}'
+=======
+  arguments: {}
+>>>>>>> upstream/master
   entrypoint: entrypoint
   podMetadata:
     annotations:
@@ -115,16 +121,10 @@ spec:
       - '{{workflow.name}}'
       - --run_display_name
       - ""
-      - --dag_execution_id
-      - '{{inputs.parameters.parent-dag-id}}'
-      - --component
-      - '{{inputs.parameters.component}}'
-      - --task
-      - '{{inputs.parameters.task}}'
+      - --parent_task_id
+      - '{{inputs.parameters.parent-dag-task-id}}'
       - --task_name
       - '{{inputs.parameters.task-name}}'
-      - --container
-      - '{{inputs.parameters.container}}'
       - --iteration_index
       - '{{inputs.parameters.iteration-index}}'
       - --cached_decision_path
@@ -135,6 +135,8 @@ spec:
       - '{{outputs.parameters.condition.path}}'
       - --kubernetes_config
       - '{{inputs.parameters.kubernetes-config}}'
+      - --namespace
+      - $(NAMESPACE)
       - --http_proxy
       - ""
       - --https_proxy
@@ -145,10 +147,14 @@ spec:
       - ml-pipeline.kubeflow.svc.cluster.local
       - --ml_pipeline_server_port
       - "8887"
-      - --mlmd_server_address
-      - metadata-grpc-service.kubeflow.svc.cluster.local
-      - --mlmd_server_port
-      - "8080"
+      - --cache_disabled=false
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
+      - --ml_pipeline_tls_enabled=false
+      - --ca_cert_path
+      - ""
       command:
       - driver
       env:
@@ -160,6 +166,10 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.uid
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       image: ghcr.io/kubeflow/kfp-driver:latest
       name: ""
       resources:
@@ -177,13 +187,18 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
     inputs:
       parameters:
-      - name: component
-      - name: task
-      - name: container
       - name: task-name
-      - name: parent-dag-id
+      - name: parent-dag-task-id
       - default: "-1"
         name: iteration-index
       - default: ""
@@ -214,6 +229,18 @@ spec:
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
+    volumes:
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
   - dag:
       tasks:
       - arguments:
@@ -228,6 +255,8 @@ spec:
       - name: pod-spec-patch
       - default: "false"
         name: cached-decision
+      - default: "-1"
+        name: iteration-index
     metadata: {}
     name: system-container-executor
     outputs: {}
@@ -243,10 +272,10 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.uid
-      envFrom:
-      - configMapRef:
-          name: metadata-grpc-configmap
-          optional: true
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       image: gcr.io/ml-pipeline/should-be-overridden-during-runtime
       name: ""
       resources: {}
@@ -257,9 +286,13 @@ spec:
           - ALL
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
       volumeMounts:
       - mountPath: /kfp-launcher
         name: kfp-launcher
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
       - mountPath: /gcs
         name: gcs-scratch
       - mountPath: /s3
@@ -272,6 +305,9 @@ spec:
         name: dot-cache-scratch
       - mountPath: /.config
         name: dot-config-scratch
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
     initContainers:
     - args:
       - --copy
@@ -294,6 +330,7 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
       volumeMounts:
       - mountPath: /kfp-launcher
         name: kfp-launcher
@@ -315,6 +352,13 @@ spec:
     volumes:
     - emptyDir: {}
       name: kfp-launcher
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
     - emptyDir: {}
       name: gcs-scratch
     - emptyDir: {}
@@ -327,10 +371,15 @@ spec:
       name: dot-cache-scratch
     - emptyDir: {}
       name: dot-config-scratch
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
   - dag:
       tasks:
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task
@@ -345,6 +394,12 @@ spec:
             value: '{{inputs.parameters.parent-dag-id}}'
           - name: kubernetes-config
             value: '{{workflow.parameters.kubernetes-comp-print-msg}}'
+=======
+          - name: task-name
+            value: print-msg
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
+>>>>>>> upstream/master
         name: print-msg-driver
         template: system-container-driver
       - arguments:
@@ -359,7 +414,7 @@ spec:
         template: system-container-executor
     inputs:
       parameters:
-      - name: parent-dag-id
+      - name: parent-dag-task-id
     metadata: {}
     name: comp-condition-2
     outputs: {}
@@ -367,6 +422,7 @@ spec:
       tasks:
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task
@@ -381,6 +437,12 @@ spec:
             value: '{{inputs.parameters.parent-dag-id}}'
           - name: kubernetes-config
             value: '{{workflow.parameters.kubernetes-comp-print-msg-2}}'
+=======
+          - name: task-name
+            value: print-msg-2
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
+>>>>>>> upstream/master
         name: print-msg-2-driver
         template: system-container-driver
       - arguments:
@@ -395,7 +457,7 @@ spec:
         template: system-container-executor
     inputs:
       parameters:
-      - name: parent-dag-id
+      - name: parent-dag-task-id
     metadata: {}
     name: comp-condition-3
     outputs: {}
@@ -411,24 +473,22 @@ spec:
       - '{{workflow.name}}'
       - --run_display_name
       - ""
-      - --dag_execution_id
-      - '{{inputs.parameters.parent-dag-id}}'
-      - --component
-      - '{{inputs.parameters.component}}'
-      - --task
-      - '{{inputs.parameters.task}}'
+      - --parent_task_id
+      - '{{inputs.parameters.parent-dag-task-id}}'
       - --task_name
       - '{{inputs.parameters.task-name}}'
       - --runtime_config
       - '{{inputs.parameters.runtime-config}}'
       - --iteration_index
       - '{{inputs.parameters.iteration-index}}'
-      - --execution_id_path
-      - '{{outputs.parameters.execution-id.path}}'
+      - --parent_task_id_path
+      - '{{outputs.parameters.parent-dag-task-id-path.path}}'
       - --iteration_count_path
       - '{{outputs.parameters.iteration-count.path}}'
       - --condition_path
       - '{{outputs.parameters.condition.path}}'
+      - --namespace
+      - $(NAMESPACE)
       - --http_proxy
       - ""
       - --https_proxy
@@ -439,12 +499,29 @@ spec:
       - ml-pipeline.kubeflow.svc.cluster.local
       - --ml_pipeline_server_port
       - "8887"
-      - --mlmd_server_address
-      - metadata-grpc-service.kubeflow.svc.cluster.local
-      - --mlmd_server_port
-      - "8080"
+      - --cache_disabled=false
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
+      - --ml_pipeline_tls_enabled=false
+      - --ca_cert_path
+      - ""
       command:
       - driver
+      env:
+      - name: KFP_POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: KFP_POD_UID
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.uid
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       image: ghcr.io/kubeflow/kfp-driver:latest
       name: ""
       resources:
@@ -462,17 +539,22 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
     inputs:
       parameters:
-      - name: component
       - default: ""
         name: runtime-config
       - default: ""
-        name: task
-      - default: ""
         name: task-name
-      - default: "0"
-        name: parent-dag-id
+      - default: ""
+        name: parent-dag-task-id
       - default: "-1"
         name: iteration-index
       - default: DAG
@@ -486,9 +568,9 @@ spec:
     name: system-dag-driver
     outputs:
       parameters:
-      - name: execution-id
+      - name: parent-dag-task-id-path
         valueFrom:
-          path: /tmp/outputs/execution-id
+          path: /tmp/outputs/task-id
       - name: iteration-count
         valueFrom:
           default: "0"
@@ -501,17 +583,24 @@ spec:
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
+    volumes:
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
   - dag:
       tasks:
       - arguments:
           parameters:
-          - name: component
-            value: '{{workflow.parameters.components-comp-condition-2}}'
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
-          - name: task
-            value: '{"componentRef":{"name":"comp-condition-2"},"dependentTasks":["random-num"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"componentInputParameter":"pipelinechannel--flip-coin-Output"},"pipelinechannel--random-num-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"random-num"}}}},"taskInfo":{"name":"condition-2"},"triggerPolicy":{"condition":"int(inputs.parameter_values[''pipelinechannel--random-num-Output''])
-              \u003e 5"}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
           - name: task-name
             value: condition-2
         depends: random-num.Succeeded
@@ -519,8 +608,8 @@ spec:
         template: system-dag-driver
       - arguments:
           parameters:
-          - name: parent-dag-id
-            value: '{{tasks.condition-2-driver.outputs.parameters.execution-id}}'
+          - name: parent-dag-task-id
+            value: '{{tasks.condition-2-driver.outputs.parameters.parent-dag-task-id-path}}'
           - name: condition
             value: '{{tasks.condition-2-driver.outputs.parameters.condition}}'
         depends: condition-2-driver.Succeeded
@@ -529,13 +618,8 @@ spec:
         when: '{{tasks.condition-2-driver.outputs.parameters.condition}} != false'
       - arguments:
           parameters:
-          - name: component
-            value: '{{workflow.parameters.components-comp-condition-3}}'
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
-          - name: task
-            value: '{"componentRef":{"name":"comp-condition-3"},"dependentTasks":["random-num"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"componentInputParameter":"pipelinechannel--flip-coin-Output"},"pipelinechannel--random-num-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"random-num"}}}},"taskInfo":{"name":"condition-3"},"triggerPolicy":{"condition":"int(inputs.parameter_values[''pipelinechannel--random-num-Output''])
-              \u003c= 5"}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
           - name: task-name
             value: condition-3
         depends: random-num.Succeeded
@@ -543,8 +627,8 @@ spec:
         template: system-dag-driver
       - arguments:
           parameters:
-          - name: parent-dag-id
-            value: '{{tasks.condition-3-driver.outputs.parameters.execution-id}}'
+          - name: parent-dag-task-id
+            value: '{{tasks.condition-3-driver.outputs.parameters.parent-dag-task-id-path}}'
           - name: condition
             value: '{{tasks.condition-3-driver.outputs.parameters.condition}}'
         depends: condition-3-driver.Succeeded
@@ -553,6 +637,7 @@ spec:
         when: '{{tasks.condition-3-driver.outputs.parameters.condition}} != false'
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-f1170b2d8b489f7533f5675cb134187e3b1a1f86c7febe015f4113cff3efadaa}}'
           - name: task
@@ -565,6 +650,12 @@ spec:
             value: '{{inputs.parameters.parent-dag-id}}'
           - name: kubernetes-config
             value: '{{workflow.parameters.kubernetes-comp-random-num}}'
+=======
+          - name: task-name
+            value: random-num
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
+>>>>>>> upstream/master
         name: random-num-driver
         template: system-container-driver
       - arguments:
@@ -579,7 +670,7 @@ spec:
         template: system-container-executor
     inputs:
       parameters:
-      - name: parent-dag-id
+      - name: parent-dag-task-id
     metadata: {}
     name: comp-condition-1
     outputs: {}
@@ -587,6 +678,7 @@ spec:
       tasks:
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task
@@ -601,6 +693,12 @@ spec:
             value: '{{inputs.parameters.parent-dag-id}}'
           - name: kubernetes-config
             value: '{{workflow.parameters.kubernetes-comp-print-msg-3}}'
+=======
+          - name: task-name
+            value: print-msg-3
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
+>>>>>>> upstream/master
         name: print-msg-3-driver
         template: system-container-driver
       - arguments:
@@ -615,7 +713,7 @@ spec:
         template: system-container-executor
     inputs:
       parameters:
-      - name: parent-dag-id
+      - name: parent-dag-task-id
     metadata: {}
     name: comp-condition-5
     outputs: {}
@@ -623,6 +721,7 @@ spec:
       tasks:
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-4b5090822500e307a6dcf3138c6fa0374894156e02a0adc3609819b66c66982c}}'
           - name: task
@@ -637,6 +736,12 @@ spec:
             value: '{{inputs.parameters.parent-dag-id}}'
           - name: kubernetes-config
             value: '{{workflow.parameters.kubernetes-comp-print-msg-4}}'
+=======
+          - name: task-name
+            value: print-msg-4
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
+>>>>>>> upstream/master
         name: print-msg-4-driver
         template: system-container-driver
       - arguments:
@@ -651,7 +756,7 @@ spec:
         template: system-container-executor
     inputs:
       parameters:
-      - name: parent-dag-id
+      - name: parent-dag-task-id
     metadata: {}
     name: comp-condition-6
     outputs: {}
@@ -659,13 +764,8 @@ spec:
       tasks:
       - arguments:
           parameters:
-          - name: component
-            value: '{{workflow.parameters.components-comp-condition-5}}'
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
-          - name: task
-            value: '{"componentRef":{"name":"comp-condition-5"},"dependentTasks":["random-num-2"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"componentInputParameter":"pipelinechannel--flip-coin-Output"},"pipelinechannel--random-num-2-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"random-num-2"}}}},"taskInfo":{"name":"condition-5"},"triggerPolicy":{"condition":"int(inputs.parameter_values[''pipelinechannel--random-num-2-Output''])
-              \u003e 15"}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
           - name: task-name
             value: condition-5
         depends: random-num-2.Succeeded
@@ -673,8 +773,8 @@ spec:
         template: system-dag-driver
       - arguments:
           parameters:
-          - name: parent-dag-id
-            value: '{{tasks.condition-5-driver.outputs.parameters.execution-id}}'
+          - name: parent-dag-task-id
+            value: '{{tasks.condition-5-driver.outputs.parameters.parent-dag-task-id-path}}'
           - name: condition
             value: '{{tasks.condition-5-driver.outputs.parameters.condition}}'
         depends: condition-5-driver.Succeeded
@@ -683,13 +783,8 @@ spec:
         when: '{{tasks.condition-5-driver.outputs.parameters.condition}} != false'
       - arguments:
           parameters:
-          - name: component
-            value: '{{workflow.parameters.components-comp-condition-6}}'
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
-          - name: task
-            value: '{"componentRef":{"name":"comp-condition-6"},"dependentTasks":["random-num-2"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"componentInputParameter":"pipelinechannel--flip-coin-Output"},"pipelinechannel--random-num-2-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"random-num-2"}}}},"taskInfo":{"name":"condition-6"},"triggerPolicy":{"condition":"int(inputs.parameter_values[''pipelinechannel--random-num-2-Output''])
-              \u003c= 15"}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
           - name: task-name
             value: condition-6
         depends: random-num-2.Succeeded
@@ -697,8 +792,8 @@ spec:
         template: system-dag-driver
       - arguments:
           parameters:
-          - name: parent-dag-id
-            value: '{{tasks.condition-6-driver.outputs.parameters.execution-id}}'
+          - name: parent-dag-task-id
+            value: '{{tasks.condition-6-driver.outputs.parameters.parent-dag-task-id-path}}'
           - name: condition
             value: '{{tasks.condition-6-driver.outputs.parameters.condition}}'
         depends: condition-6-driver.Succeeded
@@ -707,6 +802,7 @@ spec:
         when: '{{tasks.condition-6-driver.outputs.parameters.condition}} != false'
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-f1170b2d8b489f7533f5675cb134187e3b1a1f86c7febe015f4113cff3efadaa}}'
           - name: task
@@ -719,6 +815,12 @@ spec:
             value: '{{inputs.parameters.parent-dag-id}}'
           - name: kubernetes-config
             value: '{{workflow.parameters.kubernetes-comp-random-num-2}}'
+=======
+          - name: task-name
+            value: random-num-2
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
+>>>>>>> upstream/master
         name: random-num-2-driver
         template: system-container-driver
       - arguments:
@@ -733,7 +835,7 @@ spec:
         template: system-container-executor
     inputs:
       parameters:
-      - name: parent-dag-id
+      - name: parent-dag-task-id
     metadata: {}
     name: comp-condition-4
     outputs: {}
@@ -741,13 +843,8 @@ spec:
       tasks:
       - arguments:
           parameters:
-          - name: component
-            value: '{{workflow.parameters.components-comp-condition-1}}'
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
-          - name: task
-            value: '{"componentRef":{"name":"comp-condition-1"},"dependentTasks":["flip-coin"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"flip-coin"}}}},"taskInfo":{"name":"condition-1"},"triggerPolicy":{"condition":"inputs.parameter_values[''pipelinechannel--flip-coin-Output'']
-              == ''heads''"}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
           - name: task-name
             value: condition-1
         depends: flip-coin.Succeeded
@@ -755,8 +852,8 @@ spec:
         template: system-dag-driver
       - arguments:
           parameters:
-          - name: parent-dag-id
-            value: '{{tasks.condition-1-driver.outputs.parameters.execution-id}}'
+          - name: parent-dag-task-id
+            value: '{{tasks.condition-1-driver.outputs.parameters.parent-dag-task-id-path}}'
           - name: condition
             value: '{{tasks.condition-1-driver.outputs.parameters.condition}}'
         depends: condition-1-driver.Succeeded
@@ -765,13 +862,8 @@ spec:
         when: '{{tasks.condition-1-driver.outputs.parameters.condition}} != false'
       - arguments:
           parameters:
-          - name: component
-            value: '{{workflow.parameters.components-comp-condition-4}}'
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
-          - name: task
-            value: '{"componentRef":{"name":"comp-condition-4"},"dependentTasks":["flip-coin"],"inputs":{"parameters":{"pipelinechannel--flip-coin-Output":{"taskOutputParameter":{"outputParameterKey":"Output","producerTask":"flip-coin"}}}},"taskInfo":{"name":"condition-4"},"triggerPolicy":{"condition":"inputs.parameter_values[''pipelinechannel--flip-coin-Output'']
-              == ''tails''"}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
           - name: task-name
             value: condition-4
         depends: flip-coin.Succeeded
@@ -779,8 +871,8 @@ spec:
         template: system-dag-driver
       - arguments:
           parameters:
-          - name: parent-dag-id
-            value: '{{tasks.condition-4-driver.outputs.parameters.execution-id}}'
+          - name: parent-dag-task-id
+            value: '{{tasks.condition-4-driver.outputs.parameters.parent-dag-task-id-path}}'
           - name: condition
             value: '{{tasks.condition-4-driver.outputs.parameters.condition}}'
         depends: condition-4-driver.Succeeded
@@ -789,6 +881,7 @@ spec:
         when: '{{tasks.condition-4-driver.outputs.parameters.condition}} != false'
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-54d0c2631d6668bed811927e817e5e2cbe659621bc132697bf31d556d3bf1fdc}}'
           - name: task
@@ -801,6 +894,12 @@ spec:
             value: '{{inputs.parameters.parent-dag-id}}'
           - name: kubernetes-config
             value: '{{workflow.parameters.kubernetes-comp-flip-coin}}'
+=======
+          - name: task-name
+            value: flip-coin
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
+>>>>>>> upstream/master
         name: flip-coin-driver
         template: system-container-driver
       - arguments:
@@ -815,7 +914,7 @@ spec:
         template: system-container-executor
     inputs:
       parameters:
-      - name: parent-dag-id
+      - name: parent-dag-task-id
     metadata: {}
     name: root
     outputs: {}
@@ -823,8 +922,6 @@ spec:
       tasks:
       - arguments:
           parameters:
-          - name: component
-            value: '{{workflow.parameters.components-root}}'
           - name: runtime-config
             value: '{}'
           - name: driver-type
@@ -833,8 +930,8 @@ spec:
         template: system-dag-driver
       - arguments:
           parameters:
-          - name: parent-dag-id
-            value: '{{tasks.root-driver.outputs.parameters.execution-id}}'
+          - name: parent-dag-task-id
+            value: '{{tasks.root-driver.outputs.parameters.parent-dag-task-id-path}}'
           - name: condition
             value: ""
         depends: root-driver.Succeeded

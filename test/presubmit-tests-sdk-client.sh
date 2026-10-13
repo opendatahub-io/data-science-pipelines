@@ -14,8 +14,8 @@
 # limitations under the License.
 
 source_root=$(pwd)
-SETUP_ENV="${SETUP_ENV:-true}"
 
+<<<<<<< HEAD
 if [ "${SETUP_ENV}" = "true" ]; then
   # Create a virtual environment and activate it
   python3 -m venv venv
@@ -47,3 +47,6 @@ if [ "${SETUP_ENV}" = "true" ]; then
   # Deactivate the virtual environment
   deactivate
 fi
+=======
+uv run python -m pytest sdk/python/test/client/ -v -s -m client --cov=kfp
+>>>>>>> upstream/master

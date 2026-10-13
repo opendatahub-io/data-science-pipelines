@@ -16,6 +16,8 @@ package template
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -23,17 +25,15 @@ import (
 
 	"github.com/kubeflow/pipelines/backend/src/apiserver/config/proxy"
 
-	"github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/model"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
-	commonutil "github.com/kubeflow/pipelines/backend/src/common/util"
 	scheduledworkflow "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 	goyaml "gopkg.in/yaml.v3"
@@ -42,49 +42,29 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func TestFailValidation(t *testing.T) {
-	wf := unmarshalWf(emptyName)
-	wf.Spec.Arguments.Parameters = []v1alpha1.Parameter{{Name: "dup", Value: v1alpha1.AnyStringPtr("value1")}}
-	templateBytes, _ := yaml.Marshal(wf)
-	_, err := ValidateWorkflow([]byte(templateBytes))
-	if assert.NotNil(t, err) {
-		assert.Contains(t, err.Error(), "name is required")
-	}
-}
-
-func TestValidateWorkflow_ParametersTooLong(t *testing.T) {
-	var params []v1alpha1.Parameter
-	// Create a long enough parameter string so it exceed the length limit of parameter.
-	for i := 0; i < 10000; i++ {
-		params = append(params, v1alpha1.Parameter{Name: "name1", Value: v1alpha1.AnyStringPtr("value1")})
-	}
-	template := v1alpha1.Workflow{Spec: v1alpha1.WorkflowSpec{Arguments: v1alpha1.Arguments{
-		Parameters: params,
-	}}}
-	templateBytes, _ := yaml.Marshal(template)
-	_, err := ValidateWorkflow(templateBytes)
-	assert.Equal(t, codes.InvalidArgument, err.(*commonutil.UserError).ExternalStatusCode())
-}
-
 func TestParseSpecFormat(t *testing.T) {
 	tt := []struct {
 		template     string
 		templateType TemplateType
+		wantErr      bool
 	}{{
 		// standard match
 		template: `
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow`,
-		templateType: V1,
+		templateType: Unknown,
+		wantErr:      true,
 	}, { // template contains content too
 		template:     awfTemplate,
-		templateType: V1,
+		templateType: Unknown,
+		wantErr:      true,
 	}, {
 		// version does not matter
 		template: `
 apiVersion: argoproj.io/v1alpha2
 kind: Workflow`,
-		templateType: V1,
+		templateType: Unknown,
+		wantErr:      true,
 	}, {
 		template:     "",
 		templateType: Unknown,
@@ -109,14 +89,73 @@ kind: CronWorkflow`,
 	}, {
 		template:     loadYaml(t, "testdata/hello_world.yaml"),
 		templateType: V2,
+	}, {
+		// multi-document V2 pipeline (pipeline spec + platforms section)
+		template:     loadYaml(t, "testdata/pipeline_with_volume.yaml"),
+		templateType: V2,
+	}, {
+		// valid YAML scalar (not a mapping) — not a pipeline spec
+		template:     "not a valid spec",
+		templateType: Unknown,
+	}, {
+		// malformed YAML: unclosed single-quoted scalar
+		template:     "'",
+		templateType: Unknown,
+		wantErr:      true,
+	}, {
+		// malformed YAML: unclosed flow sequence
+		template:     "[",
+		templateType: Unknown,
+		wantErr:      true,
+	}, {
+		// malformed YAML: incomplete directive
+		template:     "%",
+		templateType: Unknown,
+		wantErr:      true,
 	}}
 
 	for _, test := range tt {
-		format := inferTemplateFormat([]byte(test.template))
+		format, err := inferTemplateFormat([]byte(test.template))
 		if format != test.templateType {
 			t.Errorf("InferTemplateFormat(%s)=%q, expect %q", test.template, format, test.templateType)
 		}
+		if test.wantErr {
+			require.Error(t, err)
+			assert.False(t, errors.Is(err, io.EOF))
+		} else {
+			require.NoError(t, err)
+		}
 	}
+}
+
+func TestNewTemplateRejectsArgoWithMigrationGuidance(t *testing.T) {
+	for _, input := range []string{
+		awfTemplate,
+		`{"apiVersion":"argoproj.io/v1alpha2","kind":"Workflow","spec":{}}`,
+		"---\n# historical workflow\napiVersion: argoproj.io/v1alpha1\nkind: Workflow\n",
+	} {
+		t.Run(input, func(t *testing.T) {
+			tmpl, err := New([]byte(input), TemplateOptions{})
+			require.Error(t, err)
+			assert.Nil(t, tmpl)
+			assert.Contains(t, err.Error(), "Argo Workflow pipelines are no longer supported")
+			assert.Contains(t, err.Error(), "rewrite the pipeline with the KFP v2 SDK")
+			assert.Contains(t, err.Error(), "upload compiled PipelineSpec IR YAML")
+			assert.NotContains(t, err.Error(), "failed to parse pipeline spec YAML")
+		})
+	}
+}
+
+func TestNewTemplateMalformedYAML(t *testing.T) {
+	_, err := New([]byte("'"), TemplateOptions{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse pipeline spec YAML")
+}
+
+func TestNewTemplateValidNonPipelineYAML(t *testing.T) {
+	_, err := New([]byte("key: value"), TemplateOptions{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown template format")
 }
 
 func unmarshalWf(yamlStr string) *v1alpha1.Workflow {
@@ -185,6 +224,7 @@ func TestToSwfCRDResourceGeneratedName_EmptyName(t *testing.T) {
 	assert.Equal(t, name, "job-")
 }
 
+<<<<<<< HEAD
 func TestScheduledWorkflow(t *testing.T) {
 	proxy.InitializeConfigWithEmptyForTests()
 
@@ -283,6 +323,8 @@ func TestScheduledWorkflow_CustomServiceAccount(t *testing.T) {
 	assert.Equal(t, "custom-sa", actualScheduledWorkflow.Spec.ServiceAccount)
 }
 
+=======
+>>>>>>> upstream/master
 func TestModelToCRDTrigger_Cron(t *testing.T) {
 	inputModelTrigger := model.Trigger{
 		CronSchedule: model.CronSchedule{
@@ -461,51 +503,6 @@ func TestStringMapToCRDParameters_InvalidJSON(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
-// --- stringArrayToCRDParameters tests ---
-
-func TestStringArrayToCRDParameters_Empty(t *testing.T) {
-	result, err := stringArrayToCRDParameters("")
-	assert.Nil(t, err)
-	assert.Empty(t, result)
-}
-
-func TestStringArrayToCRDParameters_ValidParams(t *testing.T) {
-	input := `[{"name":"param1","value":"val1"},{"name":"param2","value":"val2"}]`
-	result, err := stringArrayToCRDParameters(input)
-	assert.Nil(t, err)
-	assert.Len(t, result, 2)
-	assert.Equal(t, "param1", result[0].Name)
-	assert.Equal(t, "val1", result[0].Value)
-	assert.Equal(t, "param2", result[1].Name)
-	assert.Equal(t, "val2", result[1].Value)
-}
-
-func TestStringArrayToCRDParameters_InvalidJSON(t *testing.T) {
-	_, err := stringArrayToCRDParameters("not json")
-	assert.NotNil(t, err)
-}
-
-// --- modelToParametersMap tests ---
-
-func TestModelToParametersMap_Empty(t *testing.T) {
-	result, err := modelToParametersMap("")
-	assert.Nil(t, err)
-	assert.Empty(t, result)
-}
-
-func TestModelToParametersMap_ValidParams(t *testing.T) {
-	input := `[{"name":"param1","value":"val1"},{"name":"param2","value":"val2"}]`
-	result, err := modelToParametersMap(input)
-	assert.Nil(t, err)
-	assert.Equal(t, "val1", result["param1"])
-	assert.Equal(t, "val2", result["param2"])
-}
-
-func TestModelToParametersMap_InvalidJSON(t *testing.T) {
-	_, err := modelToParametersMap("{bad")
-	assert.NotNil(t, err)
-}
-
 // --- modelToCRDTrigger periodic schedule tests ---
 
 func TestModelToCRDTrigger_Periodic(t *testing.T) {
@@ -531,89 +528,6 @@ func TestModelToCRDTrigger_Empty(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, result.CronSchedule)
 	assert.Nil(t, result.PeriodicSchedule)
-}
-
-// --- NewArgoTemplate / NewArgoTemplateFromWorkflow tests ---
-
-func TestNewArgoTemplate_Valid(t *testing.T) {
-	tmpl, err := NewArgoTemplate([]byte(awfTemplate))
-	assert.Nil(t, err)
-	assert.NotNil(t, tmpl)
-	assert.Equal(t, V1, tmpl.GetTemplateType())
-	assert.False(t, tmpl.IsCacheDisabled())
-}
-
-func TestNewArgoTemplate_InvalidYAML(t *testing.T) {
-	_, err := NewArgoTemplate([]byte("not yaml: ["))
-	assert.NotNil(t, err)
-}
-
-func TestNewArgoTemplateFromWorkflow(t *testing.T) {
-	wf := unmarshalWf(awfTemplate)
-	tmpl, err := NewArgoTemplateFromWorkflow(wf)
-	assert.Nil(t, err)
-	assert.NotNil(t, tmpl)
-	assert.Equal(t, V1, tmpl.GetTemplateType())
-}
-
-// --- Argo simple method tests ---
-
-func TestArgo_Bytes(t *testing.T) {
-	tmpl, _ := NewArgoTemplate([]byte(awfTemplate))
-	result := tmpl.Bytes()
-	assert.NotEmpty(t, result)
-	assert.Contains(t, string(result), "whalesay")
-}
-
-func TestArgo_Bytes_Nil(t *testing.T) {
-	var tmpl *Argo
-	assert.Nil(t, tmpl.Bytes())
-}
-
-func TestArgo_IsV2(t *testing.T) {
-	tmpl, _ := NewArgoTemplate([]byte(awfTemplate))
-	assert.False(t, tmpl.IsV2())
-}
-
-func TestArgo_IsV2_Nil(t *testing.T) {
-	var tmpl *Argo
-	assert.False(t, tmpl.IsV2())
-}
-
-func TestArgo_V2PipelineName_Empty(t *testing.T) {
-	tmpl, _ := NewArgoTemplate([]byte(awfTemplate))
-	assert.Empty(t, tmpl.V2PipelineName())
-}
-
-func TestArgo_V2PipelineName_Nil(t *testing.T) {
-	var tmpl *Argo
-	assert.Empty(t, tmpl.V2PipelineName())
-}
-
-func TestArgo_ParametersJSON(t *testing.T) {
-	tmpl, _ := NewArgoTemplate([]byte(awfTemplate))
-	result, err := tmpl.ParametersJSON()
-	assert.Nil(t, err)
-	assert.NotEmpty(t, result)
-}
-
-func TestArgo_ParametersJSON_Nil(t *testing.T) {
-	var tmpl *Argo
-	result, err := tmpl.ParametersJSON()
-	assert.Nil(t, err)
-	assert.Empty(t, result)
-}
-
-func TestArgo_OverrideV2PipelineName_NonV2(t *testing.T) {
-	tmpl, _ := NewArgoTemplate([]byte(awfTemplate))
-	// Should be a no-op for non-V2 workflows.
-	tmpl.OverrideV2PipelineName("my-pipeline", "my-ns")
-	assert.Empty(t, tmpl.V2PipelineName())
-}
-
-func TestArgo_OverrideV2PipelineName_Nil(t *testing.T) {
-	var tmpl *Argo
-	tmpl.OverrideV2PipelineName("my-pipeline", "my-ns") // should not panic
 }
 
 // --- V2Spec simple method tests ---
@@ -718,15 +632,6 @@ func TestNewV2SpecTemplate_InvalidYAML(t *testing.T) {
 }
 
 // --- AddRuntimeMetadata tests ---
-
-func TestAddRuntimeMetadata(t *testing.T) {
-	wf := unmarshalWf(awfTemplate)
-	AddRuntimeMetadata(wf)
-	template := wf.Spec.Templates[0]
-	assert.Equal(t, "false", template.Metadata.Annotations["sidecar.istio.io/inject"])
-	assert.Equal(t, "true", template.Metadata.Labels["pipelines.kubeflow.org/cache_enabled"])
-	assert.NotEmpty(t, template.Metadata.Labels[util.LabelKeyWorkflowRunId])
-}
 
 // --- New factory error test ---
 

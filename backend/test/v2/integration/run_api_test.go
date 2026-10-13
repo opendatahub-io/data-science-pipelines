@@ -350,11 +350,29 @@ func (s *RunAPITestSuite) TestRunAPIs() {
 
 func (s *RunAPITestSuite) checkTerminatedRunDetail(t *testing.T, run *run_model.V2beta1Run, experimentID string, pipelineID string, pipelineVersionID string) {
 
+	// A terminate request moves the run from CANCELING to CANCELED as the
+	// workflow controller reacts. Depending on timing before this Get, either is
+	// a valid post-terminate state, so assert membership rather than racing on
+	// the transient CANCELING. State and RunDetails are then copied into the
+	// expected struct below so the equality check focuses on the stable,
+	// test-owned fields (like the already-copied CreatedAt/StateHistory).
+	if assert.NotNil(t, run.State, "terminated run should have a State") {
+		assert.Contains(t,
+			[]run_model.V2beta1RuntimeState{
+				run_model.V2beta1RuntimeStateCANCELING,
+				run_model.V2beta1RuntimeStateCANCELED,
+			},
+			*run.State,
+			"terminated run should be CANCELING or CANCELED")
+	}
+
 	expectedRun := &run_model.V2beta1Run{
 		RunID:          run.RunID,
+		Namespace:      run.Namespace,
 		DisplayName:    "long running",
 		Description:    "this pipeline will run long enough for us to manually terminate it before it finishes",
-		State:          run_model.V2beta1RuntimeStateCANCELING.Pointer(),
+		State:          run.State,
+		RunDetails:     run.RunDetails,
 		StateHistory:   run.StateHistory,
 		StorageState:   run.StorageState,
 		ServiceAccount: test.GetDefaultPipelineRunnerServiceAccount(*isKubeflowMode),
@@ -378,6 +396,7 @@ func (s *RunAPITestSuite) checkHelloWorldRunDetail(t *testing.T, run *run_model.
 
 	expectedRun := &run_model.V2beta1Run{
 		RunID:          run.RunID,
+		Namespace:      run.Namespace,
 		DisplayName:    "hello world",
 		Description:    "this is hello world",
 		State:          run.State,
@@ -416,6 +435,7 @@ func (s *RunAPITestSuite) checkArgParamsRunDetail(t *testing.T, run *run_model.V
 
 	expectedRun := &run_model.V2beta1Run{
 		RunID:          run.RunID,
+		Namespace:      run.Namespace,
 		DisplayName:    "argument parameter",
 		Description:    "this is argument parameter",
 		State:          run.State,

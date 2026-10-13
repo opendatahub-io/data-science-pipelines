@@ -1,8 +1,11 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
+  annotations:
+    workflows.argoproj.io/pod-name-format: v1
   generateName: iris-training-pipeline-
 spec:
+<<<<<<< HEAD
   arguments:
     parameters:
     - name: components-bc70db665dabbd18d63f17bcbb124aec304a24fc5ec02378b09d034f08ae2934
@@ -73,6 +76,9 @@ spec:
         f)\n\n"],"image":"registry.access.redhat.com/ubi9/python-312@sha256:e80ff3673c95b91f0dafdbe97afb261eab8244d7fd8b47e20ffcbcfee27fb168"}'
     - name: components-root
       value: '{"dag":{"tasks":{"create-dataset":{"cachingOptions":{},"componentRef":{"name":"comp-create-dataset"},"taskInfo":{"name":"create-dataset"}},"normalize-dataset":{"cachingOptions":{},"componentRef":{"name":"comp-normalize-dataset"},"dependentTasks":["create-dataset"],"inputs":{"artifacts":{"input_iris_dataset":{"taskOutputArtifact":{"outputArtifactKey":"iris_dataset","producerTask":"create-dataset"}}},"parameters":{"standard_scaler":{"componentInputParameter":"standard_scaler"}}},"taskInfo":{"name":"normalize-dataset"}},"train-model":{"cachingOptions":{},"componentRef":{"name":"comp-train-model"},"dependentTasks":["normalize-dataset"],"inputs":{"artifacts":{"normalized_iris_dataset":{"taskOutputArtifact":{"outputArtifactKey":"normalized_iris_dataset","producerTask":"normalize-dataset"}}},"parameters":{"n_neighbors":{"componentInputParameter":"neighbors"}}},"taskInfo":{"name":"train-model"}}}},"inputDefinitions":{"parameters":{"neighbors":{"defaultValue":3,"isOptional":true,"parameterType":"NUMBER_INTEGER"},"standard_scaler":{"defaultValue":true,"isOptional":true,"parameterType":"BOOLEAN"}}}}'
+=======
+  arguments: {}
+>>>>>>> upstream/master
   entrypoint: entrypoint
   podMetadata:
     annotations:
@@ -97,16 +103,10 @@ spec:
       - '{{workflow.name}}'
       - --run_display_name
       - ""
-      - --dag_execution_id
-      - '{{inputs.parameters.parent-dag-id}}'
-      - --component
-      - '{{inputs.parameters.component}}'
-      - --task
-      - '{{inputs.parameters.task}}'
+      - --parent_task_id
+      - '{{inputs.parameters.parent-dag-task-id}}'
       - --task_name
       - '{{inputs.parameters.task-name}}'
-      - --container
-      - '{{inputs.parameters.container}}'
       - --iteration_index
       - '{{inputs.parameters.iteration-index}}'
       - --cached_decision_path
@@ -117,6 +117,8 @@ spec:
       - '{{outputs.parameters.condition.path}}'
       - --kubernetes_config
       - '{{inputs.parameters.kubernetes-config}}'
+      - --namespace
+      - $(NAMESPACE)
       - --http_proxy
       - ""
       - --https_proxy
@@ -127,10 +129,14 @@ spec:
       - ml-pipeline.kubeflow.svc.cluster.local
       - --ml_pipeline_server_port
       - "8887"
-      - --mlmd_server_address
-      - metadata-grpc-service.kubeflow.svc.cluster.local
-      - --mlmd_server_port
-      - "8080"
+      - --cache_disabled=false
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
+      - --ml_pipeline_tls_enabled=false
+      - --ca_cert_path
+      - ""
       command:
       - driver
       env:
@@ -142,6 +148,10 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.uid
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       image: ghcr.io/kubeflow/kfp-driver:latest
       name: ""
       resources:
@@ -159,13 +169,18 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
     inputs:
       parameters:
-      - name: component
-      - name: task
-      - name: container
       - name: task-name
-      - name: parent-dag-id
+      - name: parent-dag-task-id
       - default: "-1"
         name: iteration-index
       - default: ""
@@ -196,6 +211,18 @@ spec:
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
+    volumes:
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
   - dag:
       tasks:
       - arguments:
@@ -210,6 +237,8 @@ spec:
       - name: pod-spec-patch
       - default: "false"
         name: cached-decision
+      - default: "-1"
+        name: iteration-index
     metadata: {}
     name: system-container-executor
     outputs: {}
@@ -225,10 +254,10 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.uid
-      envFrom:
-      - configMapRef:
-          name: metadata-grpc-configmap
-          optional: true
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       image: gcr.io/ml-pipeline/should-be-overridden-during-runtime
       name: ""
       resources: {}
@@ -239,9 +268,13 @@ spec:
           - ALL
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
       volumeMounts:
       - mountPath: /kfp-launcher
         name: kfp-launcher
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
       - mountPath: /gcs
         name: gcs-scratch
       - mountPath: /s3
@@ -254,6 +287,9 @@ spec:
         name: dot-cache-scratch
       - mountPath: /.config
         name: dot-config-scratch
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
     initContainers:
     - args:
       - --copy
@@ -276,6 +312,7 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
       volumeMounts:
       - mountPath: /kfp-launcher
         name: kfp-launcher
@@ -297,6 +334,13 @@ spec:
     volumes:
     - emptyDir: {}
       name: kfp-launcher
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
     - emptyDir: {}
       name: gcs-scratch
     - emptyDir: {}
@@ -309,20 +353,27 @@ spec:
       name: dot-cache-scratch
     - emptyDir: {}
       name: dot-config-scratch
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
   - dag:
       tasks:
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-bc70db665dabbd18d63f17bcbb124aec304a24fc5ec02378b09d034f08ae2934}}'
           - name: task
             value: '{"cachingOptions":{},"componentRef":{"name":"comp-create-dataset"},"taskInfo":{"name":"create-dataset"}}'
           - name: container
             value: '{{workflow.parameters.implementations-bc70db665dabbd18d63f17bcbb124aec304a24fc5ec02378b09d034f08ae2934}}'
+=======
+>>>>>>> upstream/master
           - name: task-name
             value: create-dataset
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
         name: create-dataset-driver
         template: system-container-driver
       - arguments:
@@ -337,16 +388,19 @@ spec:
         template: system-container-executor
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-8b1547fdb4209d3c74719b6d4984b1c8856b4c4cb1f98f2b47d52ce4a4bc930c}}'
           - name: task
             value: '{"cachingOptions":{},"componentRef":{"name":"comp-normalize-dataset"},"dependentTasks":["create-dataset"],"inputs":{"artifacts":{"input_iris_dataset":{"taskOutputArtifact":{"outputArtifactKey":"iris_dataset","producerTask":"create-dataset"}}},"parameters":{"standard_scaler":{"componentInputParameter":"standard_scaler"}}},"taskInfo":{"name":"normalize-dataset"}}'
           - name: container
             value: '{{workflow.parameters.implementations-8b1547fdb4209d3c74719b6d4984b1c8856b4c4cb1f98f2b47d52ce4a4bc930c}}'
+=======
+>>>>>>> upstream/master
           - name: task-name
             value: normalize-dataset
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
         depends: create-dataset.Succeeded
         name: normalize-dataset-driver
         template: system-container-driver
@@ -362,16 +416,19 @@ spec:
         template: system-container-executor
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-a5735595929bbe80dadd46d9a3188fb68358579cd3817e670cf7ee8bad802e61}}'
           - name: task
             value: '{"cachingOptions":{},"componentRef":{"name":"comp-train-model"},"dependentTasks":["normalize-dataset"],"inputs":{"artifacts":{"normalized_iris_dataset":{"taskOutputArtifact":{"outputArtifactKey":"normalized_iris_dataset","producerTask":"normalize-dataset"}}},"parameters":{"n_neighbors":{"componentInputParameter":"neighbors"}}},"taskInfo":{"name":"train-model"}}'
           - name: container
             value: '{{workflow.parameters.implementations-a5735595929bbe80dadd46d9a3188fb68358579cd3817e670cf7ee8bad802e61}}'
+=======
+>>>>>>> upstream/master
           - name: task-name
             value: train-model
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
         depends: normalize-dataset.Succeeded
         name: train-model-driver
         template: system-container-driver
@@ -387,7 +444,7 @@ spec:
         template: system-container-executor
     inputs:
       parameters:
-      - name: parent-dag-id
+      - name: parent-dag-task-id
     metadata: {}
     name: root
     outputs: {}
@@ -403,24 +460,22 @@ spec:
       - '{{workflow.name}}'
       - --run_display_name
       - ""
-      - --dag_execution_id
-      - '{{inputs.parameters.parent-dag-id}}'
-      - --component
-      - '{{inputs.parameters.component}}'
-      - --task
-      - '{{inputs.parameters.task}}'
+      - --parent_task_id
+      - '{{inputs.parameters.parent-dag-task-id}}'
       - --task_name
       - '{{inputs.parameters.task-name}}'
       - --runtime_config
       - '{{inputs.parameters.runtime-config}}'
       - --iteration_index
       - '{{inputs.parameters.iteration-index}}'
-      - --execution_id_path
-      - '{{outputs.parameters.execution-id.path}}'
+      - --parent_task_id_path
+      - '{{outputs.parameters.parent-dag-task-id-path.path}}'
       - --iteration_count_path
       - '{{outputs.parameters.iteration-count.path}}'
       - --condition_path
       - '{{outputs.parameters.condition.path}}'
+      - --namespace
+      - $(NAMESPACE)
       - --http_proxy
       - ""
       - --https_proxy
@@ -431,12 +486,29 @@ spec:
       - ml-pipeline.kubeflow.svc.cluster.local
       - --ml_pipeline_server_port
       - "8887"
-      - --mlmd_server_address
-      - metadata-grpc-service.kubeflow.svc.cluster.local
-      - --mlmd_server_port
-      - "8080"
+      - --cache_disabled=false
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
+      - --ml_pipeline_tls_enabled=false
+      - --ca_cert_path
+      - ""
       command:
       - driver
+      env:
+      - name: KFP_POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: KFP_POD_UID
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.uid
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       image: ghcr.io/kubeflow/kfp-driver:latest
       name: ""
       resources:
@@ -454,17 +526,22 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
     inputs:
       parameters:
-      - name: component
       - default: ""
         name: runtime-config
       - default: ""
-        name: task
-      - default: ""
         name: task-name
-      - default: "0"
-        name: parent-dag-id
+      - default: ""
+        name: parent-dag-task-id
       - default: "-1"
         name: iteration-index
       - default: DAG
@@ -478,9 +555,9 @@ spec:
     name: system-dag-driver
     outputs:
       parameters:
-      - name: execution-id
+      - name: parent-dag-task-id-path
         valueFrom:
-          path: /tmp/outputs/execution-id
+          path: /tmp/outputs/task-id
       - name: iteration-count
         valueFrom:
           default: "0"
@@ -493,12 +570,22 @@ spec:
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
+    volumes:
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
   - dag:
       tasks:
       - arguments:
           parameters:
-          - name: component
-            value: '{{workflow.parameters.components-root}}'
           - name: runtime-config
             value: '{"parameterValues":{"neighbors":3,"standard_scaler":true}}'
           - name: driver-type
@@ -507,8 +594,8 @@ spec:
         template: system-dag-driver
       - arguments:
           parameters:
-          - name: parent-dag-id
-            value: '{{tasks.root-driver.outputs.parameters.execution-id}}'
+          - name: parent-dag-task-id
+            value: '{{tasks.root-driver.outputs.parameters.parent-dag-task-id-path}}'
           - name: condition
             value: ""
         depends: root-driver.Succeeded

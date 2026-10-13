@@ -37,17 +37,21 @@ import (
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	apiv1beta1 "github.com/kubeflow/pipelines/backend/api/v1beta1/go_client"
 	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
 	cm "github.com/kubeflow/pipelines/backend/src/apiserver/client_manager"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/config"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/config/proxy"
+<<<<<<< HEAD
+=======
+	"github.com/kubeflow/pipelines/backend/src/apiserver/gc"
+>>>>>>> upstream/master
 	_ "github.com/kubeflow/pipelines/backend/src/apiserver/plugins/all"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/resource"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/server"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/template"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/webhook"
+	_ "github.com/kubeflow/pipelines/backend/src/common/dbcreds/all"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
@@ -81,6 +85,8 @@ var (
 	managedPipelinesDir           = flag.String("managedPipelinesDir", "", "Directory containing managed-pipelines.json manifest")
 	tlsCertPath                   = flag.String("tlsCertPath", "", "Path to the public TLS cert.")
 	tlsCertKeyPath                = flag.String("tlsCertKeyPath", "", "Path to the private TLS key cert.")
+	tlsMinVersion                 = flag.String("tlsMinVersion", "VersionTLS12", "Minimum TLS version (VersionTLS12 or VersionTLS13)")
+	tlsCipherSuites               = flag.String("tlsCipherSuites", "", "Comma-separated list of TLS cipher suites (Go names from crypto/tls.CipherSuites and InsecureCipherSuites). Only applies to TLS 1.0-1.2; TLS 1.3 cipher suites are not configurable in Go. If empty, Go defaults are used.")
 	collectMetricsFlag            = flag.Bool("collectMetricsFlag", true, "Whether to collect Prometheus metrics in API server.")
 	usePipelinesKubernetesStorage = flag.Bool("pipelinesStoreKubernetes", false, "Store and run pipeline versions in Kubernetes")
 	disableWebhook                = flag.Bool("disableWebhook", false, "Set this if pipelinesStoreKubernetes is on but using a global webhook in a separate pod")
@@ -94,13 +100,79 @@ type RegisterHttpHandlerFromEndpoint func(ctx context.Context, mux *runtime.Serv
 // allows tests to supply lightweight stubs without constructing real
 // server instances.
 type HTTPRouterDeps struct {
-	UploadPipelineV1        http.HandlerFunc
-	UploadPipelineVersionV1 http.HandlerFunc
-	UploadPipeline          http.HandlerFunc
-	UploadPipelineVersion   http.HandlerFunc
-	ReadRunLogV1            http.HandlerFunc
-	ReadArtifactV1          http.HandlerFunc
-	ReadArtifact            http.HandlerFunc
+	ExportTransfer        http.HandlerFunc
+	ImportTransfer        http.HandlerFunc
+	UploadPipeline        http.HandlerFunc
+	UploadPipelineVersion http.HandlerFunc
+	ReadRunLog            http.HandlerFunc
+	ReadArtifact          http.HandlerFunc
+}
+
+func parseTLSVersion(version string) (uint16, error) {
+	switch strings.TrimSpace(version) {
+	case "", "VersionTLS12":
+		return tls.VersionTLS12, nil
+	case "VersionTLS13":
+		return tls.VersionTLS13, nil
+	default:
+		return 0, fmt.Errorf("unrecognized TLS version %q, valid values are VersionTLS12 and VersionTLS13", version)
+	}
+}
+
+func parseTLSCipherSuites(commaSeparated string) ([]uint16, error) {
+	commaSeparated = strings.TrimSpace(commaSeparated)
+	if commaSeparated == "" {
+		return nil, nil
+	}
+	allCiphers := make(map[string]uint16)
+	for _, cs := range tls.CipherSuites() {
+		allCiphers[cs.Name] = cs.ID
+	}
+	for _, cs := range tls.InsecureCipherSuites() {
+		allCiphers[cs.Name] = cs.ID
+	}
+	var ids []uint16
+	var unknown []string
+	for _, name := range strings.Split(commaSeparated, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if id, ok := allCiphers[name]; ok {
+			ids = append(ids, id)
+		} else {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) > 0 {
+		return nil, fmt.Errorf("unknown TLS cipher suite(s): %s. Use Go cipher suite names from crypto/tls.CipherSuites() or InsecureCipherSuites()", strings.Join(unknown, ", "))
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("--tlsCipherSuites was set but no cipher suites were specified")
+	}
+	return ids, nil
+}
+
+func buildTLSConfig() (*tls.Config, error) {
+	minVersion, err := parseTLSVersion(*tlsMinVersion)
+	if err != nil {
+		return nil, fmt.Errorf("invalid --tlsMinVersion: %w", err)
+	}
+	cfg := &tls.Config{
+		MinVersion: minVersion,
+		NextProtos: []string{"h2", "http/1.1"},
+	}
+	if trimmed := strings.TrimSpace(*tlsCipherSuites); trimmed != "" {
+		if cfg.MinVersion >= tls.VersionTLS13 {
+			return nil, fmt.Errorf("--tlsCipherSuites cannot be used with TLS 1.3 (cipher suites are not configurable in Go for TLS 1.3)")
+		}
+		suites, err := parseTLSCipherSuites(trimmed)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --tlsCipherSuites: %w", err)
+		}
+		cfg.CipherSuites = suites
+	}
+	return cfg, nil
 }
 
 func initCerts() (*tls.Config, error) {
@@ -118,12 +190,14 @@ func initCerts() (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	tlsCfg := &tls.Config{
-		ServerName:   common.GetMLPipelineServiceName() + "." + common.GetPodNamespace() + ".svc." + common.GetClusterDomain(),
-		Certificates: []tls.Certificate{serverCert},
+	tlsCfg, err := buildTLSConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %v", err)
 	}
-	glog.Info("TLS cert key/pair loaded.")
-	return tlsCfg, err
+	tlsCfg.ServerName = common.GetMLPipelineServiceName() + "." + common.GetPodNamespace() + ".svc." + common.GetClusterDomain()
+	tlsCfg.Certificates = []tls.Certificate{serverCert}
+	glog.Infof("TLS cert key/pair loaded (MinVersion: %s)", *tlsMinVersion)
+	return tlsCfg, nil
 }
 
 func main() {
@@ -131,6 +205,9 @@ func main() {
 
 	if err := initConfig(); err != nil {
 		glog.Fatalf("Failed to initialize config: %v", err)
+	}
+	if _, err := common.GetPipelineSizeLimits(); err != nil {
+		glog.Fatalf("Failed to initialize pipeline size limits: %v", err)
 	}
 	// check ExecutionType Settings if presents
 	if viper.IsSet(executionTypeEnv) {
@@ -231,6 +308,7 @@ func main() {
 			DefaultRunAsUser:     parseOptionalInt64(common.GetDefaultSecurityContextRunAsUser()),
 			DefaultRunAsGroup:    parseOptionalInt64(common.GetDefaultSecurityContextRunAsGroup()),
 			DefaultRunAsNonRoot:  parseOptionalBool(common.GetDefaultSecurityContextRunAsNonRoot()),
+			DefaultHostUsers:     parseOptionalBool(common.GetDefaultSecurityContextHostUsers()),
 		},
 	)
 	err = config.LoadSamples(resourceManager, *sampleConfigPath, *managedPipelinesDir)
@@ -239,7 +317,7 @@ func main() {
 	}
 
 	if !common.IsMultiUserMode() {
-		_, err = resourceManager.CreateDefaultExperiment("")
+		_, err = resourceManager.CreateDefaultExperiment(context.Background(), "")
 		if err != nil {
 			glog.Fatalf("Failed to create default experiment. Err: %v", err)
 		}
@@ -247,6 +325,24 @@ func main() {
 
 	wg.Add(1)
 	go reconcileSwfCrs(resourceManager, backgroundCtx, &wg)
+
+	// Start run GC when a retention window is configured. The collector
+	// re-validates the required database index on every tick and skips
+	// collection until the operator has applied the index migration.
+	if common.GetRunsRetentionTime() > 0 || common.GetArchivedRunsRetentionTime() > 0 {
+		runGC := gc.NewRunGarbageCollector(
+			clientManager.RunStore(),
+			clientManager.KubernetesCoreClient().GetClientSet(),
+			common.GetPodNamespace(),
+			clientManager.GarbageCollectorIndexChecker(),
+		)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runGC.Start(backgroundCtx)
+		}()
+	}
+
 	go startRPCServer(resourceManager, tlsCfg)
 	// This is blocking
 	startHTTPProxy(resourceManager, *usePipelinesKubernetesStorage, tlsCfg)
@@ -282,18 +378,53 @@ func grpcCustomMatcher(key string) (string, bool) {
 //
 // Scoped to pipeline and pipeline version update paths to avoid interfering
 // with other endpoints that may have a top-level "tags" field.
+// MaxUpdateRequestBodySize is the default request-body ceiling (32 MiB) for
+// pipeline and version updates. Operators can override it with
+// MAX_PIPELINE_UPDATE_BODY_BYTES within the validated finite range.
+const MaxUpdateRequestBodySize = 32 << 20
+
 func clearTagsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if (r.Method == http.MethodPut || r.Method == http.MethodPatch) && r.Body != nil &&
 			isPipelineUpdatePath(r.URL.Path) {
+			limits, err := common.GetPipelineSizeLimits()
+			if err != nil {
+				glog.Errorf("Invalid pipeline size-limit configuration: %v", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"code":    13, // Internal
+					"message": "Invalid server size-limit configuration; contact your administrator",
+				})
+				return
+			}
+			// Enforce the ceiling while reading, including unknown-length bodies.
+			r.Body = http.MaxBytesReader(w, r.Body, int64(limits.UpdateBodyBytes))
 			body, err := io.ReadAll(r.Body)
 			r.Body.Close()
-			if err == nil {
-				var raw map[string]json.RawMessage
-				if json.Unmarshal(body, &raw) == nil {
-					if tagsVal, hasTags := raw["tags"]; hasTags && string(tagsVal) == "{}" {
-						r.Header.Set(common.ClearTagsMetadataKey, "true")
-					}
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				var maxBytesErr *http.MaxBytesError
+				if errors.As(err, &maxBytesErr) {
+					_ = common.NewSizeLimitError("pipeline_update_body", int64(limits.UpdateBodyBytes), common.MaxPipelineUpdateBodyBytesEnv)
+					w.WriteHeader(http.StatusRequestEntityTooLarge)
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"code":    3, // InvalidArgument
+						"message": common.SizeLimitErrorMessage("pipeline_update_body", int64(limits.UpdateBodyBytes), common.MaxPipelineUpdateBodyBytesEnv),
+					})
+				} else {
+					w.WriteHeader(http.StatusBadRequest)
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"code":    3,
+						"message": "Failed to read request body",
+					})
+				}
+				return
+			}
+			var raw map[string]json.RawMessage
+			if json.Unmarshal(body, &raw) == nil {
+				if tagsVal, hasTags := raw["tags"]; hasTags && string(tagsVal) == "{}" {
+					r.Header.Set(common.ClearTagsMetadataKey, "true")
 				}
 			}
 			r.Body = io.NopCloser(bytes.NewReader(body))
@@ -303,8 +434,7 @@ func clearTagsMiddleware(next http.Handler) http.Handler {
 }
 
 // isPipelineUpdatePath returns true if the URL path matches a pipeline or
-// pipeline version update endpoint (v2beta1 only, since v1beta1 does not
-// support tags).
+// pipeline version update endpoint.
 func isPipelineUpdatePath(path string) bool {
 	// v2beta1 UpdatePipeline:        PATCH /apis/v2beta1/pipelines/{pipeline_id}
 	// v2beta1 UpdatePipelineVersion: PATCH /apis/v2beta1/pipelines/{pipeline_id}/versions/{version_id}
@@ -344,6 +474,7 @@ func startRPCServer(resourceManager *resource.ResourceManager, tlsCfg *tls.Confi
 		glog.Fatalf("Failed to start RPC server: %v", err)
 	}
 
+<<<<<<< HEAD
 	ExperimentServerV1 := server.NewExperimentServerV1(resourceManager, &server.ExperimentServerOptions{CollectMetrics: *collectMetricsFlag})
 	ExperimentServer := server.NewExperimentServer(resourceManager, &server.ExperimentServerOptions{CollectMetrics: *collectMetricsFlag})
 
@@ -383,6 +514,9 @@ func startRPCServer(resourceManager *resource.ResourceManager, tlsCfg *tls.Confi
 	apiv2beta1.RegisterRecurringRunServiceServer(s, JobServer)
 	apiv2beta1.RegisterRunServiceServer(s, RunServer)
 	apiv2beta1.RegisterReportServiceServer(s, ReportServer)
+=======
+	registerRPCServices(s, resourceManager)
+>>>>>>> upstream/master
 
 	// Register reflection service on gRPC server.
 	reflection.Register(s)
@@ -415,6 +549,7 @@ func startHTTPProxy(resourceManager *resource.ResourceManager, usePipelinesKuber
 			glog.Fatalf("%v", err)
 		}
 	}
+<<<<<<< HEAD
 	register(apiv1beta1.RegisterPipelineServiceHandlerFromEndpoint, "PipelineService")
 	register(apiv1beta1.RegisterExperimentServiceHandlerFromEndpoint, "ExperimentService")
 	register(apiv1beta1.RegisterJobServiceHandlerFromEndpoint, "JobService")
@@ -431,19 +566,22 @@ func startHTTPProxy(resourceManager *resource.ResourceManager, usePipelinesKuber
 	register(apiv2beta1.RegisterRunServiceHandlerFromEndpoint, "RunService")
 	register(apiv2beta1.RegisterReportServiceHandlerFromEndpoint, "ReportService")
 	register(apiv2beta1.RegisterArtifactServiceHandlerFromEndpoint, "ArtifactService")
+=======
+	registerGatewayServices(register)
+>>>>>>> upstream/master
 
 	sharedPipelineUploadServer := server.NewPipelineUploadServer(resourceManager, &server.PipelineUploadServerOptions{CollectMetrics: *collectMetricsFlag})
 	runLogServer := server.NewRunLogServer(resourceManager)
 	runArtifactServer := server.NewRunArtifactServer(resourceManager)
 
+	transferServer := server.NewTransferServer(resourceManager)
 	handlerDeps := HTTPRouterDeps{
-		UploadPipelineV1:        sharedPipelineUploadServer.UploadPipelineV1,
-		UploadPipelineVersionV1: sharedPipelineUploadServer.UploadPipelineVersionV1,
-		UploadPipeline:          sharedPipelineUploadServer.UploadPipeline,
-		UploadPipelineVersion:   sharedPipelineUploadServer.UploadPipelineVersion,
-		ReadRunLogV1:            runLogServer.ReadRunLogV1,
-		ReadArtifactV1:          runArtifactServer.ReadArtifactV1,
-		ReadArtifact:            runArtifactServer.ReadArtifact,
+		ExportTransfer:        transferServer.Export,
+		ImportTransfer:        transferServer.Import,
+		UploadPipeline:        sharedPipelineUploadServer.UploadPipeline,
+		UploadPipelineVersion: sharedPipelineUploadServer.UploadPipelineVersion,
+		ReadRunLog:            runLogServer.ReadRunLog,
+		ReadArtifact:          runArtifactServer.ReadArtifact,
 	}
 
 	topMux := buildHTTPRouter(handlerDeps, runtimeMux, pipelineStore)
@@ -500,16 +638,16 @@ func newHealthzResponse(pipelineStore string) healthzResponse {
 // registered. It does not start a listener, making it testable in isolation.
 func buildHTTPRouter(handlerDeps HTTPRouterDeps, grpcGatewayHandler http.Handler, pipelineStore string) *mux.Router {
 	topMux := mux.NewRouter()
+	if handlerDeps.ExportTransfer != nil {
+		topMux.HandleFunc("/apis/v2beta1/transfer/export", handlerDeps.ExportTransfer)
+	}
+	if handlerDeps.ImportTransfer != nil {
+		topMux.HandleFunc("/apis/v2beta1/transfer/import", handlerDeps.ImportTransfer)
+	}
 
 	// multipart upload is only supported in HTTP. In long term, we should have gRPC endpoints that
 	// accept pipeline url for importing.
 	// https://github.com/grpc-ecosystem/grpc-gateway/issues/410
-	// API v1beta1
-	topMux.HandleFunc("/apis/v1beta1/pipelines/upload", handlerDeps.UploadPipelineV1)
-	topMux.HandleFunc("/apis/v1beta1/pipelines/upload_version", handlerDeps.UploadPipelineVersionV1)
-	topMux.HandleFunc("/apis/v1beta1/healthz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSONResponse(w, newHealthzResponse(""))
-	})
 	// API v2beta1
 	topMux.HandleFunc("/apis/v2beta1/pipelines/upload", handlerDeps.UploadPipeline)
 	topMux.HandleFunc("/apis/v2beta1/pipelines/upload_version", handlerDeps.UploadPipelineVersion)
@@ -518,10 +656,9 @@ func buildHTTPRouter(handlerDeps HTTPRouterDeps, grpcGatewayHandler http.Handler
 	})
 
 	// log streaming is provided via HTTP.
-	topMux.HandleFunc("/apis/v1alpha1/runs/{run_id}/nodes/{node_id}/log", handlerDeps.ReadRunLogV1)
+	topMux.HandleFunc("/apis/v2beta1/runs/{run_id}/nodes/{node_id}/log", handlerDeps.ReadRunLog).Methods(http.MethodGet)
 
 	// Artifact reading endpoints (implemented with streaming for memory efficiency)
-	topMux.HandleFunc("/apis/v1beta1/runs/{run_id}/nodes/{node_id}/artifacts/{artifact_name}:read", handlerDeps.ReadArtifactV1).Methods(http.MethodGet)
 	topMux.HandleFunc("/apis/v2beta1/runs/{run_id}/nodes/{node_id}/artifacts/{artifact_name}:read", handlerDeps.ReadArtifact).Methods(http.MethodGet)
 
 	topMux.PathPrefix("/apis/").Handler(clearTagsMiddleware(grpcGatewayHandler))
@@ -548,9 +685,15 @@ func startWebhook(client ctrlclient.Client, clientNoCahe ctrlclient.Client, wg *
 	topMux.Handle("/webhooks/validate-pipelineversion", pvValidateWebhook)
 	topMux.Handle("/webhooks/mutate-pipelineversion", pvMutateWebhook)
 
+	tlsConfig, err := buildTLSConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %v", err)
+	}
+
 	webhookServer := &http.Server{
-		Addr:    *webhookPortFlag,
-		Handler: topMux,
+		Addr:      *webhookPortFlag,
+		Handler:   topMux,
+		TLSConfig: tlsConfig,
 	}
 
 	go func() {
@@ -645,18 +788,39 @@ func initConfig() error {
 		glog.Fatalf("Invalid plugin limits configuration: %v", err)
 	}
 
+	if err := validateServiceAccountAuthorizationMode(); err != nil {
+		return err
+	}
+	if err := common.InitializeWorkflowIdentityMode(); err != nil {
+		return err
+	}
+
 	// Watch for configuration change
 	viper.WatchConfig()
 	viper.OnConfigChange(func(e fsnotify.Event) {
 		if err := viper.ReadInConfig(); err != nil {
 			glog.Errorf("Failed to reload config: %v", err)
 		}
+		if err := common.InitializeWorkflowIdentityMode(); err != nil {
+			glog.Fatalf("Invalid workflow identity configuration: %v", err)
+		}
 		if _, err := common.GetPluginLimitsConfig(); err != nil {
 			glog.Fatalf("Invalid plugin limits configuration: %v", err)
+		}
+		if err := validateServiceAccountAuthorizationMode(); err != nil {
+			glog.Fatalf("Invalid service-account authorization configuration: %v", err)
 		}
 	})
 
 	proxy.InitializeConfigWithEnv()
+
+	// Initialize driver pod configuration after Viper config is loaded.
+	// This loads and caches the configuration to catch errors at startup.
+	// Note: driver pod config is intentionally NOT reloaded on config file change;
+	// an API server restart is required for changes to take effect.
+	if err := common.InitDriverPodConfig(); err != nil {
+		return fmt.Errorf("driver pod config: %w", err)
+	}
 	return nil
 }
 
@@ -712,4 +876,49 @@ func getPVCSpec() (*corev1.PersistentVolumeClaimSpec, error) {
 	}
 
 	return &pvcSpec, nil
+}
+
+// registerRPCServices wires the API server's v2 gRPC service implementations
+// onto the shared gRPC server.
+func registerRPCServices(s *grpc.Server, resourceManager *resource.ResourceManager) {
+	ExperimentServer := server.NewExperimentServer(resourceManager, &server.ExperimentServerOptions{CollectMetrics: *collectMetricsFlag})
+
+	PipelineServer := server.NewPipelineServer(resourceManager, &server.PipelineServerOptions{CollectMetrics: *collectMetricsFlag})
+
+	RunServer := server.NewRunServer(resourceManager, &server.RunServerOptions{CollectMetrics: *collectMetricsFlag})
+
+	JobServer := server.NewJobServer(resourceManager, &server.JobServerOptions{CollectMetrics: *collectMetricsFlag})
+
+	ReportServer := server.NewReportServer(resourceManager)
+
+	ArtifactServer := server.NewArtifactServer(resourceManager)
+
+	apiv2beta1.RegisterAuthServiceServer(s, server.NewAuthServer(resourceManager))
+	apiv2beta1.RegisterExperimentServiceServer(s, ExperimentServer)
+	apiv2beta1.RegisterPipelineServiceServer(s, PipelineServer)
+	apiv2beta1.RegisterRecurringRunServiceServer(s, JobServer)
+	apiv2beta1.RegisterRunServiceServer(s, RunServer)
+	apiv2beta1.RegisterReportServiceServer(s, ReportServer)
+	apiv2beta1.RegisterArtifactServiceServer(s, ArtifactServer)
+}
+
+func registerGatewayServices(register func(RegisterHttpHandlerFromEndpoint, string)) {
+	register(apiv2beta1.RegisterAuthServiceHandlerFromEndpoint, "AuthService")
+	register(apiv2beta1.RegisterExperimentServiceHandlerFromEndpoint, "ExperimentService")
+	register(apiv2beta1.RegisterPipelineServiceHandlerFromEndpoint, "PipelineService")
+	register(apiv2beta1.RegisterRecurringRunServiceHandlerFromEndpoint, "RecurringRunService")
+	register(apiv2beta1.RegisterRunServiceHandlerFromEndpoint, "RunService")
+	register(apiv2beta1.RegisterReportServiceHandlerFromEndpoint, "ReportService")
+	register(apiv2beta1.RegisterArtifactServiceHandlerFromEndpoint, "ArtifactService")
+}
+
+func validateServiceAccountAuthorizationMode() error {
+	mode, err := common.GetServiceAccountAuthorizationMode()
+	if err != nil {
+		return err
+	}
+	if mode == "audit" {
+		glog.Warning("KFP_SECURITY_SERVICE_ACCOUNT_MODE=audit: service-account policy denials are allowed; this restores the security exposure addressed by service-account authorization. Migrate to enforce before 3.0.0, when audit mode is planned for removal (https://github.com/kubeflow/pipelines/issues/14367).")
+	}
+	return nil
 }

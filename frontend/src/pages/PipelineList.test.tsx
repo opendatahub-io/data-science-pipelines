@@ -21,7 +21,7 @@ import { range } from 'lodash';
 import { RoutePage, RouteParams } from 'src/components/Router';
 import { Apis } from 'src/lib/Apis';
 import { ButtonKeys } from 'src/lib/Buttons';
-import TestUtils from 'src/TestUtils';
+import TestUtils, { flushPromisesInAct } from 'src/TestUtils';
 import { PageProps } from './Page';
 import PipelineList from './PipelineList';
 import { CommonTestWrapper } from 'src/TestWrapper';
@@ -180,7 +180,7 @@ describe('PipelineList', () => {
         <PipelineList ref={pipelineListRef} {...props} namespace={options?.namespace} />
       </CommonTestWrapper>,
     );
-    await TestUtils.flushPromises();
+    await flushPromisesInAct();
     await waitForPipelinesLoad();
   }
 
@@ -188,7 +188,7 @@ describe('PipelineList', () => {
     await waitFor(() => {
       expect(listPipelinesSpy).toHaveBeenCalled();
     });
-    await TestUtils.flushPromises();
+    await flushPromisesInAct();
   }
 
   async function mountWithNPipelines(n: number, options?: { namespace?: string }) {
@@ -211,6 +211,28 @@ describe('PipelineList', () => {
   afterEach(() => {
     pipelineListRef = null;
     vi.resetAllMocks();
+  });
+
+  it('opens namespace transfer from the accessible More actions menu', async () => {
+    await renderPipelineList();
+    const trigger = screen.getByRole('button', { name: 'More actions' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+    await userEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const item = screen.getByRole('menuitem', { name: 'Import / export namespace data…' });
+    expect(item).toHaveAttribute('href', RoutePage.METADATA_TRANSFER);
+    await userEvent.click(item);
+    await waitFor(() => expect(screen.queryByRole('menuitem')).not.toBeInTheDocument());
+  });
+
+  it('closes More actions with Escape and returns focus to its trigger', async () => {
+    await renderPipelineList();
+    const trigger = screen.getByRole('button', { name: 'More actions' });
+    await userEvent.click(trigger);
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menuitem')).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
   });
 
   it('renders an empty list with empty state message', async () => {
@@ -706,7 +728,7 @@ describe('PipelineList', () => {
     await waitFor(() => {
       expect(deletePipelineVersionSpy).toHaveBeenCalledTimes(2);
     });
-    await TestUtils.flushPromises();
+    await flushPromisesInAct();
 
     expect(updateSnackbarSpy).not.toHaveBeenCalled();
     expect(updateDialogSpy).toHaveBeenCalledTimes(1);

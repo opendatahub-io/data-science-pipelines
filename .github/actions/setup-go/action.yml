@@ -3,6 +3,7 @@ description: "Installs Go from Red Hat go-toolset image (includes FIPS support)"
 runs:
   using: composite
   steps:
+<<<<<<< HEAD
     - name: Extract Go from go-toolset
       shell: bash
       env:
@@ -22,6 +23,10 @@ runs:
       run: go version
     - name: Cache Go modules and build cache
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+=======
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+>>>>>>> upstream/master
       with:
         path: |
           ~/go/pkg/mod
