@@ -1,6 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
+<<<<<<< HEAD
   generateName: container-with-if-placeholder-default-
 spec:
   arguments:
@@ -13,6 +14,13 @@ spec:
         \"Else\": \"--no-dataset\"}}"],"image":"registry.access.redhat.com/ubi9/python-311:latest"}'
     - name: components-root
       value: '{"dag":{"tasks":{"container-with-if-placeholder-default":{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-container-with-if-placeholder-default"},"taskInfo":{"name":"container-with-if-placeholder-default"}}}}}'
+=======
+  annotations:
+    workflows.argoproj.io/pod-name-format: v1
+  generateName: container-with-if-placeholder-default-
+spec:
+  arguments: {}
+>>>>>>> upstream/master
   entrypoint: entrypoint
   podMetadata:
     annotations:
@@ -37,6 +45,7 @@ spec:
       - '{{workflow.name}}'
       - --run_display_name
       - ""
+<<<<<<< HEAD
       - --dag_execution_id
       - '{{inputs.parameters.parent-dag-id}}'
       - --component
@@ -47,6 +56,12 @@ spec:
       - '{{inputs.parameters.task-name}}'
       - --container
       - '{{inputs.parameters.container}}'
+=======
+      - --parent_task_id
+      - '{{inputs.parameters.parent-dag-task-id}}'
+      - --task_name
+      - '{{inputs.parameters.task-name}}'
+>>>>>>> upstream/master
       - --iteration_index
       - '{{inputs.parameters.iteration-index}}'
       - --cached_decision_path
@@ -57,6 +72,11 @@ spec:
       - '{{outputs.parameters.condition.path}}'
       - --kubernetes_config
       - '{{inputs.parameters.kubernetes-config}}'
+<<<<<<< HEAD
+=======
+      - --namespace
+      - $(NAMESPACE)
+>>>>>>> upstream/master
       - --http_proxy
       - ""
       - --https_proxy
@@ -67,10 +87,21 @@ spec:
       - ml-pipeline.kubeflow.svc.cluster.local
       - --ml_pipeline_server_port
       - "8887"
+<<<<<<< HEAD
       - --mlmd_server_address
       - metadata-grpc-service.kubeflow.svc.cluster.local
       - --mlmd_server_port
       - "8080"
+=======
+      - --cache_disabled=false
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
+      - --ml_pipeline_tls_enabled=false
+      - --ca_cert_path
+      - ""
+>>>>>>> upstream/master
       command:
       - driver
       env:
@@ -82,6 +113,13 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.uid
+<<<<<<< HEAD
+=======
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+>>>>>>> upstream/master
       image: ghcr.io/kubeflow/kfp-driver:latest
       name: ""
       resources:
@@ -99,6 +137,7 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+<<<<<<< HEAD
     inputs:
       parameters:
       - name: component
@@ -106,6 +145,20 @@ spec:
       - name: container
       - name: task-name
       - name: parent-dag-id
+=======
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
+    inputs:
+      parameters:
+      - name: task-name
+      - name: parent-dag-task-id
+>>>>>>> upstream/master
       - default: "-1"
         name: iteration-index
       - default: ""
@@ -136,6 +189,21 @@ spec:
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
+<<<<<<< HEAD
+=======
+    volumes:
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
+>>>>>>> upstream/master
   - dag:
       tasks:
       - arguments:
@@ -150,6 +218,11 @@ spec:
       - name: pod-spec-patch
       - default: "false"
         name: cached-decision
+<<<<<<< HEAD
+=======
+      - default: "-1"
+        name: iteration-index
+>>>>>>> upstream/master
     metadata: {}
     name: system-container-executor
     outputs: {}
@@ -165,10 +238,17 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.uid
+<<<<<<< HEAD
       envFrom:
       - configMapRef:
           name: metadata-grpc-configmap
           optional: true
+=======
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+>>>>>>> upstream/master
       image: gcr.io/ml-pipeline/should-be-overridden-during-runtime
       name: ""
       resources: {}
@@ -179,9 +259,19 @@ spec:
           - ALL
         seccompProfile:
           type: RuntimeDefault
+<<<<<<< HEAD
       volumeMounts:
       - mountPath: /kfp-launcher
         name: kfp-launcher
+=======
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+      - mountPath: /kfp-launcher
+        name: kfp-launcher
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
+>>>>>>> upstream/master
       - mountPath: /gcs
         name: gcs-scratch
       - mountPath: /s3
@@ -194,6 +284,12 @@ spec:
         name: dot-cache-scratch
       - mountPath: /.config
         name: dot-config-scratch
+<<<<<<< HEAD
+=======
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
+>>>>>>> upstream/master
     initContainers:
     - args:
       - --copy
@@ -216,6 +312,10 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+<<<<<<< HEAD
+=======
+      terminationMessagePolicy: FallbackToLogsOnError
+>>>>>>> upstream/master
       volumeMounts:
       - mountPath: /kfp-launcher
         name: kfp-launcher
@@ -237,6 +337,16 @@ spec:
     volumes:
     - emptyDir: {}
       name: kfp-launcher
+<<<<<<< HEAD
+=======
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
+>>>>>>> upstream/master
     - emptyDir: {}
       name: gcs-scratch
     - emptyDir: {}
@@ -249,10 +359,18 @@ spec:
       name: dot-cache-scratch
     - emptyDir: {}
       name: dot-config-scratch
+<<<<<<< HEAD
+=======
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
+>>>>>>> upstream/master
   - dag:
       tasks:
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-07061110db156c25345008b7cb59f43a8df744cc7f20ada43ebd2285121eff41}}'
           - name: task
@@ -263,6 +381,12 @@ spec:
             value: container-with-if-placeholder-default
           - name: parent-dag-id
             value: '{{inputs.parameters.parent-dag-id}}'
+=======
+          - name: task-name
+            value: container-with-if-placeholder-default
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
+>>>>>>> upstream/master
         name: container-with-if-placeholder-default-driver
         template: system-container-driver
       - arguments:
@@ -277,7 +401,11 @@ spec:
         template: system-container-executor
     inputs:
       parameters:
+<<<<<<< HEAD
       - name: parent-dag-id
+=======
+      - name: parent-dag-task-id
+>>>>>>> upstream/master
     metadata: {}
     name: root
     outputs: {}
@@ -293,24 +421,39 @@ spec:
       - '{{workflow.name}}'
       - --run_display_name
       - ""
+<<<<<<< HEAD
       - --dag_execution_id
       - '{{inputs.parameters.parent-dag-id}}'
       - --component
       - '{{inputs.parameters.component}}'
       - --task
       - '{{inputs.parameters.task}}'
+=======
+      - --parent_task_id
+      - '{{inputs.parameters.parent-dag-task-id}}'
+>>>>>>> upstream/master
       - --task_name
       - '{{inputs.parameters.task-name}}'
       - --runtime_config
       - '{{inputs.parameters.runtime-config}}'
       - --iteration_index
       - '{{inputs.parameters.iteration-index}}'
+<<<<<<< HEAD
       - --execution_id_path
       - '{{outputs.parameters.execution-id.path}}'
+=======
+      - --parent_task_id_path
+      - '{{outputs.parameters.parent-dag-task-id-path.path}}'
+>>>>>>> upstream/master
       - --iteration_count_path
       - '{{outputs.parameters.iteration-count.path}}'
       - --condition_path
       - '{{outputs.parameters.condition.path}}'
+<<<<<<< HEAD
+=======
+      - --namespace
+      - $(NAMESPACE)
+>>>>>>> upstream/master
       - --http_proxy
       - ""
       - --https_proxy
@@ -321,12 +464,38 @@ spec:
       - ml-pipeline.kubeflow.svc.cluster.local
       - --ml_pipeline_server_port
       - "8887"
+<<<<<<< HEAD
       - --mlmd_server_address
       - metadata-grpc-service.kubeflow.svc.cluster.local
       - --mlmd_server_port
       - "8080"
       command:
       - driver
+=======
+      - --cache_disabled=false
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
+      - --ml_pipeline_tls_enabled=false
+      - --ca_cert_path
+      - ""
+      command:
+      - driver
+      env:
+      - name: KFP_POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: KFP_POD_UID
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.uid
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+>>>>>>> upstream/master
       image: ghcr.io/kubeflow/kfp-driver:latest
       name: ""
       resources:
@@ -344,6 +513,7 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+<<<<<<< HEAD
     inputs:
       parameters:
       - name: component
@@ -355,6 +525,24 @@ spec:
         name: task-name
       - default: "0"
         name: parent-dag-id
+=======
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
+    inputs:
+      parameters:
+      - default: ""
+        name: runtime-config
+      - default: ""
+        name: task-name
+      - default: ""
+        name: parent-dag-task-id
+>>>>>>> upstream/master
       - default: "-1"
         name: iteration-index
       - default: DAG
@@ -368,9 +556,15 @@ spec:
     name: system-dag-driver
     outputs:
       parameters:
+<<<<<<< HEAD
       - name: execution-id
         valueFrom:
           path: /tmp/outputs/execution-id
+=======
+      - name: parent-dag-task-id-path
+        valueFrom:
+          path: /tmp/outputs/task-id
+>>>>>>> upstream/master
       - name: iteration-count
         valueFrom:
           default: "0"
@@ -383,12 +577,30 @@ spec:
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
+<<<<<<< HEAD
+=======
+    volumes:
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
+>>>>>>> upstream/master
   - dag:
       tasks:
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: component
             value: '{{workflow.parameters.components-root}}'
+=======
+>>>>>>> upstream/master
           - name: runtime-config
             value: '{}'
           - name: driver-type
@@ -397,8 +609,13 @@ spec:
         template: system-dag-driver
       - arguments:
           parameters:
+<<<<<<< HEAD
           - name: parent-dag-id
             value: '{{tasks.root-driver.outputs.parameters.execution-id}}'
+=======
+          - name: parent-dag-task-id
+            value: '{{tasks.root-driver.outputs.parameters.parent-dag-task-id-path}}'
+>>>>>>> upstream/master
           - name: condition
             value: ""
         depends: root-driver.Succeeded

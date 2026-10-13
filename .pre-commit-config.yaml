@@ -1,24 +1,24 @@
-exclude: ^backend/api/(v1beta1|v2beta1)/python_http_client/
+exclude: ^(backend/api/v2beta1/python_http_client/|sdk/python/kfp/server_api/|sdk/python/kfp/(pipeline_spec/pipeline_spec|kubernetes/kubernetes_executor_config)_pb2\.py$)
 
 repos:
   # other fast helpful checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.3.0
+    rev: v6.0.0
     hooks:
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-json
       - id: end-of-file-fixer
       - id: trailing-whitespace
-        exclude: ^manifests/gcp_marketplace/test/*
+        # Snapshot whitespace represents rendered text and is owned by Vitest.
+        exclude: (^manifests/gcp_marketplace/test/|^frontend/.*\.snap$)
       - id: debug-statements
       - id: check-merge-conflict
       - id: name-tests-test
-      - id: double-quote-string-fixer
       - id: no-commit-to-branch
         args: [--branch, master]
   - repo: https://github.com/PyCQA/flake8
-    rev: 7.1.1
+    rev: 7.4.1
     hooks:
       - id: flake8
         args:
@@ -28,26 +28,45 @@ repos:
   # add comment "noqa" to ignore an import that should not be removed
   # (e.g., for an import with desired side-effects)
   - repo: https://github.com/hadialqattan/pycln
-    rev: v2.5.0
+    rev: v2.6.0
     hooks:
       - id: pycln
         name: pycln
         language: python
         entry: pycln --all
+<<<<<<< HEAD
         exclude: ^kubernetes_platform/python/kfp/kubernetes/kubernetes_executor_config_pb2\.py$
   - repo: https://github.com/pycqa/isort
     rev: 5.11.5
+=======
+        exclude: ^sdk/python/kfp/kubernetes/kubernetes_executor_config_pb2\.py$
+  - repo: local
+>>>>>>> upstream/master
     hooks:
       - id: isort
         name: isort
         entry: isort --profile google
+<<<<<<< HEAD
         exclude: ^kubernetes_platform/python/kfp/kubernetes/kubernetes_executor_config_pb2\.py$
+=======
+        language: python
+        additional_dependencies: ['isort==5.10.1']
+        require_serial: true
+        types_or: [cython, pyi, python]
+        args: ['--filter-files']
+        exclude: ^sdk/python/kfp/kubernetes/kubernetes_executor_config_pb2\.py$
+>>>>>>> upstream/master
   - repo: https://github.com/google/yapf
-    rev: "v0.40.2"
+    rev: "v0.43.0"
     hooks:
       - id: yapf
+<<<<<<< HEAD
         exclude: ^kubernetes_platform/python/kfp/kubernetes/kubernetes_executor_config_pb2\.py$
+=======
+        exclude: ^sdk/python/kfp/kubernetes/kubernetes_executor_config_pb2\.py$
+>>>>>>> upstream/master
   - repo: https://github.com/pycqa/docformatter
+    # v1.7.8 corrupts continuation and blank-line tokens, conflicting with YAPF.
     rev: v1.7.7
     hooks:
       - id: docformatter
@@ -56,30 +75,31 @@ repos:
         entry: docformatter -i -r
         # docformatter messes up certain sphinx link formatting.
         # The kubernetes_platform/python docstrings are heavy on links, so ignore.
-        exclude: (sdk/python/kfp/compiler/compiler_test.py|kubernetes_platform/python/)
+        exclude: (sdk/python/kfp/compiler/compiler_test.py|sdk/python/kfp/kubernetes/|kubernetes_platform/python/)
 
   # Golang pre-submit hooks
   - repo: https://github.com/golangci/golangci-lint
-    rev: v2.10.1
+    rev: v2.14.0
     hooks:
       - id: golangci-lint
         name: golangci-lint
         description: Fast linters runner for Go.
-        entry: golangci-lint run --new-from-rev HEAD --fix
+        entry: >-
+          bash -c 'base="${PRE_COMMIT_FROM_REF:-HEAD}";
+          if git diff --quiet "${base}" -- "*.go"; then
+            golangci-lint config verify &&
+            golangci-lint run ./backend/src/common/plugins;
+          else
+            golangci-lint run --new-from-rev "${base}" --fix;
+          fi'
         types: [go]
         language: golang
         require_serial: true
         pass_filenames: false
-      - id: golangci-lint
-        name: golangci-lint fmt
-        description: Formatter for Go.
-        entry: golangci-lint fmt
-        types: [go]
-        language: golang
-        require_serial: true
-        pass_filenames: false
+      - id: golangci-lint-fmt
+        pass_filenames: true
+      - id: golangci-lint-config-verify
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.9
+    rev: v1.7.12
     hooks:
       - id: actionlint
-    types: ["yml", "yaml"]

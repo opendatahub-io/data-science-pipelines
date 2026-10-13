@@ -212,14 +212,25 @@ func TestBackwardCompat_ListPipelineVersions_MixedCRs(t *testing.T) {
 	assert.Contains(t, names, "new-style-version")
 }
 
+<<<<<<< HEAD
 func TestBackwardCompat_GetLatestPipelineVersion_MixedCRs(t *testing.T) {
+=======
+func TestBackwardCompat_GetDefaultPipelineVersion_MixedCRs(t *testing.T) {
+>>>>>>> upstream/master
 	podNamespace := viper.Get("POD_NAMESPACE")
 	viper.Set("POD_NAMESPACE", "Test")
 	defer viper.Set("POD_NAMESPACE", podNamespace)
 
+<<<<<<< HEAD
 	store := NewPipelineStoreKubernetes(getClient())
 
 	// Create a new-style version (will have a later creation timestamp)
+=======
+	k8sClient, k8sClientNoCache := getClient()
+	store := NewPipelineStoreKubernetes(k8sClient, k8sClientNoCache)
+
+	// Create a new-style version alongside the pre-seeded legacy "test-pipeline-version-3".
+>>>>>>> upstream/master
 	_, err := store.CreatePipelineVersion(&model.PipelineVersion{
 		Name:         "new-latest-version",
 		PipelineId:   DefaultFakePipelineIdTwo,
@@ -227,7 +238,28 @@ func TestBackwardCompat_GetLatestPipelineVersion_MixedCRs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+<<<<<<< HEAD
 	latest, err := store.GetLatestPipelineVersion(DefaultFakePipelineIdTwo)
+=======
+	// The fake client leaves creationTimestamp at zero, so stamp the new version to make it
+	// genuinely newer than the legacy CR rather than relying on list ordering.
+	ctx := context.Background()
+	versions := &v2beta1.PipelineVersionList{}
+	require.NoError(t, k8sClient.List(ctx, versions, client.InNamespace("Test")))
+
+	stamped := false
+	for i := range versions.Items {
+		if versions.Items[i].Spec.VersionName != "new-latest-version" {
+			continue
+		}
+		versions.Items[i].CreationTimestamp = metav1.Unix(1700000000, 0)
+		require.NoError(t, k8sClient.Update(ctx, &versions.Items[i]))
+		stamped = true
+	}
+	require.True(t, stamped, "expected the newly created pipeline version to be present")
+
+	latest, err := store.GetDefaultPipelineVersion(DefaultFakePipelineIdTwo)
+>>>>>>> upstream/master
 	require.NoError(t, err)
 	assert.Equal(t, "new-latest-version", latest.Name)
 }

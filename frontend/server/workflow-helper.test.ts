@@ -11,19 +11,28 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import { PassThrough } from 'stream';
+import { text as readStreamText } from 'stream/consumers';
 import { Client as MinioClient } from 'minio';
 import {
   createPodLogsMinioRequestConfig,
   composePodLogsStreamHandler,
   getPodLogsStreamFromK8s,
-  getPodLogsStreamFromWorkflow,
+  createPodLogsStreamFromWorkflow,
+  getPodLogsMinioRequestConfigfromWorkflow,
   toGetPodLogsStream,
   getKeyFormatFromArtifactRepositories,
 } from './workflow-helper.js';
-import { getK8sSecret, getArgoWorkflow, getPodLogs, getConfigMap } from './k8s-helper.js';
+import {
+  getK8sSecret,
+  getArgoWorkflow,
+  getPodLogs,
+  getConfigMap,
+  getServerNamespace,
+} from './k8s-helper.js';
 import { V1ConfigMap, V1ObjectMeta } from '@kubernetes/client-node';
+import * as minioHelper from './minio-helper.js';
 
 vi.mock('minio');
 vi.mock('./k8s-helper');
@@ -153,6 +162,32 @@ describe('workflow-helper', () => {
       expect(mockedGetConfigMap).toBeCalledTimes(1);
       expect(res).toEqual('foo');
     });
+
+    it('resolves a keyFormat inherited through a YAML merge key.', async () => {
+      const artifactRepositories = {
+        'artifact-repositories':
+          'common: &common\n' +
+          '  keyFormat: inherited-format\n' +
+          '  insecure: true\n' +
+          's3:\n' +
+          '  <<: *common\n' +
+          '  bucket: mlpipeline\n',
+      };
+
+      const mockedConfigMap: V1ConfigMap = {
+        apiVersion: 'v1',
+        kind: 'ConfigMap',
+        metadata: new V1ObjectMeta(),
+        data: artifactRepositories,
+        binaryData: {},
+      };
+
+      const mockedGetConfigMap: Mock = getConfigMap as any;
+      mockedGetConfigMap.mockResolvedValueOnce([mockedConfigMap, undefined]);
+      const res = await getKeyFormatFromArtifactRepositories('');
+      expect(mockedGetConfigMap).toBeCalledTimes(1);
+      expect(res).toEqual('inherited-format');
+    });
   });
 
   describe('createPodLogsMinioRequestConfig', () => {
@@ -179,7 +214,230 @@ describe('workflow-helper', () => {
     });
   });
 
-  describe('getPodLogsStreamFromWorkflow', () => {
+  describe('createPodLogsStreamFromWorkflow', () => {
+    const getPodLogsStreamFromWorkflow = createPodLogsStreamFromWorkflow([
+      'http://seaweedfs.kubeflow',
+    ]);
+
+    beforeEach(() => {
+      vi.spyOn(minioHelper, 'createMinioClient');
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    });
+
+    function workflowWithEndpoint(endpoint: string, insecure: boolean | undefined = true) {
+      return {
+        status: {
+          artifactRepositoryRef: {
+            artifactRepository: {
+              archiveLogs: true,
+              s3: {
+                accessKeySecret: { key: 'accessKey', name: 'accessKeyName' },
+                bucket: 'bucket',
+                endpoint,
+                insecure,
+                key: 'prefix/some-artifact.csv',
+                secretKeySecret: { key: 'secretKey', name: 'secretKeyName' },
+              },
+            },
+          },
+          nodes: {
+            'workflow-name-abc': {
+              outputs: {
+                artifacts: [{ name: 'main-logs', s3: { key: 'prefix/main.log' } }],
+              },
+            },
+          },
+        },
+      };
+    }
+
+    describe.each(['my-user-namespace', 'kubeflow', undefined])(
+      'artifact endpoint policy with namespace %s',
+      (namespace) => {
+        it.each([
+          ['169.254.169.254', true],
+          ['127.0.0.1:8080', true],
+          ['kubernetes.default.svc:443', false],
+          ['untrusted.example.com', true],
+          ['seaweedfs.kubeflow:9001', true],
+          ['seaweedfs.kubeflow', false],
+        ])(
+          'rejects untrusted endpoint %s (insecure=%s) before credentials or clients',
+          async (endpoint, insecure) => {
+            vi.mocked(getArgoWorkflow).mockResolvedValueOnce(
+              workflowWithEndpoint(endpoint, insecure),
+            );
+            vi.mocked(getServerNamespace).mockReturnValue('kubeflow');
+            vi.mocked(getK8sSecret).mockResolvedValue('someSecret');
+            vi.stubEnv('MINIO_ACCESS_KEY', 'server-access-key');
+            vi.stubEnv('MINIO_SECRET_KEY', 'server-secret-key');
+
+            await expect(
+              getPodLogsStreamFromWorkflow(
+                'workflow-name-system-container-impl-abc',
+                '2024-07-09',
+                namespace,
+              ),
+            ).rejects.toThrow(
+              'Artifact store endpoint is not allowed; add its exact origin to ALLOWED_ARTIFACT_ENDPOINTS',
+            );
+
+            expect(getK8sSecret).not.toHaveBeenCalled();
+            expect(minioHelper.createMinioClient).not.toHaveBeenCalled();
+            expect(MinioClient).not.toHaveBeenCalled();
+          },
+        );
+      },
+    );
+
+    it('rejects workflow origins when no trusted endpoints are supplied', async () => {
+      vi.mocked(getArgoWorkflow).mockResolvedValueOnce(
+        workflowWithEndpoint('seaweedfs.kubeflow', true),
+      );
+      vi.mocked(getServerNamespace).mockReturnValue('kubeflow');
+
+      await expect(
+        getPodLogsMinioRequestConfigfromWorkflow(
+          'workflow-name-system-container-impl-abc',
+          '2024-07-09',
+          'kubeflow',
+        ),
+      ).rejects.toThrow('Artifact store endpoint is not allowed');
+
+      expect(getK8sSecret).not.toHaveBeenCalled();
+      expect(minioHelper.createMinioClient).not.toHaveBeenCalled();
+      expect(MinioClient).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['http://seaweedfs.kubeflow', false],
+      ['https://seaweedfs.kubeflow', true],
+      ['http://user@seaweedfs.kubeflow', true],
+      ['seaweedfs.kubeflow/path', true],
+      ['seaweedfs.kubeflow:9000suffix', true],
+      ['seaweedfs.kubeflow', 'false'],
+    ])(
+      'rejects invalid endpoint %s (insecure=%s) before credentials or clients',
+      async (endpoint, insecure) => {
+        vi.mocked(getArgoWorkflow).mockResolvedValueOnce(
+          workflowWithEndpoint(endpoint, insecure as boolean),
+        );
+        vi.mocked(getServerNamespace).mockReturnValue('kubeflow');
+
+        await expect(
+          getPodLogsStreamFromWorkflow(
+            'workflow-name-system-container-impl-abc',
+            '2024-07-09',
+            'kubeflow',
+          ),
+        ).rejects.toThrow(
+          'Artifact store endpoint must be a valid HTTP(S) origin consistent with insecure',
+        );
+
+        expect(getK8sSecret).not.toHaveBeenCalled();
+        expect(minioHelper.createMinioClient).not.toHaveBeenCalled();
+        expect(MinioClient).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      {
+        endpoint: 'SEAWEEDFS.KUBEFLOW:80',
+        insecure: true,
+        expectedHost: 'seaweedfs.kubeflow',
+        expectedPort: 80,
+        trustedEndpoints: ['http://seaweedfs.kubeflow'],
+      },
+      {
+        endpoint: 'seaweedfs.kubeflow',
+        insecure: false,
+        expectedHost: 'seaweedfs.kubeflow',
+        expectedPort: 443,
+        trustedEndpoints: ['https://seaweedfs.kubeflow:443'],
+      },
+      {
+        endpoint: 'seaweedfs.kubeflow:9000',
+        insecure: true,
+        expectedHost: 'seaweedfs.kubeflow',
+        expectedPort: 9000,
+        trustedEndpoints: ['http://seaweedfs.kubeflow:9000'],
+      },
+      {
+        endpoint: 'seaweedfs.kubeflow:9443',
+        insecure: false,
+        expectedHost: 'seaweedfs.kubeflow',
+        expectedPort: 9443,
+        trustedEndpoints: ['https://seaweedfs.kubeflow:9443'],
+      },
+      {
+        endpoint: 'OBJECTS.EXAMPLE.COM:443',
+        insecure: false,
+        expectedHost: 'objects.example.com',
+        expectedPort: 443,
+        trustedEndpoints: ['http://seaweedfs.kubeflow', 'https://objects.example.com'],
+      },
+      {
+        endpoint: 'objects.example.com',
+        insecure: true,
+        expectedHost: 'objects.example.com',
+        expectedPort: 80,
+        trustedEndpoints: ['http://seaweedfs.kubeflow', 'http://objects.example.com:80'],
+      },
+      {
+        endpoint: 'objects.example.com:9443',
+        insecure: false,
+        expectedHost: 'objects.example.com',
+        expectedPort: 9443,
+        trustedEndpoints: ['http://seaweedfs.kubeflow', 'https://objects.example.com:9443'],
+      },
+      {
+        endpoint: 'objects.example.com',
+        insecure: undefined,
+        expectedHost: 'objects.example.com',
+        expectedPort: 443,
+        trustedEndpoints: ['https://objects.example.com'],
+      },
+    ])(
+      'retrieves logs from trusted origin $endpoint (insecure=$insecure)',
+      async ({ endpoint, insecure, expectedHost, expectedPort, trustedEndpoints }) => {
+        vi.stubEnv('MINIO_ACCESS_KEY', 'server-access-key');
+        vi.stubEnv('MINIO_SECRET_KEY', 'server-secret-key');
+        const workflow = workflowWithEndpoint(endpoint, insecure);
+        if (insecure === undefined) {
+          delete workflow.status.artifactRepositoryRef.artifactRepository.s3.insecure;
+        }
+        vi.mocked(getArgoWorkflow).mockResolvedValueOnce(workflow);
+        vi.mocked(getServerNamespace).mockReturnValue('kubeflow');
+        const objStream = new PassThrough();
+        objStream.end('archived logs');
+        MinioClient.prototype.getObject = vi.fn().mockResolvedValueOnce(objStream) as any;
+
+        const stream = await createPodLogsStreamFromWorkflow(trustedEndpoints)(
+          'workflow-name-system-container-impl-abc',
+          '2024-07-09',
+          'my-user-namespace',
+        );
+
+        expect(getK8sSecret).not.toHaveBeenCalled();
+        expect(minioHelper.createMinioClient).toHaveBeenCalledExactlyOnceWith(
+          {
+            accessKey: 'server-access-key',
+            endPoint: expectedHost,
+            port: expectedPort,
+            secretKey: 'server-secret-key',
+            useSSL: !insecure,
+          },
+          's3',
+        );
+        expect(MinioClient.prototype.getObject).toHaveBeenCalledWith('bucket', 'prefix/main.log');
+        expect(await readStreamText(stream)).toBe('archived logs');
+      },
+    );
+
     it('returns a getPodLogsStream function that retrieves an object stream using the workflow status corresponding to the pod name.', async () => {
       const sampleWorkflow = {
         apiVersion: 'argoproj.io/v1alpha1',
@@ -218,6 +476,11 @@ describe('workflow-helper', () => {
       const mockedGetArgoWorkflow: Mock = getArgoWorkflow as any;
       mockedGetArgoWorkflow.mockResolvedValueOnce(sampleWorkflow);
 
+      // The run namespace matches the server's own namespace, so reading the
+      // object-store credential Secret is permitted.
+      const mockedGetServerNamespace: Mock = getServerNamespace as any;
+      mockedGetServerNamespace.mockReturnValue('kubeflow');
+
       const mockedGetK8sSecret: Mock = getK8sSecret as any;
       mockedGetK8sSecret.mockResolvedValue('someSecret');
 
@@ -231,13 +494,14 @@ describe('workflow-helper', () => {
       const stream = await getPodLogsStreamFromWorkflow(
         'workflow-name-system-container-impl-abc',
         '2024-07-09',
+        'kubeflow',
       );
 
-      expect(mockedGetArgoWorkflow).toBeCalledWith('workflow-name');
+      expect(mockedGetArgoWorkflow).toBeCalledWith('workflow-name', 'kubeflow');
 
       expect(mockedGetK8sSecret).toBeCalledTimes(2);
-      expect(mockedGetK8sSecret).toBeCalledWith('accessKeyName', 'accessKey');
-      expect(mockedGetK8sSecret).toBeCalledWith('secretKeyName', 'secretKey');
+      expect(mockedGetK8sSecret).toBeCalledWith('accessKeyName', 'accessKey', 'kubeflow');
+      expect(mockedGetK8sSecret).toBeCalledWith('secretKeyName', 'secretKey', 'kubeflow');
 
       expect(mockedClient).toBeCalledTimes(1);
       expect(mockedClient).toBeCalledWith({
@@ -254,6 +518,236 @@ describe('workflow-helper', () => {
         'bucket',
         'prefix/workflow-name/workflow-name-system-container-impl-abc/main.log',
       );
+    });
+
+    it('does not read the object-store Secret when the run namespace is not the server namespace (security)', async () => {
+      const sampleWorkflow = {
+        apiVersion: 'argoproj.io/v1alpha1',
+        kind: 'Workflow',
+        status: {
+          artifactRepositoryRef: {
+            artifactRepository: {
+              archiveLogs: true,
+              s3: {
+                accessKeySecret: { key: 'accessKey', name: 'accessKeyName' },
+                bucket: 'bucket',
+                endpoint: 'seaweedfs.kubeflow',
+                insecure: true,
+                key: 'prefix/workflow-name/workflow-name-system-container-impl-abc/some-artifact.csv',
+                secretKeySecret: { key: 'secretKey', name: 'secretKeyName' },
+              },
+            },
+          },
+          nodes: {
+            'workflow-name-abc': {
+              outputs: {
+                artifacts: [
+                  {
+                    name: 'main-logs',
+                    s3: {
+                      key: 'prefix/workflow-name/workflow-name-system-container-impl-abc/main.log',
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      };
+
+      const mockedGetArgoWorkflow: Mock = getArgoWorkflow as any;
+      mockedGetArgoWorkflow.mockResolvedValueOnce(sampleWorkflow);
+
+      // The run namespace is a customer namespace, different from the server's
+      // own namespace, so the credential Secret must NOT be read.
+      const mockedGetServerNamespace: Mock = getServerNamespace as any;
+      mockedGetServerNamespace.mockReturnValue('kubeflow');
+
+      const mockedGetK8sSecret: Mock = getK8sSecret as any;
+
+      // The server's own object-store credentials are provided via the
+      // environment, matching the deployment's MINIO_ACCESS_KEY/MINIO_SECRET_KEY.
+      const previousAccessKey = process.env.MINIO_ACCESS_KEY;
+      const previousSecretKey = process.env.MINIO_SECRET_KEY;
+      process.env.MINIO_ACCESS_KEY = 'server-access-key';
+      process.env.MINIO_SECRET_KEY = 'server-secret-key';
+
+      const objStream = new PassThrough();
+      const mockedClient: Mock = MinioClient as any;
+      MinioClient.prototype.getObject = vi.fn().mockResolvedValueOnce(objStream) as any;
+      objStream.end('some fake logs.');
+
+      try {
+        await getPodLogsStreamFromWorkflow(
+          'workflow-name-system-container-impl-abc',
+          '2024-07-09',
+          'my-user-namespace',
+        );
+      } finally {
+        process.env.MINIO_ACCESS_KEY = previousAccessKey;
+        process.env.MINIO_SECRET_KEY = previousSecretKey;
+      }
+
+      expect(mockedGetK8sSecret).not.toBeCalled();
+      // The client is built using the server's own environment credentials
+      // rather than the customer-namespace Secret, so the workflow-status log
+      // path works against the shared store instead of failing anonymously.
+      expect(mockedClient).toBeCalledWith({
+        accessKey: 'server-access-key',
+        endPoint: 'seaweedfs.kubeflow',
+        port: 80,
+        secretKey: 'server-secret-key',
+        useSSL: false,
+      });
+    });
+
+    it('reads the object-store Secret from the server namespace when the run namespace is omitted (standalone)', async () => {
+      const sampleWorkflow = {
+        apiVersion: 'argoproj.io/v1alpha1',
+        kind: 'Workflow',
+        status: {
+          artifactRepositoryRef: {
+            artifactRepository: {
+              archiveLogs: true,
+              s3: {
+                accessKeySecret: { key: 'accessKey', name: 'accessKeyName' },
+                bucket: 'bucket',
+                endpoint: 'seaweedfs.kubeflow',
+                insecure: true,
+                key: 'prefix/workflow-name/workflow-name-system-container-impl-abc/some-artifact.csv',
+                secretKeySecret: { key: 'secretKey', name: 'secretKeyName' },
+              },
+            },
+          },
+          nodes: {
+            'workflow-name-abc': {
+              outputs: {
+                artifacts: [
+                  {
+                    name: 'main-logs',
+                    s3: {
+                      key: 'prefix/workflow-name/workflow-name-system-container-impl-abc/main.log',
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      };
+
+      const mockedGetArgoWorkflow: Mock = getArgoWorkflow as any;
+      mockedGetArgoWorkflow.mockResolvedValueOnce(sampleWorkflow);
+
+      // Standalone mode omits the namespace; the run is effectively in the server
+      // namespace, so the credential Secret is read from the server namespace.
+      const mockedGetServerNamespace: Mock = getServerNamespace as any;
+      mockedGetServerNamespace.mockReturnValue('kubeflow');
+
+      const mockedGetK8sSecret: Mock = getK8sSecret as any;
+      mockedGetK8sSecret.mockResolvedValue('custom-store-secret');
+
+      const objStream = new PassThrough();
+      const mockedClient: Mock = MinioClient as any;
+      MinioClient.prototype.getObject = vi.fn().mockResolvedValueOnce(objStream) as any;
+      objStream.end('some fake logs.');
+
+      await getPodLogsStreamFromWorkflow(
+        'workflow-name-system-container-impl-abc',
+        '2024-07-09',
+        undefined,
+      );
+
+      // The Secret is read from the server namespace, never a user namespace.
+      expect(mockedGetK8sSecret).toBeCalledTimes(2);
+      expect(mockedGetK8sSecret).toBeCalledWith('accessKeyName', 'accessKey', 'kubeflow');
+      expect(mockedGetK8sSecret).toBeCalledWith('secretKeyName', 'secretKey', 'kubeflow');
+
+      // The custom object-store credentials from the Secret are honored rather
+      // than falling back to default env credentials.
+      expect(mockedClient).toBeCalledWith({
+        accessKey: 'custom-store-secret',
+        endPoint: 'seaweedfs.kubeflow',
+        port: 80,
+        secretKey: 'custom-store-secret',
+        useSSL: false,
+      });
+    });
+
+    it('falls back to env credentials for an omitted namespace when the artifact references no Secret', async () => {
+      const sampleWorkflow = {
+        apiVersion: 'argoproj.io/v1alpha1',
+        kind: 'Workflow',
+        status: {
+          artifactRepositoryRef: {
+            artifactRepository: {
+              archiveLogs: true,
+              s3: {
+                // No accessKeySecret / secretKeySecret: the artifact repository
+                // does not reference a credential Secret.
+                bucket: 'bucket',
+                endpoint: 'seaweedfs.kubeflow',
+                insecure: true,
+                key: 'prefix/workflow-name/workflow-name-system-container-impl-abc/some-artifact.csv',
+              },
+            },
+          },
+          nodes: {
+            'workflow-name-abc': {
+              outputs: {
+                artifacts: [
+                  {
+                    name: 'main-logs',
+                    s3: {
+                      key: 'prefix/workflow-name/workflow-name-system-container-impl-abc/main.log',
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      };
+
+      const mockedGetArgoWorkflow: Mock = getArgoWorkflow as any;
+      mockedGetArgoWorkflow.mockResolvedValueOnce(sampleWorkflow);
+
+      const mockedGetServerNamespace: Mock = getServerNamespace as any;
+      mockedGetServerNamespace.mockReturnValue('kubeflow');
+
+      const mockedGetK8sSecret: Mock = getK8sSecret as any;
+
+      const previousAccessKey = process.env.MINIO_ACCESS_KEY;
+      const previousSecretKey = process.env.MINIO_SECRET_KEY;
+      process.env.MINIO_ACCESS_KEY = 'server-access-key';
+      process.env.MINIO_SECRET_KEY = 'server-secret-key';
+
+      const objStream = new PassThrough();
+      const mockedClient: Mock = MinioClient as any;
+      MinioClient.prototype.getObject = vi.fn().mockResolvedValueOnce(objStream) as any;
+      objStream.end('some fake logs.');
+
+      try {
+        await getPodLogsStreamFromWorkflow(
+          'workflow-name-system-container-impl-abc',
+          '2024-07-09',
+          undefined,
+        );
+      } finally {
+        process.env.MINIO_ACCESS_KEY = previousAccessKey;
+        process.env.MINIO_SECRET_KEY = previousSecretKey;
+      }
+
+      // With no Secret referenced, no Secret read is attempted and the frontend's
+      // own configured env credentials are used.
+      expect(mockedGetK8sSecret).not.toBeCalled();
+      expect(mockedClient).toBeCalledWith({
+        accessKey: 'server-access-key',
+        endPoint: 'seaweedfs.kubeflow',
+        port: 80,
+        secretKey: 'server-secret-key',
+        useSSL: false,
+      });
     });
   });
 });

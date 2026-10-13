@@ -11,6 +11,7 @@ on: []
 #      - stable
 #      - 'rhoai-*'
 
+<<<<<<< HEAD
 #  pull_request:
 #    paths:
 #      - 'sdk/python/**'
@@ -23,25 +24,40 @@ on: []
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+=======
+  pull_request:
+    paths:
+      - '**/pyproject.toml'
+      - 'uv.lock'
+      - 'sdk/python/**'
+      - 'test/presubmit-test-sdk-upgrade.sh'
+      - '.github/workflows/sdk-upgrade.yml'
+      - '.github/actions/setup-python/**'
+      - '!**/*.md'
+      - '!**/OWNERS'
+>>>>>>> upstream/master
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test-upgrade-kfp-sdk:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Setup Python with uv
+        uses: ./.github/actions/setup-python
         with:
-          python-version: 3.9
-          cache: 'pip'
+          python-version: '3.11'
 
-      - name: Install protobuf dependencies & kfp-pipeline-spec
-        id: install-protobuf-deps
+      - name: Install protobuf dependencies & generate proto files
         uses: ./.github/actions/protobuf
-        with:
-          generate_golang_proto: "false"
 
       - name: Run SDK upgrade tests
+        env:
+          SETUP_ENV: false
         run: ./test/presubmit-test-sdk-upgrade.sh

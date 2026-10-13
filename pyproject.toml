@@ -1,0 +1,96 @@
+[project]
+name = "kfp-workspace"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = [
+  "kfp",
+]
+
+[tool.uv.workspace]
+members = [
+  "sdk/python",
+]
+
+[tool.uv.sources]
+kfp = { workspace = true }
+
+[tool.uv]
+# Shared constraints applied during resolution for ALL workspace members
+constraint-dependencies = [
+  "protobuf>=6.33.5",
+  "kubernetes>=8.0.0",
+  "google-auth>=1.6.1,<3",
+  "PyYAML>=5.3,<7",
+  "urllib3<3.0.0",
+]
+
+[project.optional-dependencies]
+# Linting tools (pinned to avoid new lint failures)
+lint = [
+  "docformatter==1.7.7",
+  "isort==5.10.1",  "pre-commit-hooks",  "pycln==2.6.0",
+  "pylint==2.17.7",
+  "yapf==0.43.0",
+]
+
+# Testing tools
+test = [
+  "absl-py",
+  "docker",
+  "google-cloud-pipeline-components",
+  "kfp[notebooks]",
+  "kubernetes",
+  "nbformat",
+  "pip",
+  "pydantic>=2",
+  # pytest 9.0.3 contains the tmpdir handling fix.
+  "pytest>=9.0.3",
+  "pytest-cov>=7.1.0",
+  "pytest-mock",
+  "pytest-randomly>=3.12",
+  "pytest-xdist>=3.8.0",
+  "setuptools",
+  "wheel",
+]
+
+# Development (lint + test + type checking)
+dev = [
+  "kfp-workspace[lint,test]",
+  "mypy",
+  "pre-commit>=3.2",
+  "types-protobuf",
+  "types-PyYAML",
+  "types-requests",
+  "types-tabulate",
+]
+
+# Documentation building
+docs = [
+  "autodocsumm",
+  "m2r2",
+  "sphinx>=7.2.0,<8.0.0",
+  "sphinx-click",
+  "sphinx-immaterial>=0.9.0,<1",
+  "sphinx-rtd-theme",
+  "furo>=2024.8.6",
+  "myst-parser>=3.0.0,<4.0.0",
+  "sphinxcontrib-mermaid>=0.9.0,<1.0.0",
+  "sphinx-copybutton>=0.5.2,<1.0.0",
+  "sphinx-design>=0.6.0,<1.0.0",
+  "sphinx-autobuild>=2024.10.3",
+]
+
+# CI-specific tools (includes lint, test, and docs)
+ci = [
+  "kfp-workspace[lint,test,docs]",
+  "build",
+  "junit2html",
+  "requests",
+  "ruamel.yaml",
+  "twine",
+]
+
+# Legacy backend v2 test helpers
+backend-v2-test = [
+  "fire",
+]

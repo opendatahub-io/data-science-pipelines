@@ -8,10 +8,13 @@ on:
       - stable
       - 'rhoai-*'
     paths:
+      - '**/pyproject.toml'
+      - 'uv.lock'
       - 'api/**'
       - 'sdk/python/**'
       - 'test/presubmit-yapf-sdk.sh'
       - '.github/workflows/sdk-yapf.yml'
+      - '.github/actions/setup-python/**'
       - '!**/*.md'
       - '!**/OWNERS'
   pull_request:
@@ -30,22 +33,23 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   yapf-sdk:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
-    - name: Set up Python
-      uses: actions/setup-python@v6
+    - name: Setup Python with uv
+      uses: ./.github/actions/setup-python
       with:
-        python-version: '3.9'
-        cache: 'pip'
-
-    - name: Install dependencies
-      run: pip install yapf
+        python-version: '3.11'
 
     - name: Run YAPF SDK Tests
       run: ./test/presubmit-yapf-sdk.sh

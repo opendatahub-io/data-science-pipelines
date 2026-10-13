@@ -77,7 +77,7 @@ def execute_gcloud_command(
     if project_id is not None:
         command_list.extend(['--project', project_id])
 
-    return utility.ExecutorResponse().execute_command(command_list)
+    return utility.execute_command(command_list)
 
 
 def execute_gsutil_command(
@@ -92,7 +92,7 @@ def execute_gsutil_command(
         format is ['config', 'list', '--all']
       project_id: specific project to check the QUOTASs for,if no project id is
         provided will use gcloud default project if one is configured otherwise
-        will return an erro massage.
+        will return an error message.
 
     Returns:
       utility.ExecutorResponse with outputs from stdout,stderr and execution code.
@@ -101,7 +101,7 @@ def execute_gsutil_command(
     if project_id is not None:
         command_list.extend(['-p', project_id])
 
-    return utility.ExecutorResponse().execute_command(command_list)
+    return utility.execute_command(command_list)
 
 
 def get_gcp_configuration(
@@ -133,7 +133,7 @@ def get_gcp_configuration(
       project_id: specific project to check the QUOTASs for,if no project id is
         provided will use gcloud default project if one is configured otherwise
         will return an error message.
-      human_readable: If true all output will be in human readable form insted of
+      human_readable: If true all output will be in human readable form instead of
         Json.
 
     Returns:

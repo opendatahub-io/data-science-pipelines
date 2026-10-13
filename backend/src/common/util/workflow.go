@@ -17,34 +17,32 @@ package util
 
 import (
 	"context"
+	stdjson "encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/encoding/protojson"
-
-	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
-	argoclient "github.com/argoproj/argo-workflows/v3/pkg/client/clientset/versioned"
-	argoclientwf "github.com/argoproj/argo-workflows/v3/pkg/client/clientset/versioned/typed/workflow/v1alpha1"
-	argoinformer "github.com/argoproj/argo-workflows/v3/pkg/client/informers/externalversions"
-	"github.com/argoproj/argo-workflows/v3/pkg/client/informers/externalversions/workflow/v1alpha1"
-	"github.com/argoproj/argo-workflows/v3/workflow/common"
-	"github.com/argoproj/argo-workflows/v3/workflow/packer"
-	"github.com/argoproj/argo-workflows/v3/workflow/validate"
+	workflowapi "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
+	argoclient "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned"
+	argoclientwf "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned/typed/workflow/v1alpha1"
+	argoinformer "github.com/argoproj/argo-workflows/v4/pkg/client/informers/externalversions"
+	"github.com/argoproj/argo-workflows/v4/pkg/client/informers/externalversions/workflow/v1alpha1"
+	argologging "github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/workflow/common"
+	"github.com/argoproj/argo-workflows/v4/workflow/packer"
+	"github.com/argoproj/argo-workflows/v4/workflow/validate"
 	"github.com/golang/glog"
-	api "github.com/kubeflow/pipelines/backend/api/v1beta1/go_client"
-	"github.com/kubeflow/pipelines/backend/src/agent/persistence/client/artifactclient"
 	exec "github.com/kubeflow/pipelines/backend/src/common"
 	swfregister "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow"
 	swfapi "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/yaml"
 )
@@ -53,6 +51,8 @@ import (
 type Workflow struct {
 	*workflowapi.Workflow
 }
+
+var argoContext = argologging.NewSlogLogger(argologging.Info, argologging.Text).NewBackgroundContext()
 
 func NewWorkflowFromBytes(bytes []byte) (*Workflow, error) {
 	var workflow workflowapi.Workflow
@@ -168,6 +168,282 @@ func (w *Workflow) SetServiceAccount(serviceAccount string) {
 
 func (w *Workflow) ServiceAccount() string {
 	return w.Spec.ServiceAccountName
+}
+
+func (w *Workflow) walkTemplates(visit func(*workflowapi.Template) error) error {
+	hasReference := func(ref *workflowapi.TemplateRef, hooks workflowapi.LifecycleHooks) bool {
+		if ref != nil {
+			return true
+		}
+		for _, hook := range hooks {
+			if hook.TemplateRef != nil {
+				return true
+			}
+		}
+		return false
+	}
+	referenceError := func() error {
+		return NewInvalidInputError("external workflow template references cannot be authorized; inline the referenced template")
+	}
+
+	var walk func(*workflowapi.Template) error
+	walk = func(tmpl *workflowapi.Template) error {
+		if tmpl == nil {
+			return nil
+		}
+		if visit != nil {
+			if err := visit(tmpl); err != nil {
+				return err
+			}
+		}
+		for i := range tmpl.Steps {
+			for j := range tmpl.Steps[i].Steps {
+				step := &tmpl.Steps[i].Steps[j]
+				if hasReference(step.TemplateRef, step.Hooks) {
+					return referenceError()
+				}
+				if err := walk(step.Inline); err != nil {
+					return err
+				}
+			}
+		}
+		if tmpl.DAG != nil {
+			for i := range tmpl.DAG.Tasks {
+				task := &tmpl.DAG.Tasks[i]
+				if hasReference(task.TemplateRef, task.Hooks) {
+					return referenceError()
+				}
+				if err := walk(task.Inline); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	for _, spec := range []*workflowapi.WorkflowSpec{&w.Spec, w.Status.StoredWorkflowSpec} {
+		if spec == nil {
+			continue
+		}
+		if spec.WorkflowTemplateRef != nil || hasReference(nil, spec.Hooks) {
+			return referenceError()
+		}
+		if err := walk(spec.TemplateDefaults); err != nil {
+			return err
+		}
+		for i := range spec.Templates {
+			if err := walk(&spec.Templates[i]); err != nil {
+				return err
+			}
+		}
+	}
+	for _, tmpl := range w.Status.StoredTemplates {
+		if err := walk(&tmpl); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateNoExternalTemplateReferences rejects template references because KFP
+// does not resolve them while validating or authorizing a workflow.
+func (w *Workflow) validateNoExternalTemplateReferences() error {
+	return w.walkTemplates(nil)
+}
+
+// ServiceAccounts returns every service account that pods created by the
+// workflow can use.
+func (w *Workflow) ServiceAccounts(allowCompilerPodSpecPatch bool) ([]string, error) {
+	workflowAccount := w.Spec.ServiceAccountName
+	if workflowAccount == "" {
+		workflowAccount = "default"
+	}
+	accounts := make([]string, 0, len(w.Spec.Templates)+1)
+	seen := make(map[string]struct{}, len(w.Spec.Templates)+1)
+	add := func(account string) {
+		if account == workflowServiceAccountTemplate {
+			account = workflowAccount
+		}
+		if account == "" {
+			return
+		}
+		if _, ok := seen[account]; ok {
+			return
+		}
+		seen[account] = struct{}{}
+		accounts = append(accounts, account)
+	}
+	addPatch := func(patch string) error {
+		patchAccounts, err := serviceAccountsInPodSpecPatch(patch, allowCompilerPodSpecPatch)
+		if err != nil {
+			return err
+		}
+		for _, account := range patchAccounts {
+			add(account)
+		}
+		return nil
+	}
+	add(workflowAccount)
+	if w.Spec.Executor != nil {
+		add(w.Spec.Executor.ServiceAccountName)
+	}
+	for _, plugin := range w.Spec.ExecutorPlugins {
+		if plugin.Spec.Sidecar.AutomountServiceAccountToken {
+			add(plugin.Name + "-executor-plugin")
+		}
+	}
+	if err := addPatch(w.Spec.PodSpecPatch); err != nil {
+		return nil, err
+	}
+
+	var artifactGCPatchAccounts []string
+	artifactGCPatchInspected := false
+
+	visitArtifacts := func(artifacts []workflowapi.Artifact) error {
+		for i := range artifacts {
+			artifact := &artifacts[i]
+			strategy := w.GetArtifactGCStrategy(artifact)
+			if strategy == workflowapi.ArtifactGCNever || strategy == workflowapi.ArtifactGCStrategyUndefined {
+				continue
+			}
+			account := ""
+			if w.Spec.ArtifactGC != nil {
+				account = w.Spec.ArtifactGC.ServiceAccountName
+			}
+			if artifact.ArtifactGC != nil && artifact.ArtifactGC.ServiceAccountName != "" {
+				account = artifact.ArtifactGC.ServiceAccountName
+			}
+			if account != "" {
+				add(account)
+				continue
+			}
+			if !artifactGCPatchInspected {
+				artifactGCPatchInspected = true
+				if w.Spec.ArtifactGC != nil {
+					var err error
+					artifactGCPatchAccounts, err = serviceAccountsInPodSpecPatch(w.Spec.ArtifactGC.PodSpecPatch, allowCompilerPodSpecPatch)
+					if err != nil {
+						return err
+					}
+				}
+			}
+			if len(artifactGCPatchAccounts) == 0 {
+				add("default")
+			}
+			for _, patchAccount := range artifactGCPatchAccounts {
+				add(patchAccount)
+			}
+		}
+		return nil
+	}
+
+	visitTemplate := func(tmpl *workflowapi.Template) error {
+		add(tmpl.ServiceAccountName)
+		if tmpl.Executor != nil {
+			add(tmpl.Executor.ServiceAccountName)
+		}
+		if err := addPatch(tmpl.PodSpecPatch); err != nil {
+			return err
+		}
+		return visitArtifacts(tmpl.Outputs.Artifacts)
+	}
+
+	if err := w.walkTemplates(visitTemplate); err != nil {
+		return nil, err
+	}
+	// Argo also schedules artifact-GC pods from retained node outputs on retry.
+	for _, node := range w.Status.Nodes {
+		if node.Type == workflowapi.NodeTypePod && node.Outputs != nil {
+			if err := visitArtifacts(node.Outputs.Artifacts); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if storedSpec := w.Status.StoredWorkflowSpec; storedSpec != nil {
+		// Retried workflows retain Argo's cached spec. Inspect its own defaults
+		// as well as the submitted spec, including helpers for cached templates.
+		storedWorkflow := NewWorkflow(&workflowapi.Workflow{
+			Spec: *storedSpec,
+			Status: workflowapi.WorkflowStatus{
+				StoredTemplates: w.Status.StoredTemplates,
+				Nodes:           w.Status.Nodes,
+			},
+		})
+		storedAccounts, err := storedWorkflow.ServiceAccounts(allowCompilerPodSpecPatch)
+		if err != nil {
+			return nil, err
+		}
+		for _, account := range storedAccounts {
+			add(account)
+		}
+	}
+	return accounts, nil
+}
+
+const (
+	workflowServiceAccountTemplate        = "{{workflow.serviceAccountName}}"
+	podSpecPatchServiceAccountSentinel    = "<unchanged>" // Invalid as a Kubernetes service account name.
+	compilerGeneratedPodSpecPatchTemplate = "{{inputs.parameters.pod-spec-patch}}"
+)
+
+func serviceAccountsInPodSpecPatch(patch string, allowCompilerPatch bool) ([]string, error) {
+	if patch == "" {
+		return nil, nil
+	}
+	if strings.Contains(patch, "{{") {
+		if allowCompilerPatch && strings.TrimSpace(patch) == compilerGeneratedPodSpecPatchTemplate {
+			return nil, nil
+		}
+		return nil, NewInvalidInputError("podSpecPatch contains a template expression, so its service account cannot be authorized before execution; use a literal podSpecPatch")
+	}
+
+	// Argo preserves JSON input before validating it with encoding/json.
+	patchJSON := []byte(patch)
+	if !strings.HasPrefix(strings.TrimSpace(patch), "{") {
+		var err error
+		patchJSON, err = yaml.YAMLToJSON(patchJSON)
+		if err != nil {
+			return nil, NewInvalidInputError("podSpecPatch is not a valid Kubernetes PodSpec patch; provide a literal valid patch: %v", err)
+		}
+	}
+	// Case variants can be hidden by an inherited canonical field and exposed
+	// when a later template patch removes it, before Argo's case-folding decode.
+	var fields map[string]stdjson.RawMessage
+	if err := stdjson.Unmarshal(patchJSON, &fields); err != nil {
+		return nil, NewInvalidInputError("podSpecPatch is not a valid Kubernetes PodSpec patch; provide a literal valid patch: %v", err)
+	}
+	for field := range fields {
+		for _, canonical := range []string{"serviceAccountName", "serviceAccount"} {
+			if field != canonical && strings.EqualFold(field, canonical) {
+				return nil, NewInvalidInputError("podSpecPatch field %q has a noncanonical service account spelling; use %q", field, canonical)
+			}
+		}
+	}
+	if err := stdjson.Unmarshal(patchJSON, &corev1.PodSpec{}); err != nil {
+		return nil, NewInvalidInputError("podSpecPatch is not a valid Kubernetes PodSpec patch; provide a literal valid patch: %v", err)
+	}
+	baseJSON := []byte(`{"serviceAccountName":"` + podSpecPatchServiceAccountSentinel + `"}`)
+	patchedJSON, err := strategicpatch.StrategicMergePatch(baseJSON, patchJSON, corev1.PodSpec{})
+	if err != nil {
+		return nil, NewInvalidInputError("podSpecPatch is not a valid Kubernetes PodSpec patch; provide a literal valid patch: %v", err)
+	}
+	var patched corev1.PodSpec
+	if err := stdjson.Unmarshal(patchedJSON, &patched); err != nil {
+		return nil, NewInvalidInputError("podSpecPatch is not a valid Kubernetes PodSpec patch; provide a literal valid patch: %v", err)
+	}
+
+	var accounts []string
+	canonicalTouched := patched.ServiceAccountName != podSpecPatchServiceAccountSentinel
+	if canonicalTouched && patched.ServiceAccountName != "" {
+		accounts = append(accounts, patched.ServiceAccountName)
+	}
+	if patched.DeprecatedServiceAccount != "" {
+		accounts = append(accounts, patched.DeprecatedServiceAccount)
+	}
+	if canonicalTouched && patched.ServiceAccountName == "" && patched.DeprecatedServiceAccount == "" {
+		accounts = append(accounts, "default")
+	}
+	return accounts, nil
 }
 
 func (w *Workflow) SpecParameters() SpecParameters {
@@ -478,142 +754,7 @@ func (w *Workflow) StartedAtTime() metav1.Time {
 
 const (
 	metricsArtifactName = "mlpipeline-metrics"
-	// More than 50 metrics is not scalable with current UI design.
-	maxMetricsCountLimit = 50
 )
-
-func (w *Workflow) CollectionMetrics(readArtifact func(*artifactclient.ReadArtifactRequest) (*artifactclient.ReadArtifactResponse, error)) ([]*api.RunMetric, []error) {
-	runID := w.Labels[LabelKeyWorkflowRunId]
-	runMetrics := make([]*api.RunMetric, 0, len(w.Status.Nodes))
-	partialFailures := make([]error, 0, len(w.Status.Nodes))
-	for _, nodeStatus := range w.Status.Nodes {
-		nodeMetrics, err := collectNodeMetricsOrNil(runID, &nodeStatus, readArtifact, *w.Workflow)
-		if err != nil {
-			partialFailures = append(partialFailures, err)
-			continue
-		}
-		if nodeMetrics != nil {
-			if len(runMetrics)+len(nodeMetrics) >= maxMetricsCountLimit {
-				leftQuota := maxMetricsCountLimit - len(runMetrics)
-				runMetrics = append(runMetrics, nodeMetrics[0:leftQuota]...)
-				// TODO(#1426): report the error back to api server to notify user
-				log.Errorf("Reported metrics are more than the limit %v", maxMetricsCountLimit)
-				break
-			}
-			runMetrics = append(runMetrics, nodeMetrics...)
-		}
-	}
-	return runMetrics, partialFailures
-}
-
-func collectNodeMetricsOrNil(runID string, nodeStatus *workflowapi.NodeStatus, readArtifact func(*artifactclient.ReadArtifactRequest) (*artifactclient.ReadArtifactResponse, error), wf workflowapi.Workflow) (
-	[]*api.RunMetric, error,
-) {
-	if !nodeStatus.Completed() {
-		return nil, nil
-	}
-	metricsJSON, err := readNodeMetricsJSONOrEmpty(runID, nodeStatus, readArtifact, &wf)
-	if err != nil || metricsJSON == "" {
-		return nil, err
-	}
-
-	retrievedNodeID := nodeStatus.ID
-	// Proto json lib requires a proto message before unmarshal data from JSON. We use
-	// ReportRunMetricsRequest as a workaround to hold user's metrics, which is a superset of what
-	// user can provide.
-	reportMetricsRequest := new(api.ReportRunMetricsRequest)
-	transformedJSON, err := transformJSONForBackwardCompatibility(metricsJSON)
-	if err != nil {
-		fmt.Printf("Failed to transform JSON: %v\n", err)
-		return nil, err
-	}
-
-	err = protojson.Unmarshal([]byte(transformedJSON), reportMetricsRequest)
-	if err != nil {
-		// User writes invalid metrics JSON.
-		// TODO(#1426): report the error back to api server to notify user
-		log.WithFields(log.Fields{
-			"run":         runID,
-			"node":        retrievedNodeID,
-			"raw_content": metricsJSON,
-			"error":       err.Error(),
-		}).Warning("Failed to unmarshal metrics file.")
-		return nil, NewCustomError(err, CUSTOM_CODE_PERMANENT,
-			"failed to unmarshal metrics file from (%s, %s).", runID, retrievedNodeID)
-	}
-	if reportMetricsRequest.GetMetrics() == nil {
-		return nil, nil
-	}
-	for _, metric := range reportMetricsRequest.GetMetrics() {
-		// User metrics just have name and value but no NodeId.
-		metric.NodeId = retrievedNodeID
-	}
-	return reportMetricsRequest.GetMetrics(), nil
-}
-
-// Previously number_value for RunMetrics in backend/api/v1beta1/run.proto
-// allowed camelCase field values in JSON, to be consistent with the
-// rest of the API (as well as with KFP api docs); this value was switched
-// to support snake case. This function will convert old values to the
-// newer snakecase so we can continue to support camelcase Metric Values for
-// backwards compatibility for the end user.
-func transformJSONForBackwardCompatibility(jsonStr string) (string, error) {
-	replacer := strings.NewReplacer(
-		`"numberValue":`, `"number_value":`,
-	)
-	return replacer.Replace(jsonStr), nil
-}
-
-func readNodeMetricsJSONOrEmpty(runID string, nodeStatus *workflowapi.NodeStatus,
-	readArtifact func(*artifactclient.ReadArtifactRequest) (*artifactclient.ReadArtifactResponse, error), wf *workflowapi.Workflow,
-) (string, error) {
-	if nodeStatus.Outputs == nil || nodeStatus.Outputs.Artifacts == nil {
-		return "", nil // No output artifacts, skip the reporting
-	}
-
-	var foundMetricsArtifact bool = false
-	for _, artifact := range nodeStatus.Outputs.Artifacts {
-		if artifact.Name == metricsArtifactName {
-			foundMetricsArtifact = true
-		}
-	}
-	if !foundMetricsArtifact {
-		return "", nil // No metrics artifact, skip the reporting
-	}
-
-	artifactRequest := &artifactclient.ReadArtifactRequest{
-		RunID:        runID,
-		NodeID:       nodeStatus.ID,
-		ArtifactName: metricsArtifactName,
-	}
-	artifactResponse, err := readArtifact(artifactRequest)
-	if err != nil {
-		return "", err
-	}
-	if artifactResponse == nil || artifactResponse.Data == nil || len(artifactResponse.Data) == 0 {
-		// If artifact is not found or empty content, skip the reporting.
-		return "", nil
-	}
-	archivedFiles, err := ExtractTgz(string(artifactResponse.Data))
-	if err != nil {
-		// Invalid tgz file. This should never happen unless there is a bug in the system and
-		// it is a unrecoverable error.
-		return "", NewCustomError(err, CUSTOM_CODE_PERMANENT,
-			"Unable to extract metrics tgz file read from (%+v): %v", artifactRequest, err)
-	}
-	// There needs to be exactly one metrics file in the artifact archive. We load that file.
-	if len(archivedFiles) == 1 {
-		for _, value := range archivedFiles {
-			return value, nil
-		}
-	}
-	return "", NewCustomErrorf(CUSTOM_CODE_PERMANENT,
-		"There needs to be exactly one metrics file in the artifact archive, but zero or multiple files were found.")
-}
-
-func (w *Workflow) HasMetrics() bool {
-	return w.Status.Nodes != nil
-}
 
 func (w *Workflow) ToStringForStore() string {
 	workflow, err := json.Marshal(w.Workflow)
@@ -771,27 +912,62 @@ func (w *Workflow) SetCannonicalLabels(name string, nextScheduledEpoch int64, in
 	w.SetLabels(LabelKeyWorkflowIsOwnedByScheduledWorkflow, "true")
 }
 
-// FindObjectStoreArtifactKeyOrEmpty loops through all node running statuses and look up the first
-// S3 artifact with the specified nodeID and artifactName. Returns empty if nothing is found.
+// FindObjectStoreArtifactKeyOrEmpty looks up the first S3 artifact with the specified artifactName
+// on the specified node ID or derived Pod name. If the node has no outputs (e.g., a retry parent or step group node),
+// it recursively checks the node's children up to a bounded depth. This handles the hierarchy
+// introduced by templateDefaults.retryStrategy: StepGroup → Retry → Pod.
+// Returns empty string if nothing is found.
 func (w *Workflow) FindObjectStoreArtifactKeyOrEmpty(nodeName string, artifactName string) string {
 	if w.Status.Nodes == nil {
 		return ""
 	}
 	node, found := w.Status.Nodes[nodeName]
 	if !found {
+		for _, candidate := range w.Status.Nodes {
+			if RetrievePodName(*w.Workflow, candidate) == nodeName {
+				node = candidate
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
 		return ""
 	}
+	// maxDepth of 3 covers: StepGroup → Retry → Pod (deepest expected path).
+	return w.findArtifactKeyRecursive(node, artifactName, 3)
+}
+
+// findArtifactKeyRecursive searches the node and its children (up to maxDepth levels)
+// for an S3 artifact with the given name.
+func (w *Workflow) findArtifactKeyRecursive(node workflowapi.NodeStatus, artifactName string, maxDepth int) string {
+	if s3Key := findArtifactS3KeyFromNode(node, artifactName); s3Key != "" {
+		return s3Key
+	}
+	if maxDepth <= 0 {
+		return ""
+	}
+	for _, childNodeID := range node.Children {
+		if childNode, childFound := w.Status.Nodes[childNodeID]; childFound {
+			if s3Key := w.findArtifactKeyRecursive(childNode, artifactName, maxDepth-1); s3Key != "" {
+				return s3Key
+			}
+		}
+	}
+	return ""
+}
+
+// findArtifactS3KeyFromNode extracts the S3 key for a named artifact from a node's outputs.
+func findArtifactS3KeyFromNode(node workflowapi.NodeStatus, artifactName string) string {
 	if node.Outputs == nil || node.Outputs.Artifacts == nil {
 		return ""
 	}
-	var s3Key string
 	for _, artifact := range node.Outputs.Artifacts {
-		if artifact.Name != artifactName || artifact.S3 == nil || artifact.S3.Key == "" {
-			continue
+		if artifact.Name == artifactName && artifact.S3 != nil && artifact.S3.Key != "" {
+			return artifact.S3.Key
 		}
-		s3Key = artifact.S3.Key
 	}
-	return s3Key
+	return ""
 }
 
 // IsInFinalState whether the workflow is in a final state.
@@ -812,14 +988,13 @@ func (w *Workflow) PersistedFinalState() bool {
 	return false
 }
 
-// IsV2Compatible whether the workflow is a v2 compatible pipeline.
-func (w *Workflow) IsV2Compatible() bool {
-	value := w.GetObjectMeta().GetAnnotations()["pipelines.kubeflow.org/v2_pipeline"]
-	return value == "true"
-}
-
 func (w *Workflow) Validate(lint, ignoreEntrypoint bool) error {
-	err := validate.ValidateWorkflow(nil, nil, w.Workflow, nil, validate.ValidateOpts{
+	// Argo validation receives no external-template getters, so reject
+	// references instead of allowing validation to dereference a nil getter.
+	if err := w.validateNoExternalTemplateReferences(); err != nil {
+		return err
+	}
+	err := validate.Workflow(ArgoContext(), nil, nil, w.Workflow, nil, validate.Opts{
 		Lint:                       lint,
 		IgnoreEntrypoint:           ignoreEntrypoint,
 		WorkflowTemplateValidation: false, // not used by kubeflow
@@ -829,12 +1004,24 @@ func (w *Workflow) Validate(lint, ignoreEntrypoint bool) error {
 }
 
 func (w *Workflow) Decompress() error {
-	return packer.DecompressWorkflow(w.Workflow)
+	return packer.DecompressWorkflow(ArgoContext(), w.Workflow)
+}
+
+func ArgoContext() context.Context {
+	return argoContext
 }
 
 func (w *Workflow) CanRetry() error {
+	if w == nil || w.Workflow == nil {
+		return NewInvalidInputError("Cannot retry an empty workflow; create a new run from pipeline IR")
+	}
 	if w.Workflow.Status.OffloadNodeStatusVersion != "" {
 		return NewBadRequestError(errors.New("workflow cannot be retried"), "Cannot retry workflow with offloaded node status")
+	}
+	// The IR compiler emits this format marker. It is not an authorization boundary.
+	metadata := w.Spec.PodMetadata
+	if metadata == nil || (metadata.Labels[V2ComponentKey] != "true" && metadata.Annotations[V2ComponentKey] != "true") {
+		return NewInvalidInputError("Cannot retry workflow missing the IR compiler's v2_component pod metadata marker; create a new run from pipeline IR and ensure controllers and webhooks preserve spec.podMetadata")
 	}
 	return nil
 }
@@ -849,29 +1036,19 @@ func (w *Workflow) ToStringForSchedule() string {
 	return string(workflow)
 }
 
-// Marking auto-added artifacts as optional. Otherwise most older workflows will start failing after upgrade to Argo 2.3.
-// TODO: Fix the components to explicitly declare the artifacts they really output.
-func (w *Workflow) PatchTemplateOutputArtifacts() {
-	for templateIdx, template := range w.Spec.Templates {
-		for artIdx, artifact := range template.Outputs.Artifacts {
-			if artifact.Name == "mlpipeline-ui-metadata" || artifact.Name == "mlpipeline-metrics" {
-				w.Spec.Templates[templateIdx].Outputs.Artifacts[artIdx].Optional = true
-			}
-		}
-	}
-}
-
 func (w *Workflow) NodeStatuses() map[string]NodeStatus {
 	rev := make(map[string]NodeStatus, len(w.Status.Nodes))
 	for id, node := range w.Status.Nodes {
 		rev[id] = NodeStatus{
 			ID:          RetrievePodName(*w.Workflow, node),
 			DisplayName: node.DisplayName,
+			Type:        string(node.Type),
 			State:       string(node.Phase),
 			StartTime:   node.StartedAt.Unix(),
 			CreateTime:  node.StartedAt.Unix(),
 			FinishTime:  node.FinishedAt.Unix(),
 			Children:    node.Children,
+			Message:     node.Message,
 		}
 	}
 	return rev
@@ -1000,8 +1177,8 @@ func (wfi *WorkflowInformer) Get(namespace string, name string) (ExecutionSpec, 
 	return NewWorkflow(workflow), false, nil
 }
 
-func (wfi *WorkflowInformer) List(labels *labels.Selector) (ExecutionSpecList, error) {
-	workflows, err := wfi.informer.Lister().List(*labels)
+func (wfi *WorkflowInformer) List(namespace string, labels *labels.Selector) (ExecutionSpecList, error) {
+	workflows, err := wfi.informer.Lister().Workflows(namespace).List(*labels)
 	if err != nil {
 		return nil, err
 	}

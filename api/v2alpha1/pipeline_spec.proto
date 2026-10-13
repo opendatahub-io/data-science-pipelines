@@ -507,7 +507,11 @@ message PipelineTaskSpec {
     // Whether or not to enable cache for this task. Defaults to false.
     bool enable_cache = 1;
     // Customized cache key for this task. If set, the cache_key will be used
-    // as the key for the task's cache.
+    // as the key for the task's cache. The customized cache key is combined
+    // with component reference identity (e.g. name) to prevent cross-component
+    // cache collisions. When a custom cache key is provided, all automatic
+    // inputs, base image, command, arguments, and PVC names are ignored during
+    // cache key generation.
     string cache_key = 2;
   }
   CachingOptions caching_options = 6;
@@ -596,6 +600,19 @@ message PipelineTaskSpec {
     // The maximum duration during which the task will be retried according to
     // the backoff strategy. If unspecified, will set to 1 hour.
     google.protobuf.Duration backoff_max_duration = 4;
+
+    // The retry policy controls which failure types trigger a retry attempt.
+    // Maps directly to Argo Workflows retryStrategy.retryPolicy.
+    // POLICY_UNSPECIFIED omits the field, so the deployment's Argo
+    // configuration decides; KFP's bundled manifests set OnError.
+    enum Policy {
+      POLICY_UNSPECIFIED = 0;
+      POLICY_ALWAYS = 1;
+      POLICY_ON_FAILURE = 2;
+      POLICY_ON_ERROR = 3;
+      POLICY_ON_TRANSIENT_ERROR = 4;
+    }
+    Policy policy = 5;
   }
 
   // User-configured task-level retry.
@@ -979,6 +996,9 @@ message RuntimeArtifact {
 
   // Custom path for output artifact.
   optional string custom_path = 7;
+
+  // The unique server generated id of the artifact.
+  string artifact_id = 8;
 }
 
 // Message that represents a list of artifacts.

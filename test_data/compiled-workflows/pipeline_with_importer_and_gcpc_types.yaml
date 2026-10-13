@@ -1,20 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: pipeline-with-importer-and-gcpc-type-
+  annotations:
+    workflows.argoproj.io/pod-name-format: v1
+  generateName: pipeline-with-importer-and-gcpc-types-
 spec:
   arguments:
     parameters:
-    - name: components-9422f7f39ffcd22b988c9b7896b4fe8a0944c019f8cfb5ddd8f1b1ef8f5dbe18
-      value: '{"executorLabel":"exec-consumer-op","inputDefinitions":{"artifacts":{"dataset":{"artifactType":{"schemaTitle":"google.VertexDataset","schemaVersion":"0.0.1"}}}}}'
-    - name: implementations-9422f7f39ffcd22b988c9b7896b4fe8a0944c019f8cfb5ddd8f1b1ef8f5dbe18
-      value: '{"args":["{{$.inputs.artifacts[''dataset''].path}}"],"command":["cmd"],"image":"dummy"}'
-    - name: components-comp-importer
-      value: '{"executorLabel":"exec-importer","inputDefinitions":{"parameters":{"uri":{"parameterType":"STRING"}}},"outputDefinitions":{"artifacts":{"artifact":{"artifactType":{"schemaTitle":"google.VertexDataset","schemaVersion":"0.0.1"}}}}}'
     - name: implementations-comp-importer
       value: '{"artifactUri":{"constant":"gs://ml-pipeline-playground/shakespeare1.txt"},"metadata":{"key":"value"},"typeSchema":{"schemaTitle":"google.VertexDataset","schemaVersion":"0.0.1"}}'
-    - name: components-root
-      value: '{"dag":{"tasks":{"consumer-op":{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-consumer-op"},"dependentTasks":["importer"],"inputs":{"artifacts":{"dataset":{"taskOutputArtifact":{"outputArtifactKey":"artifact","producerTask":"importer"}}}},"taskInfo":{"name":"consumer-op"}},"importer":{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-importer"},"inputs":{"parameters":{"uri":{"runtimeValue":{"constant":"gs://ml-pipeline-playground/shakespeare1.txt"}}}},"taskInfo":{"name":"importer"}}}}}'
   entrypoint: entrypoint
   podMetadata:
     annotations:
@@ -32,23 +26,17 @@ spec:
       - --type
       - CONTAINER
       - --pipeline_name
-      - pipeline-with-importer-and-gcpc-type
+      - pipeline-with-importer-and-gcpc-types
       - --run_id
       - '{{workflow.uid}}'
       - --run_name
       - '{{workflow.name}}'
       - --run_display_name
       - ""
-      - --dag_execution_id
-      - '{{inputs.parameters.parent-dag-id}}'
-      - --component
-      - '{{inputs.parameters.component}}'
-      - --task
-      - '{{inputs.parameters.task}}'
+      - --parent_task_id
+      - '{{inputs.parameters.parent-dag-task-id}}'
       - --task_name
       - '{{inputs.parameters.task-name}}'
-      - --container
-      - '{{inputs.parameters.container}}'
       - --iteration_index
       - '{{inputs.parameters.iteration-index}}'
       - --cached_decision_path
@@ -59,6 +47,8 @@ spec:
       - '{{outputs.parameters.condition.path}}'
       - --kubernetes_config
       - '{{inputs.parameters.kubernetes-config}}'
+      - --namespace
+      - $(NAMESPACE)
       - --http_proxy
       - ""
       - --https_proxy
@@ -69,10 +59,14 @@ spec:
       - ml-pipeline.kubeflow.svc.cluster.local
       - --ml_pipeline_server_port
       - "8887"
-      - --mlmd_server_address
-      - metadata-grpc-service.kubeflow.svc.cluster.local
-      - --mlmd_server_port
-      - "8080"
+      - --cache_disabled=false
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
+      - --ml_pipeline_tls_enabled=false
+      - --ca_cert_path
+      - ""
       command:
       - driver
       env:
@@ -84,6 +78,10 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.uid
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       image: ghcr.io/kubeflow/kfp-driver:latest
       name: ""
       resources:
@@ -101,13 +99,18 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
     inputs:
       parameters:
-      - name: component
-      - name: task
-      - name: container
       - name: task-name
-      - name: parent-dag-id
+      - name: parent-dag-task-id
       - default: "-1"
         name: iteration-index
       - default: ""
@@ -138,6 +141,18 @@ spec:
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
+    volumes:
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
   - dag:
       tasks:
       - arguments:
@@ -152,6 +167,8 @@ spec:
       - name: pod-spec-patch
       - default: "false"
         name: cached-decision
+      - default: "-1"
+        name: iteration-index
     metadata: {}
     name: system-container-executor
     outputs: {}
@@ -167,10 +184,10 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.uid
-      envFrom:
-      - configMapRef:
-          name: metadata-grpc-configmap
-          optional: true
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       image: gcr.io/ml-pipeline/should-be-overridden-during-runtime
       name: ""
       resources: {}
@@ -181,9 +198,13 @@ spec:
           - ALL
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
       volumeMounts:
       - mountPath: /kfp-launcher
         name: kfp-launcher
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
       - mountPath: /gcs
         name: gcs-scratch
       - mountPath: /s3
@@ -196,6 +217,9 @@ spec:
         name: dot-cache-scratch
       - mountPath: /.config
         name: dot-config-scratch
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
     initContainers:
     - args:
       - --copy
@@ -218,6 +242,7 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
       volumeMounts:
       - mountPath: /kfp-launcher
         name: kfp-launcher
@@ -239,6 +264,13 @@ spec:
     volumes:
     - emptyDir: {}
       name: kfp-launcher
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
     - emptyDir: {}
       name: gcs-scratch
     - emptyDir: {}
@@ -251,30 +283,44 @@ spec:
       name: dot-cache-scratch
     - emptyDir: {}
       name: dot-config-scratch
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
   - container:
       args:
       - --executor_type
       - importer
-      - --task_spec
-      - '{{inputs.parameters.task}}'
-      - --component_spec
-      - '{{inputs.parameters.component}}'
+      - --task_name
+      - '{{inputs.parameters.task-name}}'
       - --importer_spec
       - '{{inputs.parameters.importer}}'
       - --pipeline_name
-      - pipeline-with-importer-and-gcpc-type
+      - pipeline-with-importer-and-gcpc-types
       - --run_id
       - '{{workflow.uid}}'
-      - --parent_dag_id
-      - '{{inputs.parameters.parent-dag-id}}'
+      - --parent_task_id
+      - '{{inputs.parameters.parent-dag-task-id}}'
+      - --iteration_index
+      - '{{inputs.parameters.iteration-index}}'
+      - --ml_pipeline_server_address
+      - ml-pipeline.kubeflow.svc.cluster.local
+      - --ml_pipeline_server_port
+      - "8887"
+      - --namespace
+      - $(NAMESPACE)
       - --pod_name
       - $(KFP_POD_NAME)
       - --pod_uid
       - $(KFP_POD_UID)
-      - --mlmd_server_address
-      - metadata-grpc-service.kubeflow.svc.cluster.local
-      - --mlmd_server_port
-      - "8080"
+      - --cache_disabled=false
+      - --ml_pipeline_tls_enabled=false
+      - --ca_cert_path
+      - ""
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
       command:
       - launcher-v2
       env:
@@ -286,10 +332,10 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.uid
-      envFrom:
-      - configMapRef:
-          name: metadata-grpc-configmap
-          optional: true
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       image: ghcr.io/kubeflow/kfp-launcher:latest
       name: ""
       resources:
@@ -307,12 +353,21 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
     inputs:
       parameters:
-      - name: task
-      - name: component
+      - name: task-name
       - name: importer
-      - name: parent-dag-id
+      - name: parent-dag-task-id
+      - default: "-1"
+        name: iteration-index
     metadata:
       annotations:
         pipelines.kubeflow.org/runtime-role: launcher
@@ -325,20 +380,26 @@ spec:
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
+    volumes:
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
   - dag:
       tasks:
       - arguments:
           parameters:
-          - name: component
-            value: '{{workflow.parameters.components-9422f7f39ffcd22b988c9b7896b4fe8a0944c019f8cfb5ddd8f1b1ef8f5dbe18}}'
-          - name: task
-            value: '{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-consumer-op"},"dependentTasks":["importer"],"inputs":{"artifacts":{"dataset":{"taskOutputArtifact":{"outputArtifactKey":"artifact","producerTask":"importer"}}}},"taskInfo":{"name":"consumer-op"}}'
-          - name: container
-            value: '{{workflow.parameters.implementations-9422f7f39ffcd22b988c9b7896b4fe8a0944c019f8cfb5ddd8f1b1ef8f5dbe18}}'
           - name: task-name
             value: consumer-op
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
         depends: importer.Succeeded
         name: consumer-op-driver
         template: system-container-driver
@@ -354,19 +415,17 @@ spec:
         template: system-container-executor
       - arguments:
           parameters:
-          - name: task
-            value: '{"cachingOptions":{"enableCache":true},"componentRef":{"name":"comp-importer"},"inputs":{"parameters":{"uri":{"runtimeValue":{"constant":"gs://ml-pipeline-playground/shakespeare1.txt"}}}},"taskInfo":{"name":"importer"}}'
-          - name: component
-            value: '{{workflow.parameters.components-comp-importer}}'
+          - name: task-name
+            value: importer
           - name: importer
             value: '{{workflow.parameters.implementations-comp-importer}}'
-          - name: parent-dag-id
-            value: '{{inputs.parameters.parent-dag-id}}'
+          - name: parent-dag-task-id
+            value: '{{inputs.parameters.parent-dag-task-id}}'
         name: importer
         template: system-importer
     inputs:
       parameters:
-      - name: parent-dag-id
+      - name: parent-dag-task-id
     metadata: {}
     name: root
     outputs: {}
@@ -375,31 +434,29 @@ spec:
       - --type
       - '{{inputs.parameters.driver-type}}'
       - --pipeline_name
-      - pipeline-with-importer-and-gcpc-type
+      - pipeline-with-importer-and-gcpc-types
       - --run_id
       - '{{workflow.uid}}'
       - --run_name
       - '{{workflow.name}}'
       - --run_display_name
       - ""
-      - --dag_execution_id
-      - '{{inputs.parameters.parent-dag-id}}'
-      - --component
-      - '{{inputs.parameters.component}}'
-      - --task
-      - '{{inputs.parameters.task}}'
+      - --parent_task_id
+      - '{{inputs.parameters.parent-dag-task-id}}'
       - --task_name
       - '{{inputs.parameters.task-name}}'
       - --runtime_config
       - '{{inputs.parameters.runtime-config}}'
       - --iteration_index
       - '{{inputs.parameters.iteration-index}}'
-      - --execution_id_path
-      - '{{outputs.parameters.execution-id.path}}'
+      - --parent_task_id_path
+      - '{{outputs.parameters.parent-dag-task-id-path.path}}'
       - --iteration_count_path
       - '{{outputs.parameters.iteration-count.path}}'
       - --condition_path
       - '{{outputs.parameters.condition.path}}'
+      - --namespace
+      - $(NAMESPACE)
       - --http_proxy
       - ""
       - --https_proxy
@@ -410,12 +467,29 @@ spec:
       - ml-pipeline.kubeflow.svc.cluster.local
       - --ml_pipeline_server_port
       - "8887"
-      - --mlmd_server_address
-      - metadata-grpc-service.kubeflow.svc.cluster.local
-      - --mlmd_server_port
-      - "8080"
+      - --cache_disabled=false
+      - --log_level
+      - "1"
+      - --publish_logs
+      - "true"
+      - --ml_pipeline_tls_enabled=false
+      - --ca_cert_path
+      - ""
       command:
       - driver
+      env:
+      - name: KFP_POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: KFP_POD_UID
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.uid
+      - name: NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       image: ghcr.io/kubeflow/kfp-driver:latest
       name: ""
       resources:
@@ -433,17 +507,22 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+      - mountPath: /var/run/secrets/kfp
+        name: kfp-launcher-token
+        readOnly: true
+      - mountPath: /etc/kfp/launcher-config
+        name: kfp-launcher-config
+        readOnly: true
     inputs:
       parameters:
-      - name: component
       - default: ""
         name: runtime-config
       - default: ""
-        name: task
-      - default: ""
         name: task-name
-      - default: "0"
-        name: parent-dag-id
+      - default: ""
+        name: parent-dag-task-id
       - default: "-1"
         name: iteration-index
       - default: DAG
@@ -457,9 +536,9 @@ spec:
     name: system-dag-driver
     outputs:
       parameters:
-      - name: execution-id
+      - name: parent-dag-task-id-path
         valueFrom:
-          path: /tmp/outputs/execution-id
+          path: /tmp/outputs/task-id
       - name: iteration-count
         valueFrom:
           default: "0"
@@ -472,12 +551,22 @@ spec:
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
+    volumes:
+    - name: kfp-launcher-token
+      projected:
+        sources:
+        - serviceAccountToken:
+            audience: pipelines.kubeflow.org/runs/{{workflow.uid}}
+            expirationSeconds: 7200
+            path: token
+    - configMap:
+        name: kfp-launcher
+        optional: true
+      name: kfp-launcher-config
   - dag:
       tasks:
       - arguments:
           parameters:
-          - name: component
-            value: '{{workflow.parameters.components-root}}'
           - name: runtime-config
             value: '{}'
           - name: driver-type
@@ -486,8 +575,8 @@ spec:
         template: system-dag-driver
       - arguments:
           parameters:
-          - name: parent-dag-id
-            value: '{{tasks.root-driver.outputs.parameters.execution-id}}'
+          - name: parent-dag-task-id
+            value: '{{tasks.root-driver.outputs.parameters.parent-dag-task-id-path}}'
           - name: condition
             value: ""
         depends: root-driver.Succeeded

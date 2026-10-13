@@ -20,22 +20,11 @@ const defaultTimeout = 10000;
 const screenshotDir = process.env.FRONTEND_INTEGRATION_SCREENSHOT_DIR || '/tmp';
 const runPageLoadingText = 'Currently loading pipeline information';
 
-const legacyRunFormSelectors = {
-  description: '#descriptionInput',
-  message: 'input#newRunPipelineParam0',
-  runName: '#runNameInput',
-};
-
-const v2RunFormSelectors = {
+const runFormSelectors = {
   description: '//label[normalize-space()="Description"]/following::*[self::textarea or self::input][1]',
   message: '#message',
   runName: '//label[starts-with(normalize-space(), "Run name")]/following::input[1]',
 };
-
-const defaultRunFormVariants = [
-  { name: 'legacy', selectors: legacyRunFormSelectors },
-  { name: 'v2', selectors: v2RunFormSelectors },
-];
 
 async function waitForCondition(condition, { timeout = defaultTimeout, timeoutMsg, interval } = {}) {
   const waitOptions = { timeout };
@@ -73,10 +62,7 @@ async function waitForRunPageReady({
   timeout = defaultTimeout,
   requirePipelineVersion = true,
   timeoutMsg = 'expected a run creation form to load',
-  variants = defaultRunFormVariants,
 } = {}) {
-  let matchedVariant;
-
   try {
     await waitForCondition(
       async () => {
@@ -92,17 +78,13 @@ async function waitForRunPageReady({
           return false;
         }
 
-        for (const variant of variants) {
-          if (
-            (await isSelectorDisplayed(variant.selectors.runName)) &&
-            (await isSelectorDisplayed(variant.selectors.description))
-          ) {
-            matchedVariant = variant;
-            return true;
+        for (const selector of [runFormSelectors.runName, runFormSelectors.description]) {
+          if (!(await isSelectorDisplayed(selector))) {
+            return false;
           }
         }
 
-        return false;
+        return true;
       },
       {
         timeout,
@@ -116,7 +98,7 @@ async function waitForRunPageReady({
     throw error;
   }
 
-  return matchedVariant;
+  return runFormSelectors;
 }
 async function getValueFromDetailsTable(key) {
   // Find the span that shows the key, get its parent div (the row), then
@@ -143,6 +125,15 @@ async function saveDebugScreenshot(name) {
   await browser.saveScreenshot(screenshotPath);
   console.log('DEBUG_SCREENSHOT', screenshotPath);
   return screenshotPath;
+}
+
+async function saveDebugScreenshotBestEffort(name) {
+  try {
+    await saveDebugScreenshot(name);
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    console.log(`Unable to save ${name} debug screenshot: ${message}`);
+  }
 }
 
 async function logPipelineSelectorDiagnostics() {
@@ -187,6 +178,14 @@ async function selectPipelineForRun(
   await $('#pipelineSelectorDialog').waitForDisplayed({ timeout, reverse: true });
 }
 
+async function waitForSelectorDisplayed(selector, { timeout = defaultTimeout } = {}) {
+  // Navigation can replace an element without changing its selector.
+  await waitForCondition(() => isSelectorDisplayed(selector), {
+    timeout,
+    timeoutMsg: `expected selector ${selector} to be displayed`,
+  });
+}
+
 async function isSelectorDisplayed(selector) {
   const element = await $(selector);
   return (await element.isExisting()) && (await element.isDisplayed());
@@ -194,13 +193,13 @@ async function isSelectorDisplayed(selector) {
 
 async function waitForGraphNodeCount(expectedCount, { timeout = defaultTimeout } = {}) {
   await waitForCondition(
-    async () => (await $$('.graphNode')).length === expectedCount,
+    async () => (await $$('.react-flow__node-EXECUTION')).length === expectedCount,
     {
       timeout,
       timeoutMsg: `expected ${expectedCount} graph node(s) to be visible`,
     },
   );
-  const nodes = await $$('.graphNode');
+  const nodes = await $$('.react-flow__node-EXECUTION');
   assert(
     nodes.length === expectedCount,
     `should have a ${expectedCount}-node graph, instead has: ${nodes.length}`,
@@ -219,6 +218,80 @@ async function waitForTableRows(
     },
   );
   return await $$(selector);
+}
+
+async function waitForLogViewerText(
+  expectedText,
+  { timeout = defaultTimeout, interval = 1000, screenshotName = 'log-viewer' } = {},
+) {
+  let lastLogsState = 'not-started';
+  let lastViewerText = '';
+  let lastRefreshTimestamp = 0;
+  let isRefreshingLogs = false;
+
+  try {
+    await waitForCondition(
+      async () => {
+        if (await isSelectorDisplayed('#logViewer')) {
+          const viewerText = await $('#logViewer').getText();
+          lastViewerText = viewerText;
+          if (!expectedText || viewerText.includes(expectedText)) {
+            lastLogsState = 'viewer-ready';
+            return true;
+          }
+          lastLogsState = viewerText.trim() ? 'viewer-missing-expected-text' : 'viewer-empty';
+        }
+
+        const logsPanelBusy = await isSelectorDisplayed('[role="progressbar"]');
+        if (isRefreshingLogs) {
+          if (logsPanelBusy) {
+            lastLogsState = 'waiting-for-log-refresh-to-settle';
+            return false;
+          }
+          isRefreshingLogs = false;
+        }
+
+        const logsFetchFailed = await pageContainsText('Failed to retrieve pod logs.');
+        if (
+          logsFetchFailed &&
+          !isRefreshingLogs &&
+          Date.now() - lastRefreshTimestamp >= interval
+        ) {
+          const refreshButton = await $('button=Refresh');
+          if (
+            (await refreshButton.isExisting()) &&
+            (await refreshButton.isDisplayed()) &&
+            (await refreshButton.isEnabled())
+          ) {
+            lastLogsState = 'refreshing-log-fetch';
+            lastRefreshTimestamp = Date.now();
+            isRefreshingLogs = true;
+            await refreshButton.click();
+            return false;
+          }
+        }
+
+        if (logsPanelBusy) {
+          lastLogsState = 'loading-log-viewer';
+        }
+
+        return false;
+      },
+      {
+        timeout,
+        interval,
+        timeoutMsg: expectedText
+          ? `expected log viewer to contain ${expectedText}`
+          : 'expected log viewer to become ready',
+      },
+    );
+  } catch (error) {
+    console.log('LOG_VIEWER_LAST_STATE', lastLogsState);
+    console.log('LOG_VIEWER_LAST_TEXT', lastViewerText.slice(0, 500));
+    console.log('LOG_VIEWER_URL', await browser.getUrl());
+    await saveDebugScreenshotBestEffort(screenshotName);
+    throw error;
+  }
 }
 
 function annotatePhaseError(phaseName, error) {
@@ -260,6 +333,8 @@ module.exports = {
   waitForCondition,
   waitForGraphNodeCount,
   waitForHashPrefix,
+  waitForLogViewerText,
   waitForRunPageReady,
+  waitForSelectorDisplayed,
   waitForTableRows,
 };

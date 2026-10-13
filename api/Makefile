@@ -12,23 +12,63 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 # Contact one of chensun, HumairAK if this remote image needs an update.
 # Pin off :master so CI does not rewrite generated files (protoc-gen-go v1.36.11).
 PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:release-2.17@sha256:28f1aaa56c2abefedecf162f5917843283253d2cd8d99bc53c18587033320370
+=======
+# Pre-built images for faster development (default: enabled for speed)
+# Set USE_PREBUILT_IMAGE=false when:
+# - Dockerfile dependencies have been updated
+# - CI validation fails due to tool version mismatches
+# - Working on API generation toolchain changes
+USE_PREBUILT_IMAGE ?= true
+# Validate USE_PREBUILT_IMAGE value
+ifneq ($(USE_PREBUILT_IMAGE),true)
+ifneq ($(USE_PREBUILT_IMAGE),false)
+$(error USE_PREBUILT_IMAGE must be 'true' or 'false', got '$(USE_PREBUILT_IMAGE)')
+endif
+endif
+PREBUILT_REMOTE_IMAGE=ghcr.io/kubeflow/kfp-api-generator:master
+IMAGE_TAG=kfp-api-generator
+>>>>>>> upstream/master
 
 .PHONY: all
 all: golang python
 
+ifeq ($(USE_PREBUILT_IMAGE),true)
+.PHONY: ensure-prebuilt-generator-image
+ensure-prebuilt-generator-image:
+	docker image inspect "$(PREBUILT_REMOTE_IMAGE)" >/dev/null 2>&1 || \
+		bash ../.github/resources/scripts/docker-pull-with-retry.sh "$(PREBUILT_REMOTE_IMAGE)"
+
+golang python: ensure-prebuilt-generator-image
+endif
+
 .PHONY: clean
 clean: clean-go clean-python
 
-# Generate proto packages using a pre-built api-generator image.
+# Generate proto packages using either pre-built image (fast) or source build (accurate).
+# Use USE_PREBUILT_IMAGE=false to build from source for guaranteed accuracy.
 .PHONY: golang
 golang: v2alpha1/*.proto
-	docker run --interactive --rm \
+ifeq ($(USE_PREBUILT_IMAGE),true)
+	docker run --pull=never --interactive --rm \
 		--user $$(id -u):$$(id -g) \
 		--mount type=bind,source="$$(pwd)/..",target=/go/src/github.com/kubeflow/pipelines \
 		$(PREBUILT_REMOTE_IMAGE)  \
+		sh -c 'cd /go/src/github.com/kubeflow/pipelines/api && make generate'
+else
+	$(MAKE) golang-from-source
+endif
+
+# Generate proto packages by building api-generator image from source.
+.PHONY: golang-from-source
+golang-from-source: ensure-api-generator-image v2alpha1/*.proto
+	docker run --interactive --rm \
+		--user $$(id -u):$$(id -g) \
+		--mount type=bind,source="$$(pwd)/..",target=/go/src/github.com/kubeflow/pipelines \
+		$(IMAGE_TAG)  \
 		sh -c 'cd /go/src/github.com/kubeflow/pipelines/api && make generate'
 
 # Delete all generated proto go packages.
@@ -37,23 +77,33 @@ clean-go:
 	rm -rf v2alpha1/go
 	rm -f v2alpha1/google/rpc/status.proto
 
-# Build Python package using pre-built image
+# Generate SDK-owned Python bindings using the existing generator image.
+# Use USE_PREBUILT_IMAGE=false to build from source for guaranteed accuracy.
 .PHONY: python
-python: python fetch-protos
-	docker run --interactive --rm \
+python: fetch-protos
+ifeq ($(USE_PREBUILT_IMAGE),true)
+	docker run --pull=never --interactive --rm \
 		--user $$(id -u):$$(id -g) \
-		-e HOME=/tmp \
 		-v "$$(pwd)/..":"/go/src/github.com/kubeflow/pipelines":z \
 		$(PREBUILT_REMOTE_IMAGE) \
-		sh -c 'cd /go/src/github.com/kubeflow/pipelines/api/v2alpha1/python && \
-		    python3 -m pip install --user --break-system-packages -r requirements.txt && \
-		    python3 generate_proto.py && \
-            python3 setup.py sdist && pip wheel --no-deps dist/*.tar.gz -w dist'
+		python3 /go/src/github.com/kubeflow/pipelines/api/v2alpha1/python/generate_proto.py
+else
+	$(MAKE) python-from-source
+endif
+
+# Build Python package by building api-generator image from source.
+.PHONY: python-from-source
+python-from-source: ensure-api-generator-image fetch-protos
+	docker run --interactive --rm \
+		--user $$(id -u):$$(id -g) \
+		-v "$$(pwd)/..":"/go/src/github.com/kubeflow/pipelines":z \
+		$(IMAGE_TAG) \
+		python3 /go/src/github.com/kubeflow/pipelines/api/v2alpha1/python/generate_proto.py
 
 # Build and locally install Python package using editable mode for development.
 .PHONY: python-dev
 python-dev: v2alpha1/pipeline_spec.proto fetch-protos
-	python3 v2alpha1/python/generate_proto.py && cd v2alpha1/python && pip install -e .
+	python3 v2alpha1/python/generate_proto.py
 
 # Delete all generated Python packages
 .PHONY: clean-python
@@ -62,7 +112,7 @@ clean-python:
 	rm -rf v2alpha1/python/dist
 	rm -rf v2alpha1/python/kfp_pipeline_spec.egg-info
 	rm -rf v2alpha1/google
-	rm -f v2alpha1/python/kfp/pipeline_spec/pipeline_spec_pb2.py
+	rm -f ../sdk/python/kfp/pipeline_spec/pipeline_spec_pb2.py
 	rm -f v2alpha1/google/rpc/status.proto
 
 ###########################################
@@ -105,11 +155,35 @@ fetch-protos: fetch-googleapis fetch-protobuf
 
 fetch-googleapis:
 	@echo "Downloading google/rpc/status.proto from googleapis@$(GOOGLEAPIS_COMMIT)..."
-	mkdir -p $(PROTO_DST_DIR)/rpc
-	wget -qO $(PROTO_DST_DIR)/rpc/status.proto https://raw.githubusercontent.com/googleapis/googleapis/$(GOOGLEAPIS_COMMIT)/google/rpc/status.proto
+	@mkdir -p $(PROTO_DST_DIR)/rpc
+	@# Authenticate with GITHUB_TOKEN when set to avoid anonymous per-IP 429
+	@# rate limits on raw.githubusercontent.com. The bearer header is passed
+	@# through a temporary WGETRC file, never on the command line, so it
+	@# cannot leak into an echoed recipe or CI log. The whole recipe is
+	@# @-suppressed for the same reason. If the authenticated fetch fails
+	@# (e.g. token scoping), it falls back to an anonymous fetch, so behavior
+	@# is never worse than without a token; both paths keep the retries.
+	@wget_cmd="wget --tries=3 --waitretry=10 --retry-on-http-error=429,500,502,503 -qO $(PROTO_DST_DIR)/rpc/status.proto https://raw.githubusercontent.com/googleapis/googleapis/$(GOOGLEAPIS_COMMIT)/google/rpc/status.proto"; \
+	if [ -n "$$GITHUB_TOKEN" ]; then \
+		wgetrc=$$(mktemp "$${TMPDIR:-/tmp}/kfp-proto-wgetrc.XXXXXX"); \
+		printf 'header = Authorization: Bearer %s\n' "$$GITHUB_TOKEN" > "$$wgetrc"; \
+		WGETRC=$$wgetrc $$wget_cmd || $$wget_cmd; \
+		status=$$?; \
+		rm -f "$$wgetrc"; \
+	else \
+		$$wget_cmd; \
+		status=$$?; \
+	fi; \
+	exit $$status
 
 fetch-protobuf: clean-protobuf-tmp
-	@git clone --depth 1 --branch $(PROTOBUF_TAG) https://github.com/protocolbuffers/protobuf.git $(TMP_PROTOBUF_DIR)
+	@for attempt in 1 2 3; do \
+		rm -rf $(TMP_PROTOBUF_DIR); \
+		git clone --depth 1 --branch $(PROTOBUF_TAG) https://github.com/protocolbuffers/protobuf.git $(TMP_PROTOBUF_DIR) && break; \
+		echo "git clone of protobuf failed (attempt $$attempt); retrying in 10s..."; \
+		sleep 10; \
+	done
+	@test -d $(TMP_PROTOBUF_DIR)/src/google/protobuf
 	@mkdir -p $(PROTO_DST_DIR)/protobuf
 	@cp $(TMP_PROTOBUF_DIR)/src/google/protobuf/*.proto $(PROTO_DST_DIR)/protobuf/
 
@@ -118,3 +192,8 @@ clean-protobuf-tmp:
 
 protoc-gen-go:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go
+
+# Build the API generator image via the canonical target in backend/api
+.PHONY: ensure-api-generator-image
+ensure-api-generator-image:
+	$(MAKE) -C ../backend/api image
