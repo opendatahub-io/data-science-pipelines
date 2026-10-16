@@ -60,6 +60,9 @@ const (
 	PluginMaxPayloadBytes                   string = "PLUGIN_MAX_PAYLOAD_BYTES"
 	PluginMaxTotalPayloadBytes              string = "PLUGIN_MAX_TOTAL_PAYLOAD_BYTES"
 	PluginMaxNestingDepth                   string = "PLUGIN_MAX_NESTING_DEPTH"
+	// DSPANameFlag is the application name written onto compiled workflow pods.
+	// Empty leaves that label unset.
+	DSPANameFlag string = "DSPA_NAME"
 )
 
 type PluginLimitsConfig struct {

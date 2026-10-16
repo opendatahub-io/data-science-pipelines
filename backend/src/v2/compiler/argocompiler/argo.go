@@ -163,9 +163,7 @@ func Compile(jobArg *pipelinespec.PipelineJob, kubernetesSpecArg *pipelinespec.S
 				Annotations: map[string]string{
 					"pipelines.kubeflow.org/v2_component": "true",
 				},
-				Labels: map[string]string{
-					"pipelines.kubeflow.org/v2_component": "true",
-				},
+				Labels: workflowPodLabels(),
 			},
 			Arguments: wfapi.Arguments{
 				Parameters: []wfapi.Parameter{},
@@ -346,7 +344,22 @@ func (c *workflowCompiler) templateName(componentName string) string {
 const (
 	systemPodRoleLabelKey           = "pipelines.kubeflow.org/pod-role"
 	systemTemplateNameAnnotationKey = "pipelines.kubeflow.org/template-name"
+	applicationNameLabelKey         = "dspa"
+	v2ComponentLabelKey             = "pipelines.kubeflow.org/v2_component"
 )
+
+// workflowPodLabels returns the labels Argo copies onto every workflow pod.
+// The application name is included only when the API server was given one.
+func workflowPodLabels() map[string]string {
+	labels := map[string]string{
+		v2ComponentLabelKey: "true",
+	}
+	applicationName := strings.TrimSpace(common.GetStringConfigWithDefault(common.DSPANameFlag, ""))
+	if applicationName != "" {
+		labels[applicationNameLabelKey] = applicationName
+	}
+	return labels
+}
 
 func addSystemPodMetadata(t *wfapi.Template, role, templateName string) {
 	if t == nil {
