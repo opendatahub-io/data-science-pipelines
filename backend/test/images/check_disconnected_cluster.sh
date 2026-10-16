@@ -3,6 +3,10 @@
 NETWORK_TEST_IMAGE="${NETWORK_TEST_IMAGE:-busybox}"
 NETWORK_TEST_TIMEOUT="${NETWORK_TEST_TIMEOUT:-5}"
 NETWORK_TEST_URL="${NETWORK_TEST_URL:-http://google.com}"
+# Do not use the current kubeconfig namespace: upgrade tests intentionally
+# remove upg-dsp after verification, while the kubeconfig context still points
+# to it. A stable namespace keeps this probe independent of test fixtures.
+NETWORK_TEST_NAMESPACE="${NETWORK_TEST_NAMESPACE:-default}"
 
 check_mirror_policies() {
     local idms_output idms_count
@@ -27,7 +31,13 @@ check_network_access() {
     local output pod_name
     pod_name="disconnected-net-test-$(head /dev/urandom | tr -dc a-z0-9 | head -c 6)"
 
+    if ! oc get namespace "${NETWORK_TEST_NAMESPACE}" >/dev/null 2>&1; then
+        echo "ERROR: Network probe namespace does not exist: ${NETWORK_TEST_NAMESPACE}" >&2
+        return 2
+    fi
+
     output=$(oc run "${pod_name}" \
+        --namespace="${NETWORK_TEST_NAMESPACE}" \
         --image="${NETWORK_TEST_IMAGE}" \
         --restart=Never \
         --rm \
@@ -39,15 +49,15 @@ check_network_access() {
         return 1
     }
 
-    if echo "${output}" | grep -qiE 'AlreadyExists|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|Unschedulable'; then
+    if echo "${output}" | grep -qiE 'AlreadyExists|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|Unschedulable|NotFound|namespaces? .* not found'; then
         echo "ERROR: Pod infrastructure failure (not a network test result): ${output}" >&2
-        oc delete pod "${pod_name}" --ignore-not-found=true &>/dev/null
+        oc delete pod "${pod_name}" --namespace="${NETWORK_TEST_NAMESPACE}" --ignore-not-found=true &>/dev/null
         return 2
     fi
 
     echo "Pod failed to reach ${NETWORK_TEST_URL} — network is unreachable" >&2
     echo "Detail: ${output}" >&2
-    oc delete pod "${pod_name}" --ignore-not-found=true &>/dev/null
+    oc delete pod "${pod_name}" --namespace="${NETWORK_TEST_NAMESPACE}" --ignore-not-found=true &>/dev/null
     return 0
 }
 

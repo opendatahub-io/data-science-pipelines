@@ -49,6 +49,15 @@ COPY ./api ./api
 COPY ./kubernetes_platform ./kubernetes_platform
 COPY ./test_data ./test_data
 
+# Ginkgo compiles each suite beside its Go package. The test container runs as
+# the Jenkins agent UID, so the copied test tree must be writable at runtime.
+RUN chmod -R a+rwX /dspa/backend/test
+
+# Validate the same write path used by the rootless CI container at image build
+# time so a future Dockerfile change cannot silently break Ginkgo compilation.
+RUN useradd --uid 1001 --create-home testuser && \
+    su -s /bin/bash testuser -c 'touch /dspa/backend/test/v2/api/.write-test && rm /dspa/backend/test/v2/api/.write-test'
+
 WORKDIR /dspa/backend/test/images
 
 # Command to run the tests
