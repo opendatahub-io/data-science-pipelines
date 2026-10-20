@@ -7,13 +7,78 @@ import (
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
 	"github.com/kubeflow/pipelines/kubernetes_platform/go/kubernetesplatform"
+	pb "github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	k8score "k8s.io/api/core/v1"
 	k8sres "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
+
+func Test_createPVC_StorageClassName(t *testing.T) {
+	tests := []struct {
+		name                     string
+		storageClassNameInput    *structpb.Value
+		includeStorageClassInput bool
+		expectedStorageClassName *string
+	}{
+		{name: "cluster default when omitted"},
+		{
+			name:                     "explicit storage class",
+			storageClassNameInput:    structpb.NewStringValue("gp3-csi"),
+			includeStorageClassInput: true,
+			expectedStorageClassName: proto.String("gp3-csi"),
+		},
+		{
+			name:                     "explicit empty storage class",
+			storageClassNameInput:    structpb.NewStringValue(""),
+			includeStorageClassInput: true,
+			expectedStorageClassName: proto.String(""),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			inputParameters := map[string]*structpb.Value{
+				"access_modes": structpb.NewListValue(&structpb.ListValue{Values: []*structpb.Value{structpb.NewStringValue("ReadWriteOnce")}}),
+				"pvc_name":     structpb.NewStringValue("test-pvc"),
+				"size":         structpb.NewStringValue("1Gi"),
+			}
+			if test.includeStorageClassInput {
+				inputParameters["storage_class_name"] = test.storageClassNameInput
+			}
+
+			metadataService := &MockMetadataClient{
+				GetContextByTypeAndNameFunc: func(_ context.Context, _ *pb.GetContextByTypeAndNameRequest, _ ...grpc.CallOption) (*pb.GetContextByTypeAndNameResponse, error) {
+					return &pb.GetContextByTypeAndNameResponse{Context: &pb.Context{Id: proto.Int64(1)}}, nil
+				},
+				PutExecutionFunc: func(_ context.Context, _ *pb.PutExecutionRequest, _ ...grpc.CallOption) (*pb.PutExecutionResponse, error) {
+					return &pb.PutExecutionResponse{ExecutionId: proto.Int64(1)}, nil
+				},
+				GetExecutionsByIDFunc: func(_ context.Context, _ *pb.GetExecutionsByIDRequest, _ ...grpc.CallOption) (*pb.GetExecutionsByIDResponse, error) {
+					return &pb.GetExecutionsByIDResponse{Executions: []*pb.Execution{{Id: proto.Int64(1)}}}, nil
+				},
+			}
+			kubernetesClient := fake.NewClientset()
+			options := &Options{PipelineName: "test-pipeline", RunID: "test-run", Namespace: "test", CacheDisabled: true}
+			execution := Execution{ExecutorInput: &pipelinespec.ExecutorInput{Inputs: &pipelinespec.ExecutorInput_Inputs{ParameterValues: inputParameters}}}
+
+			pvcName, _, status, err := createPVC(context.Background(), kubernetesClient, execution, options, nil, metadata.NewTestClient(metadataService), &metadata.ExecutionConfig{})
+			require.NoError(t, err)
+			assert.Equal(t, pb.Execution_COMPLETE, status)
+			assert.Equal(t, "test-pvc", pvcName)
+
+			createdPVC, err := kubernetesClient.CoreV1().PersistentVolumeClaims(options.Namespace).Get(context.Background(), pvcName, metav1.GetOptions{})
+			require.NoError(t, err)
+			assert.Equal(t, test.expectedStorageClassName, createdPVC.Spec.StorageClassName)
+		})
+	}
+}
 
 func Test_makeVolumeMountPatch(t *testing.T) {
 	type args struct {

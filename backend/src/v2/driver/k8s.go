@@ -951,13 +951,11 @@ func createPVC(
 	}
 
 	// Optional input: storage_class_name
-	// When not provided, use default value `standard`
-	storageClassNameInput, ok := inputs.ParameterValues["storage_class_name"]
-	var storageClassName string
-	if !ok {
-		storageClassName = "standard"
-	} else {
-		storageClassName = storageClassNameInput.GetStringValue()
+	// When not provided, use the cluster's default storage class.
+	var storageClassName *string
+	if storageClassNameInput, ok := inputs.ParameterValues["storage_class_name"]; ok {
+		providedStorageClassName := storageClassNameInput.GetStringValue()
+		storageClassName = &providedStorageClassName
 	}
 
 	// Optional input: annotations
@@ -1045,7 +1043,7 @@ func createPVC(
 					k8score.ResourceStorage: k8sres.MustParse(volumeSizeInput.GetStringValue()),
 				},
 			},
-			StorageClassName: &storageClassName,
+			StorageClassName: storageClassName,
 			VolumeName:       volumeName,
 			DataSource:       dataSource,
 		},

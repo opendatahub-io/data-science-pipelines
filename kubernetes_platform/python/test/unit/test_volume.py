@@ -18,6 +18,43 @@ from kfp import kubernetes
 import pytest
 
 
+class TestCreatePVC:
+
+    @pytest.mark.parametrize('storage_class_kwargs, expected_storage_class', [
+        ({}, None),
+        ({
+            'storage_class_name': 'gp3-csi'
+        }, 'gp3-csi'),
+        ({
+            'storage_class_name': ''
+        }, ''),
+    ])
+    def test_compiled_storage_class(self, storage_class_kwargs,
+                                    expected_storage_class):
+
+        @dsl.pipeline
+        def my_pipeline():
+            kubernetes.CreatePVC(
+                access_modes=['ReadWriteOnce'],
+                size='1Gi',
+                **storage_class_kwargs)
+
+        pipeline_spec = my_pipeline.pipeline_spec
+        storage_class_parameter = pipeline_spec.components[
+            'comp-createpvc'].input_definitions.parameters['storage_class_name']
+        assert not storage_class_parameter.HasField('default_value')
+
+        task_parameters = pipeline_spec.root.dag.tasks[
+            'createpvc'].inputs.parameters
+        if expected_storage_class is None:
+            assert 'storage_class_name' not in task_parameters
+        else:
+            storage_class_value = task_parameters[
+                'storage_class_name'].runtime_value.constant
+            assert storage_class_value.WhichOneof('kind') == 'string_value'
+            assert storage_class_value.string_value == expected_storage_class
+
+
 class TestMountPVC:
 
     def test_mount_one(self):
