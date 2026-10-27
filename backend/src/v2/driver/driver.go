@@ -101,6 +101,10 @@ type Options struct {
 	DefaultRunAsGroup *int64
 	// Admin-configured default runAsNonRoot for user containers. Nil means not set.
 	DefaultRunAsNonRoot *bool
+	// Admin-configured default StorageClass for PVCs created by CreatePVC
+	// pipeline tasks. Nil means not set, so tasks that omit storage_class_name
+	// fall back to Kubernetes defaulting.
+	DefaultPVCStorageClass *string
 }
 
 // TaskConfig needs to stay aligned with the TaskConfig in the SDK.

@@ -52,6 +52,7 @@ const (
 	DefaultSecurityContextRunAsNonRoot      string = "DEFAULT_SECURITY_CONTEXT_RUN_AS_NON_ROOT"
 	BlockV1Pipelines                        string = "BLOCK_V1_PIPELINES"
 	V1NamespaceWhitelist                    string = "V1_ALLOWED_NAMESPACES"
+	DefaultPVCStorageClass                  string = "DEFAULT_PVC_STORAGE_CLASS"
 	PipelineURLAllowedDomains               string = "PIPELINE_URL_ALLOWED_DOMAINS"
 	PipelineURLAllowHTTP                    string = "PIPELINE_URL_ALLOW_HTTP"
 	PipelineURLTimeout                      string = "PIPELINE_URL_TIMEOUT"
@@ -242,6 +243,14 @@ func GetDefaultSecurityContextRunAsGroup() string {
 
 func GetDefaultSecurityContextRunAsNonRoot() string {
 	return GetStringConfigWithDefault(DefaultSecurityContextRunAsNonRoot, "")
+}
+
+// GetDefaultPVCStorageClass returns the administrator-configured default
+// StorageClass for PVCs created by CreatePVC pipeline tasks. Empty means not
+// configured, so omitted task storage classes fall back to Kubernetes
+// defaulting.
+func GetDefaultPVCStorageClass() string {
+	return GetStringConfigWithDefault(DefaultPVCStorageClass, "")
 }
 
 func GetPluginLimitsConfig() (PluginLimitsConfig, error) {

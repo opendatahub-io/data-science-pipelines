@@ -32,17 +32,19 @@ import (
 )
 
 // TestCreatePVCStorageClassSemantics verifies the storage-class handling of
-// CreatePVC tasks. When storage_class_name is omitted, the PVC's
-// StorageClassName must stay nil so Kubernetes applies the cluster's default
-// StorageClass. An explicit class name is preserved, and an explicit empty
-// string is preserved as an intentional opt-out of default storage-class
-// selection.
+// CreatePVC tasks. Precedence: a pipeline-supplied storage_class_name
+// (including an explicit empty string opt-out) wins over the server-configured
+// default (DefaultPVCStorageClass); when neither supplies a class, the PVC's
+// StorageClassName stays nil so Kubernetes applies the cluster default.
 func TestCreatePVCStorageClassSemantics(t *testing.T) {
 	tests := []struct {
 		name string
 		// storageClassInput, when non-nil, is passed to the task as the
 		// storage_class_name input parameter value.
 		storageClassInput *string
+		// serverDefault, when non-nil, is configured on the driver as the
+		// server-level default StorageClass (DEFAULT_PVC_STORAGE_CLASS).
+		serverDefault     *string
 		expectedClassName *string
 	}{
 		{
@@ -59,6 +61,32 @@ func TestCreatePVCStorageClassSemantics(t *testing.T) {
 			name:              "Explicit empty string is preserved as an opt-out of default selection",
 			storageClassInput: newString(""),
 			expectedClassName: newString(""),
+		},
+		{
+			name:              "Omitted input uses the configured server default",
+			storageClassInput: nil,
+			serverDefault:     newString("server-default"),
+			expectedClassName: newString("server-default"),
+		},
+		{
+			name:              "Explicit class name overrides the configured server default",
+			storageClassInput: newString("fast-ssd"),
+			serverDefault:     newString("server-default"),
+			expectedClassName: newString("fast-ssd"),
+		},
+		{
+			name:              "Explicit empty string opts out of the configured server default",
+			storageClassInput: newString(""),
+			serverDefault:     newString("server-default"),
+			expectedClassName: newString(""),
+		},
+		{
+			// Defensive: parseOptionalString never produces a pointer to an
+			// empty string, but the guard must treat it as unconfigured.
+			name:              "Pointer to empty server default is treated as unconfigured",
+			storageClassInput: nil,
+			serverDefault:     newString(""),
+			expectedClassName: nil,
 		},
 	}
 	for _, tt := range tests {
@@ -100,8 +128,9 @@ func TestCreatePVCStorageClassSemantics(t *testing.T) {
 					Container: &pipelinespec.PipelineDeploymentConfig_PipelineContainerSpec{
 						Image: "argostub/createpvc",
 					},
-					CacheDisabled:    true,
-					PluginDispatcher: plugins.NoOpDispatcher{},
+					CacheDisabled:          true,
+					PluginDispatcher:       plugins.NoOpDispatcher{},
+					DefaultPVCStorageClass: tt.serverDefault,
 				},
 				&mockCacheClient{},
 				mlmdClient,

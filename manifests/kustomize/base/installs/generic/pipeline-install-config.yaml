@@ -120,3 +120,9 @@ data:
   ## V1_ALLOWED_NAMESPACES: Comma-separated list of namespaces that are allowed to use v1 pipelines
   ## when BLOCK_V1_PIPELINES is set to true. This is only evaluated if BLOCK_V1_PIPELINES is set to true.
   V1_ALLOWED_NAMESPACES: ""
+  ## Default StorageClass for PersistentVolumeClaims created by CreatePVC
+  ## pipeline tasks. Leave empty (default) to let Kubernetes apply the
+  ## cluster's default StorageClass. A storage_class_name supplied by the
+  ## pipeline, including an explicit empty string (opt-out), always takes
+  ## precedence over this value.
+  defaultPVCStorageClass: ""

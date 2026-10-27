@@ -57,6 +57,10 @@ type Options struct {
 	// Optional: admin-configured default runAsNonRoot for customer containers.
 	// Nil means not set (feature disabled).
 	DefaultRunAsNonRoot *bool
+	// Optional: administrator-configured default StorageClass for PVCs created
+	// by CreatePVC pipeline tasks. Nil means not set, so tasks that omit
+	// storage_class_name fall back to Kubernetes defaulting.
+	DefaultPVCStorageClass *string
 }
 
 const (
@@ -213,6 +217,7 @@ func Compile(jobArg *pipelinespec.PipelineJob, kubernetesSpecArg *pipelinespec.S
 		c.defaultRunAsUser = opts.DefaultRunAsUser
 		c.defaultRunAsGroup = opts.DefaultRunAsGroup
 		c.defaultRunAsNonRoot = opts.DefaultRunAsNonRoot
+		c.defaultPVCStorageClass = opts.DefaultPVCStorageClass
 		if opts.DriverImage != "" {
 			c.driverImage = opts.DriverImage
 		}
@@ -306,18 +311,19 @@ type workflowCompiler struct {
 	spec      *pipelinespec.PipelineSpec
 	executors map[string]*pipelinespec.PipelineDeploymentConfig_ExecutorSpec
 	// state
-	wf                   *wfapi.Workflow
-	templates            map[string]*wfapi.Template
-	driverImage          string
-	driverCommand        []string
-	launcherImage        string
-	launcherCommand      []string
-	cacheDisabled        bool
-	defaultWorkspace     *k8score.PersistentVolumeClaimSpec
-	mlPipelineTLSEnabled bool
-	defaultRunAsUser     *int64
-	defaultRunAsGroup    *int64
-	defaultRunAsNonRoot  *bool
+	wf                     *wfapi.Workflow
+	templates              map[string]*wfapi.Template
+	driverImage            string
+	driverCommand          []string
+	launcherImage          string
+	launcherCommand        []string
+	cacheDisabled          bool
+	defaultWorkspace       *k8score.PersistentVolumeClaimSpec
+	mlPipelineTLSEnabled   bool
+	defaultRunAsUser       *int64
+	defaultRunAsGroup      *int64
+	defaultRunAsNonRoot    *bool
+	defaultPVCStorageClass *string
 }
 
 func (c *workflowCompiler) Resolver(name string, component *pipelinespec.ComponentSpec, resolver *pipelinespec.PipelineDeploymentConfig_ResolverSpec) error {
