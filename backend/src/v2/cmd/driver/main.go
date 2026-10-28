@@ -146,6 +146,17 @@ func validate() error {
 	return nil
 }
 
+// defaultPVCStorageClassFromFlag converts the --default_pvc_storage_class
+// flag value into the driver Options field. Returns nil when the flag is
+// empty or whitespace-only, meaning no server default is configured.
+func defaultPVCStorageClassFromFlag(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
 func drive() (err error) {
 	defer func() {
 		if err != nil {
@@ -272,10 +283,7 @@ func drive() (err error) {
 				options.DefaultRunAsNonRoot = &v
 			}
 		}
-		if *defaultPVCStorageClass != "" {
-			defaultPVCStorageClass := *defaultPVCStorageClass
-			options.DefaultPVCStorageClass = &defaultPVCStorageClass
-		}
+		options.DefaultPVCStorageClass = defaultPVCStorageClassFromFlag(*defaultPVCStorageClass)
 		execution, driverErr = driver.Container(ctx, options, client, cacheClient)
 	default:
 		err = fmt.Errorf("unknown driverType %s", *driverType)
