@@ -35,10 +35,11 @@ spec:
         to use for a dynamically generated name, which\nwill take the form ``\u003cargo-workflow-name\u003e-\u003cpvc_name_suffix\u003e``.
         Only\none of ``pvc_name`` and ``pvc_name_suffix`` can be provided.","isOptional":true,"parameterType":"STRING"},"size":{"description":"The
         size of storage requested by the PVC that will be\nprovisioned. For example,
-        ``''5Gi''``. Corresponds to\n`PersistentVolumeClaim.spec.resources.requests.storage\n\u003chttps://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#PersistentVolumeClaimSpec\u003e`_.","parameterType":"STRING"},"storage_class_name":{"defaultValue":"","description":"Name
+        ``''5Gi''``. Corresponds to\n`PersistentVolumeClaim.spec.resources.requests.storage\n\u003chttps://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#PersistentVolumeClaimSpec\u003e`_.","parameterType":"STRING"},"storage_class_name":{"description":"Name
         of StorageClass from which to provision the PV\nto back the PVC. ``None``
-        indicates to use the cluster''s default\nstorage_class_name. Set to ``''''``
-        for a statically specified PVC.","isOptional":true,"parameterType":"STRING"},"volume_name":{"description":"Pre-existing
+        indicates to use the cluster''s default\nstorage_class_name, or the server-configured
+        default StorageClass\nwhen one is set by the administrator. Set to ``''''``
+        for a\nstatically specified PVC.","isOptional":true,"parameterType":"STRING"},"volume_name":{"description":"Pre-existing
         PersistentVolume that should back the\nprovisioned PersistentVolumeClaim.
         Used for statically\nspecified PV only. Corresponds to\n`PersistentVolumeClaim.spec.volumeName\n\u003chttps://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#PersistentVolumeClaimSpec\u003e`_.","isOptional":true,"parameterType":"STRING"}}},"outputDefinitions":{"parameters":{"name":{"parameterType":"STRING"}}}}'
     - name: implementations-98f254581598234b59377784d6cbf209de79e0bcda8013fe4c4397b5d3a26767
