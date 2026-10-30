@@ -90,17 +90,18 @@ var (
 	logLevel           = flag.String("log_level", "1", "The verbosity level to log.")
 
 	// proxy
-	httpProxy            = flag.String(httpProxyArg, unsetProxyArgValue, "The proxy for HTTP connections.")
-	httpsProxy           = flag.String(httpsProxyArg, unsetProxyArgValue, "The proxy for HTTPS connections.")
-	noProxy              = flag.String(noProxyArg, unsetProxyArgValue, "Addresses that should ignore the proxy.")
-	publishLogs          = flag.String("publish_logs", "true", "Whether to publish component logs to the object store")
-	cacheDisabledFlag    = flag.Bool("cache_disabled", false, "Disable cache globally.")
-	mlPipelineTLSEnabled = flag.Bool("ml_pipeline_tls_enabled", false, "Set to true if mlpipeline API server serves over TLS.")
-	metadataTLSEnabled   = flag.Bool("metadata_tls_enabled", false, "Set to true if MLMD serves over TLS.")
-	caCertPath           = flag.String("ca_cert_path", "", "The path to the CA certificate to trust on connections to the ML pipeline API server and metadata server.")
-	defaultRunAsUser     = flag.Int64("default_run_as_user", -1, "Admin-configured default runAsUser for user containers. -1 means not set.")
-	defaultRunAsGroup    = flag.Int64("default_run_as_group", -1, "Admin-configured default runAsGroup for user containers. -1 means not set.")
-	defaultRunAsNonRoot  = flag.String("default_run_as_non_root", "", "Admin-configured default runAsNonRoot for user containers. Empty means not set.")
+	httpProxy              = flag.String(httpProxyArg, unsetProxyArgValue, "The proxy for HTTP connections.")
+	httpsProxy             = flag.String(httpsProxyArg, unsetProxyArgValue, "The proxy for HTTPS connections.")
+	noProxy                = flag.String(noProxyArg, unsetProxyArgValue, "Addresses that should ignore the proxy.")
+	publishLogs            = flag.String("publish_logs", "true", "Whether to publish component logs to the object store")
+	cacheDisabledFlag      = flag.Bool("cache_disabled", false, "Disable cache globally.")
+	mlPipelineTLSEnabled   = flag.Bool("ml_pipeline_tls_enabled", false, "Set to true if mlpipeline API server serves over TLS.")
+	metadataTLSEnabled     = flag.Bool("metadata_tls_enabled", false, "Set to true if MLMD serves over TLS.")
+	caCertPath             = flag.String("ca_cert_path", "", "The path to the CA certificate to trust on connections to the ML pipeline API server and metadata server.")
+	defaultRunAsUser       = flag.Int64("default_run_as_user", -1, "Admin-configured default runAsUser for user containers. -1 means not set.")
+	defaultRunAsGroup      = flag.Int64("default_run_as_group", -1, "Admin-configured default runAsGroup for user containers. -1 means not set.")
+	defaultRunAsNonRoot    = flag.String("default_run_as_non_root", "", "Admin-configured default runAsNonRoot for user containers. Empty means not set.")
+	defaultPVCStorageClass = flag.String("default_pvc_storage_class", "", "Admin-configured default StorageClass for PVCs created by CreatePVC pipeline tasks. Empty means not set.")
 )
 
 // func RootDAG(pipelineName string, runID string, component *pipelinespec.ComponentSpec, task *pipelinespec.PipelineTaskSpec, mlmd *metadata.Client) (*Execution, error) {
@@ -143,6 +144,17 @@ func validate() error {
 	}
 	// validation responsibility lives in driver itself, so we do not validate all other args
 	return nil
+}
+
+// defaultPVCStorageClassFromFlag converts the --default_pvc_storage_class
+// flag value into the driver Options field. Returns nil when the flag is
+// empty or whitespace-only, meaning no server default is configured.
+func defaultPVCStorageClassFromFlag(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func drive() (err error) {
@@ -271,6 +283,7 @@ func drive() (err error) {
 				options.DefaultRunAsNonRoot = &v
 			}
 		}
+		options.DefaultPVCStorageClass = defaultPVCStorageClassFromFlag(*defaultPVCStorageClass)
 		execution, driverErr = driver.Container(ctx, options, client, cacheClient)
 	default:
 		err = fmt.Errorf("unknown driverType %s", *driverType)

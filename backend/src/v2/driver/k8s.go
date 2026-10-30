@@ -951,13 +951,21 @@ func createPVC(
 	}
 
 	// Optional input: storage_class_name
-	// When not provided, use default value `standard`
-	storageClassNameInput, ok := inputs.ParameterValues["storage_class_name"]
-	var storageClassName string
-	if !ok {
-		storageClassName = "standard"
-	} else {
-		storageClassName = storageClassNameInput.GetStringValue()
+	// Precedence: (1) a value supplied by the pipeline, including an explicit
+	// empty string, which opts out of default storage-class selection; (2) the
+	// server-configured default StorageClass when the task omits the class;
+	// (3) Kubernetes defaulting, by leaving the PVC's StorageClassName unset,
+	// when neither supplies a class.
+	var storageClassName *string
+	if storageClassNameInput, ok := inputs.ParameterValues["storage_class_name"]; ok && storageClassNameInput != nil {
+		name := storageClassNameInput.GetStringValue()
+		storageClassName = &name
+	}
+	// A non-nil storageClassName, including an explicit "", was supplied by
+	// the pipeline and must not be overridden.
+	if storageClassName == nil && opts.DefaultPVCStorageClass != nil && *opts.DefaultPVCStorageClass != "" {
+		serverDefault := *opts.DefaultPVCStorageClass
+		storageClassName = &serverDefault
 	}
 
 	// Optional input: annotations
@@ -1045,7 +1053,7 @@ func createPVC(
 					k8score.ResourceStorage: k8sres.MustParse(volumeSizeInput.GetStringValue()),
 				},
 			},
-			StorageClassName: &storageClassName,
+			StorageClassName: storageClassName,
 			VolumeName:       volumeName,
 			DataSource:       dataSource,
 		},

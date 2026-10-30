@@ -142,3 +142,21 @@ func verifyFileContent(t *testing.T, filePath string, expectedContent string) {
 		t.Errorf("Expected file fileContent to be %q, got %q", expectedContent, string(fileContent))
 	}
 }
+
+func TestDefaultPVCStorageClassFromFlag(t *testing.T) {
+	tt := []struct {
+		name     string
+		input    string
+		expected *string
+	}{
+		{"Empty flag means no server default", "", nil},
+		{"Whitespace-only flag means no server default", "   ", nil},
+		{"Configured class is preserved", "fast-ssd", strPtr("fast-ssd")},
+		{"Surrounding whitespace is trimmed", " fast-ssd ", strPtr("fast-ssd")},
+	}
+	for _, test := range tt {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.expected, defaultPVCStorageClassFromFlag(test.input))
+		})
+	}
+}
