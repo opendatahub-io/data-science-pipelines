@@ -640,7 +640,7 @@ func (c *workflowCompiler) addDAGDriverTemplate() string {
 			Image:     c.driverImage,
 			Command:   c.driverCommand,
 			Args:      args,
-			Resources: driverResources,
+			Resources: GetDriverResources(),
 			Env:       proxy.GetConfig().GetEnvVars(),
 		},
 	}
