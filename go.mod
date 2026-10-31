@@ -1,10 +1,8 @@
 module github.com/kubeflow/pipelines
 
-go 1.26
+go 1.26.4
 
 godebug fips140=on
-
-toolchain go1.26.3
 
 require (
 	github.com/Masterminds/squirrel v0.0.0-20190107164353-fa735ea14f09
@@ -203,7 +201,7 @@ require (
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
+	github.com/planetscale/vtprotobuf v0.6.1-0.20260702190614-8ae5a48058df // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
