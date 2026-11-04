@@ -58,10 +58,6 @@ type Options struct {
 	// Optional: admin-configured default runAsNonRoot for customer containers.
 	// Nil means not set (feature disabled).
 	DefaultRunAsNonRoot *bool
-	// Optional: administrator-configured default hostUsers for customer workload pods.
-	// Nil means not set (feature disabled). Setting this to false places the pod
-	// in a dedicated Linux user namespace: UID 0 inside the pod maps to an
-	// unprivileged host UID, so root processes in the container are not root on the host.
 	DefaultHostUsers *bool
 	// Optional: administrator-configured labels and annotations for driver pods.
 	// Nil means not set (feature disabled). The API server reads this from its own
@@ -72,6 +68,10 @@ type Options struct {
 	// pods. Empty means DefaultTokenReviewAudience. The API server passes
 	// TOKEN_REVIEW_AUDIENCE so minted audiences match TokenReview.
 	TokenReviewAudience string
+	// Optional: administrator-configured default StorageClass for PVCs created
+	// by CreatePVC pipeline tasks. Nil means not set, so tasks that omit
+	// storage_class_name fall back to Kubernetes defaulting.
+	DefaultPVCStorageClass *string
 }
 
 const (
@@ -244,6 +244,7 @@ func Compile(jobArg *pipelinespec.PipelineJob, kubernetesSpecArg *pipelinespec.S
 		c.defaultHostUsers = opts.DefaultHostUsers
 		c.driverPodConfig = opts.DriverPodConfig
 		c.tokenReviewAudience = opts.TokenReviewAudience
+		c.defaultPVCStorageClass = opts.DefaultPVCStorageClass
 		if opts.DriverImage != "" {
 			c.driverImage = opts.DriverImage
 		}
@@ -337,22 +338,23 @@ type workflowCompiler struct {
 	spec      *pipelinespec.PipelineSpec
 	executors map[string]*pipelinespec.PipelineDeploymentConfig_ExecutorSpec
 	// state
-	wf                   *wfapi.Workflow
-	templates            map[string]*wfapi.Template
-	driverImage          string
-	driverCommand        []string
-	launcherImage        string
-	launcherCommand      []string
-	cacheDisabled        bool
-	defaultWorkspace     *k8score.PersistentVolumeClaimSpec
-	mlPipelineTLSEnabled bool
-	defaultRunAsUser     *int64
-	defaultRunAsGroup    *int64
-	defaultRunAsNonRoot  *bool
-	defaultHostUsers     *bool
-	driverPodConfig      *common.DriverPodConfig
-	tokenReviewAudience  string
-	kubernetesConfigs    map[string]*kubernetesplatform.KubernetesExecutorConfig
+	wf                     *wfapi.Workflow
+	templates              map[string]*wfapi.Template
+	driverImage            string
+	driverCommand          []string
+	launcherImage          string
+	launcherCommand        []string
+	cacheDisabled          bool
+	defaultWorkspace       *k8score.PersistentVolumeClaimSpec
+	mlPipelineTLSEnabled   bool
+	defaultRunAsUser       *int64
+	defaultRunAsGroup      *int64
+	defaultRunAsNonRoot    *bool
+	defaultHostUsers       *bool
+	defaultPVCStorageClass *string
+	driverPodConfig        *common.DriverPodConfig
+	tokenReviewAudience    string
+	kubernetesConfigs      map[string]*kubernetesplatform.KubernetesExecutorConfig
 }
 
 // applyDriverPodConfig applies driver pod labels and annotations to a workflow

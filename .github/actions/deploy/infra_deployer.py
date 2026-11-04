@@ -1,18 +1,17 @@
 """Infrastructure deployment (Argo, PyPI, cert-manager, RBAC, port forwarding).
 
-Groups infrastructure concerns that support the main DSP deployment
-but are not specific to a single domain like storage or database.
+Groups infrastructure concerns that support the main DSP deployment but
+are not specific to a single domain like storage or database.
 """
 
 import json
 import os
 import subprocess
 
-import yaml
-
 from deployment_manager import K8sDeploymentManager
 from deployment_manager import ResourceType
 from deployment_manager import WaitCondition
+import yaml
 
 
 class InfraDeployer:
@@ -29,12 +28,11 @@ class InfraDeployer:
         self.temp_dir = temp_dir
 
     def deploy_cert_manager(self):
-        """Deploy cert-manager for certificate management."""
-        if self.args.pipeline_store != 'kubernetes' and not self.args.pod_to_pod_tls_enabled:
-            print(
-                '🏷️ Skipping cert-manager deployment because pipeline_store != kubernetes and pod_to_pod_tls is disabled'
-            )
-            return
+        """Deploy cert-manager for every operator deployment.
+
+        Proxy certificates require it even with pod-to-pod TLS disabled
+        and database-backed pipeline storage.
+        """
 
         cert_manager_namespace = 'cert-manager'
 
@@ -133,8 +131,8 @@ class InfraDeployer:
     def deploy_external_argo(self):
         """Deploy external Argo Workflows from the official release manifest.
 
-        Downloads the install.yaml from the Argo Workflows GitHub release
-        matching the configured argo_version.
+        Downloads the install.yaml from the Argo Workflows GitHub
+        release matching the configured argo_version.
         """
         if not self.args.deploy_external_argo:
             return
@@ -148,8 +146,7 @@ class InfraDeployer:
 
         # Create argo namespace
         self.deployment_manager.run_command(
-            ['kubectl', 'create', 'namespace', argo_namespace],
-            check=False)
+            ['kubectl', 'create', 'namespace', argo_namespace], check=False)
 
         # Install from official Argo Workflows release manifest
         install_url = f'https://github.com/argoproj/argo-workflows/releases/download/{argo_version}/install.yaml'
@@ -159,7 +156,9 @@ class InfraDeployer:
             ['kubectl', 'apply', '-n', argo_namespace, '-f', install_url])
 
         # Wait for Argo Workflows deployment to become ready
-        print(f'⏳ Waiting for Argo Workflows deployment to be ready in namespace {argo_namespace}...')
+        print(
+            f'⏳ Waiting for Argo Workflows deployment to be ready in namespace {argo_namespace}...'
+        )
         wait_success = self.deployment_manager.wait_for_resource(
             resource_type=ResourceType.DEPLOYMENT,
             namespace=argo_namespace,
@@ -174,7 +173,8 @@ class InfraDeployer:
                 deployment_name='argo-server',
                 resource_type=ResourceType.DEPLOYMENT)
             raise RuntimeError(
-                f'Argo Workflows deployment did not become ready in namespace {argo_namespace}')
+                f'Argo Workflows deployment did not become ready in namespace {argo_namespace}'
+            )
 
         # Create ClusterRoleBinding for the argo service account
         print('🔐 Creating ClusterRoleBinding for argo service account...')
@@ -243,7 +243,9 @@ class InfraDeployer:
         self.deployment_manager.run_command([
             'kubectl', 'patch', 'configmap', 'workflow-controller-configmap',
             '-n', argo_namespace, '--type=merge', '-p',
-            json.dumps({'data': {'executor': executor_config}})
+            json.dumps({'data': {
+                'executor': executor_config
+            }})
         ])
 
         # Restart the workflow-controller so it picks up the new config
@@ -324,18 +326,21 @@ class InfraDeployer:
         print(f'🔧 Creating RBAC for service account: {service_account_name}')
 
         cluster_role_manifest = {
-            'apiVersion': 'rbac.authorization.k8s.io/v1',
-            'kind': 'ClusterRole',
+            'apiVersion':
+                'rbac.authorization.k8s.io/v1',
+            'kind':
+                'ClusterRole',
             'metadata': {
                 'name': f'{service_account_name}-pipeline-role'
             },
-            'rules': [
-                {
-                    'apiGroups': ['*'],
-                    'resources': ['*'],
-                    'verbs': ['create', 'get', 'list', 'watch', 'update', 'patch', 'delete']
-                }
-            ]
+            'rules': [{
+                'apiGroups': ['*'],
+                'resources': ['*'],
+                'verbs': [
+                    'create', 'get', 'list', 'watch', 'update', 'patch',
+                    'delete'
+                ]
+            }]
         }
 
         cluster_role_binding_manifest = {
@@ -344,13 +349,11 @@ class InfraDeployer:
             'metadata': {
                 'name': f'{service_account_name}-pipeline-binding'
             },
-            'subjects': [
-                {
-                    'kind': 'ServiceAccount',
-                    'name': service_account_name,
-                    'namespace': self.deployment_namespace
-                }
-            ],
+            'subjects': [{
+                'kind': 'ServiceAccount',
+                'name': service_account_name,
+                'namespace': self.deployment_namespace
+            }],
             'roleRef': {
                 'kind': 'ClusterRole',
                 'name': f'{service_account_name}-pipeline-role',
@@ -369,8 +372,8 @@ class InfraDeployer:
         cluster_role_binding_file = os.path.join(self.temp_dir,
                                                  'cluster-role-binding.yaml')
         with open(cluster_role_binding_file, 'w') as f:
-            yaml.dump(cluster_role_binding_manifest, f,
-                      default_flow_style=False)
+            yaml.dump(
+                cluster_role_binding_manifest, f, default_flow_style=False)
 
         self.deployment_manager.apply_resource(
             manifest_path=cluster_role_binding_file,
@@ -399,7 +402,8 @@ class InfraDeployer:
             f'app={api_server_app_name}',
             '--field-selector=status.phase=Running', '--no-headers', '-o',
             'custom-columns=NAME:.metadata.name'
-        ], check=False)
+        ],
+                                                          check=False)
 
         if pods_result.returncode != 0 or not pods_result.stdout.strip():
             print(
@@ -409,7 +413,8 @@ class InfraDeployer:
             self.deployment_manager.run_command([
                 'kubectl', 'get', 'pods', '-n', self.deployment_namespace, '-o',
                 'wide'
-            ], check=False)
+            ],
+                                                check=False)
             raise RuntimeError(
                 f'Port forwarding failed: No running API server pods found with label app={api_server_app_name}'
             )

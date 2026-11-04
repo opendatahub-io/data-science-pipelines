@@ -19,7 +19,7 @@ env:
 jobs:
   # Job to handle /integration-tests-ok command
   process-integration-command:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: ${{ github.event.issue.pull_request && contains(github.event.comment.body, '/integration-tests-ok') }}
     steps:
       - name: Check if the author is a member or Owner
@@ -89,7 +89,7 @@ jobs:
   # Job to remove label on new commits and check for label presence
   integration-test-check:
     name: Integration Test Verification
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request' || contains(github.event.comment.body, '/integration-tests-ok')
     steps:
       - name: Checkout repository

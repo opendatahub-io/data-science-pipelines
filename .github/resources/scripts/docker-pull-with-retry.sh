@@ -25,7 +25,11 @@ pull_image() {
   local image="$1"
 
   echo "Pulling ${image} with retries..."
-  retry 3 20 docker pull "$image"
+  # Pin the platform so the stored image is single-platform. Multi-platform
+  # manifest lists make `kind load` (ctr import --all-platforms) fail with
+  # "content digest ... not found" for blobs of platforms that were never
+  # pulled.
+  retry 3 20 docker pull --platform linux/amd64 "$image"
 }
 
 if pull_image "$PRIMARY_IMAGE"; then

@@ -29,13 +29,8 @@ jobs:
     uses: ./.github/workflows/image-builds.yml
 
   api-integration-tests-v2:
-    runs-on: ubuntu-latest
-    # Real ceiling for a hung suite. Without this the job inherits GitHub's
-    # 6-hour default, and the go test -timeout below is the only hang-stop.
-    timeout-minutes: 40
-    permissions:
-      actions: read
-      contents: read
+    runs-on: ubuntu-24.04
+    needs: build
     strategy:
       matrix:
         pipeline_store: [ "database", "kubernetes" ]

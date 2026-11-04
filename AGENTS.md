@@ -7,7 +7,7 @@
 
 ### Document metadata
 
-- Last updated: 2026-10-02
+- Last updated: 2026-10-29
 - Scope: KFP master branch (v2 engine), backend (Go), SDK (Python), frontend (React 19)
 
 ### Maintenance (agents and contributors)
@@ -548,6 +548,7 @@ When changing an effect-heavy frontend component, add or run the smallest releva
 
 - Workflows: `.github/workflows/` (build, test, lint, release)
 - Composite actions: `.github/actions/` (e.g., `kfp-k8s`, `create-cluster`, `deploy`, `test-and-report`)
+- Ubuntu CI jobs use `ubuntu-24.04` explicitly to keep Python 3.9 support and stabilize the Docker/kernel environment across build and Kind test lanes.
 - Typical checks: Go unit tests (backend), Python SDK tests, frontend tests/lint, image builds.
 - Frontend workflow (`frontend.yml`) verifies generated API clients are up to date by running `npm run apis:all` and failing on diff.
 
@@ -570,12 +571,20 @@ When changing an effect-heavy frontend component, add or run the smallest releva
 
 - Kind-based clusters are provisioned via the `kfp-cluster` composite action, parameterized by `k8s_version`, `pipeline_store`, `proxy`, `cache_enabled`, and optional `argo_version`.
 - The `create-cluster` and `deploy` actions are used by newer suites; `kfp-k8s` installs SDK components from source inside jobs that execute Python-based tests.
-- The `deploy` action downloads and loads CI-built images before deploying optional Tinyproxy support, preloads runtime base images used by test pods and init containers, and waits for Tinyproxy readiness/endpoints in proxy lanes.
+- `upgrade-test.yml` deploys the initial stable release in legacy mode and asserts that `default-aipipelines` is absent. It then enables the opt-in `enable_modular_architecture` deploy input only for the target deployment. That target handoff applies DSPO's modular AIPipelines fixture, enables `DSPO_ENABLEAIPIPELINESMODULECONTROLLER`, and waits for `default-aipipelines` to report `Ready` and `ProvisioningSucceeded`. The deploy action exports the fixture's platform version, and `UpgradeVerification` compares it to the module status.
+- The `deploy` action deploys optional Squid support, downloads and loads CI-built images, and preloads runtime base images used by test pods and init containers. Squid has a TCP readiness probe on port `3128` and a 120-second deployment availability wait; deployment failures print proxy pod diagnostics with a 10-second timeout per kubectl request.
+- Kind operator deployments always install cert-manager before provisioning the API server and metadata Envoy proxy certificates, including database-backed lanes with `podToPodTLS=false`: DSPO declares their Secret volumes regardless of that flag. Skipping cert-manager produces `no matches for kind "ClusterIssuer"`; missing `ds-pipelines-proxy-tls-*` or `ds-pipelines-envoy-proxy-tls-*` Secrets cause `FailedMount` and deployment timeouts. Database and internal gRPC certificates and database TLS configuration remain conditional on pod-to-pod TLS.
+- Deployment-helper unit tests: `.venv/bin/python -m unittest discover -s .github/actions/deploy -p 'test_*.py'`.
+- Operator deployment failures print DSPA conditions, issuer/certificate/request status, Secret names and types, namespace events, and the last 100 cert-manager/controller webhook log lines. Diagnostic commands have bounded timeouts and do not replace the original deployment error or print Secret data.
+- Test-failure log collection includes namespace-wide events (including events for workflow pods deleted by test cleanup) and Service/EndpointSlice addresses to help diagnose pending tasks and DNS failures.
+- API tests default to four parallel Ginkgo processes to reduce contention with the Kind control plane and pipeline pods on hosted runners. The standalone workflow-dispatch input can override this count. The E2E proxy lane sets `base_image: python:3.11` to reuse the image preloaded by deploy and avoid an ECR pull during the test.
 - CI Docker-sensitive paths use shell retry wrappers with sleeps for image builds, Buildx bootstrap, and runtime base-image pulls; Kind node image bootstrap also falls back to `gcr.io/k8s-staging-kind/node` when Docker Hub flakes.
+- Runtime base images are pulled directly inside the Kind node with `ctr --namespace=k8s.io images pull` to avoid incomplete multi-platform Docker exports. Use fully qualified references such as `docker.io/library/python:3.11`; `ctr` does not expand Docker short names and fails on `python:3.11` with `invalid port ":3.11" after host`.
 - The `test-and-report` action port-forwards MLMD on port `8080` only when `ARGO_COMPATIBILITY_TESTS=true`, allowing the canonical Argo compatibility API job to validate execution/artifact metadata without adding another test lane.
-- Proxy test failures collect both the KFP namespace and `tinyproxy` namespace logs/events to diagnose proxy-service readiness separately from pipeline failures.
-- CI image loading includes cached runtime base images and an optional Modelcar fixture; test reporting captures runner and network diagnostics.
-- The CI proxy runs Tinyproxy as a lightweight forward proxy in the `tinyproxy` namespace on port `3128`.
+- Proxy test failures collect both the KFP namespace and `squid` namespace logs/events to diagnose proxy-service readiness separately from pipeline failures.
+- API test failures also collect `kube-system` pod logs/events to diagnose cluster DNS and networking failures such as MariaDB service-name lookup timeouts.
+- The CI proxy runs Squid in the `squid` namespace on port `3128`. Its pod uses `fsGroup: 23` so Fedora's Squid worker can write to the mounted log/cache directories. Root-owned `emptyDir` logs cause Squid to briefly listen, then exit with permission-denied and broken-pipe errors; deployment availability requires five seconds of readiness to catch this startup failure.
+- Squid's config caps `max_filedescriptors` at `1024`. Inheriting a large runtime `nofile` limit can exhaust memory during startup, producing `OOMKilled`/exit `137` immediately after `Current Directory is /`.
 - The `protobuf` composite action prepares `protoc` and related dependencies when compiling Python protobufs.
 - The `create-cluster` action caches Kind node images by Kubernetes version to reduce Docker Hub pulls.
 - Python workflows use `actions/cache@v5` for pip cache to reduce repeated dependency installs.

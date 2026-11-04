@@ -242,6 +242,9 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 	if c.defaultHostUsers != nil {
 		args = append(args, "--default_host_users", strconv.FormatBool(*c.defaultHostUsers))
 	}
+	if c.defaultPVCStorageClass != nil && *c.defaultPVCStorageClass != "" {
+		args = append(args, "--default_pvc_storage_class", *c.defaultPVCStorageClass)
+	}
 
 	template := &wfapi.Template{
 		Name: name,

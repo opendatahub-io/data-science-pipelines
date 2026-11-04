@@ -13,7 +13,7 @@ env:
 jobs:
   fetch-data:
     name: Fetch workflow payload
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: >
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
@@ -59,7 +59,7 @@ jobs:
   build-pr-images:
     name: Build DSP Images
     if: needs.fetch-data.outputs.pr_state == 'open'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: fetch-data
     env:
       SOURCE_BRANCH: ${{ needs.fetch-data.outputs.head_sha }}
@@ -91,17 +91,17 @@ jobs:
           IMAGE_REPO: ${{ matrix.image }}
           DOCKERFILE: ${{ matrix.dockerfile }}
           GH_REPO: ${{ github.repository }}
-  
+
   comment-on-pr:
     name: Comment on PR after images built
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [fetch-data, build-pr-images]
     concurrency:
       group: ${{ github.workflow }}-comment-on-pr-${{ needs.fetch-data.outputs.pr_number }}
       cancel-in-progress: true
     env:
       SOURCE_BRANCH: ${{ needs.fetch-data.outputs.head_sha }}
-      TARGET_IMAGE_TAG: pr-${{ needs.fetch-data.outputs.pr_number }}        
+      TARGET_IMAGE_TAG: pr-${{ needs.fetch-data.outputs.pr_number }}
     steps:
       - uses: actions/checkout@v3
       - name: Echo PR metadata
@@ -141,7 +141,7 @@ jobs:
           fi
 
           cat <<"EOF" >> /tmp/body-file.txt
-            A set of new images have been built to help with testing out this PR: 
+            A set of new images have been built to help with testing out this PR:
             **API Server**: `${{ env.FULLIMG_API_SERVER }}`
             **DSP DRIVER**: `${{ env.FULLIMG_DRIVER }}`
             **DSP LAUNCHER**: `${{ env.FULLIMG_LAUNCHER }}`
@@ -177,14 +177,14 @@ jobs:
               image: "${{ env.FULLIMG_PERSISTENCEAGENT }}"
             scheduledWorkflow:
               image: "${{ env.FULLIMG_SCHEDULEDWORKFLOW }}"
-            mlmd:  
+            mlmd:
               deploy: true  # Optional component
               grpc:
                 image: "${{ env.FULLIMG_METADATA_GRPC }}"
               envoy:
                 image: "${{ env.FULLIMG_METADATA_ENVOY }}"
             mlpipelineUI:
-              deploy: true  # Optional component 
+              deploy: true  # Optional component
               image: "${{ env.FULLIMG_FRONTEND }}"
             objectStorage:
               minio:
@@ -211,7 +211,7 @@ jobs:
   clean-pr-images:
     name: Cleanup images if PR is closed
     if: needs.fetch-data.outputs.pr_state == 'closed'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: fetch-data
     env:
       TARGET_IMAGE_TAG: pr-${{ needs.fetch-data.outputs.pr_number }}

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """TLS Certificate Management for Data Science Pipelines on Kind Clusters.
 
-This module handles the creation and management of TLS certificates
-required for podToPodTLS communication in DSPA deployments on kind
-clusters.
+This module manages mandatory proxy certificates and optional
+podToPodTLS certificates in DSPA deployments on kind clusters.
 
 On OpenShift, certificates are automatically created by the service-ca
 controller. For kind clusters, we need to manually create them using
@@ -32,18 +31,13 @@ class TLSCertificateManager:
         self.operator_namespace = deployer.operator_namespace
 
     def setup_tls_for_kind(self):
-        """Set up complete TLS infrastructure for kind cluster with podToPodTLS
-        enabled.
+        """Create proxy certificates and optional pod-to-pod TLS
+        infrastructure.
 
         This creates all certificates and ConfigMaps that would normally
         be automatically created by OpenShift's service-ca controller.
         """
-        if not self.deployer.args.pod_to_pod_tls_enabled:
-            return
-
-        print(
-            '🔐 Setting up TLS infrastructure for kind cluster with podToPodTLS enabled...'
-        )
+        print('🔐 Setting up service certificates for kind cluster...')
 
         try:
             # Step 1: Create self-signed ClusterIssuer for service certificates
@@ -62,7 +56,8 @@ class TLSCertificateManager:
             self._verify_certificates()
 
             # Step 6: Pre-create MariaDB TLS ConfigMap for internal MariaDB (if not using external DB)
-            if not self.deployer.args.deploy_external_db:
+            if (self.deployer.args.pod_to_pod_tls_enabled and
+                    not self.deployer.args.deploy_external_db):
                 print(
                     '🔧 Pre-creating MariaDB TLS ConfigMap for operator template...'
                 )
@@ -101,10 +96,8 @@ spec:
             except Exception:
                 if attempt == max_retries:
                     raise
-                print(
-                    f'⏳ cert-manager webhook not ready yet, retrying in 10s '
-                    f'(attempt {attempt}/{max_retries})...'
-                )
+                print(f'⏳ cert-manager webhook not ready yet, retrying in 10s '
+                      f'(attempt {attempt}/{max_retries})...')
                 time.sleep(10)
 
     def _create_service_ca_certificate(self):
@@ -163,37 +156,37 @@ spec:
         print('⏳ Waiting for all component certificates to be ready...')
         failed_certs = []
         for cert in certificates:
+            certificate_name = cert['name']
             try:
                 cert_namespace = cert.get('namespace',
                                           self.deployment_namespace)
                 self.deployer.deployment_manager.run_command([
                     'kubectl', 'wait', '--for=condition=Ready',
-                    f'certificate/{cert["name"]}', '-n', cert_namespace,
+                    f'certificate/{certificate_name}', '-n', cert_namespace,
                     '--timeout=300s'
                 ])
                 print(
-                    f'✅ Certificate {cert["name"]} is ready in namespace {cert_namespace}'
+                    f'✅ Certificate {certificate_name} is ready in namespace {cert_namespace}'
                 )
             except subprocess.CalledProcessError as e:
                 print(
-                    f'⚠️  Certificate {cert["name"]} not ready within timeout: {e}'
+                    f'⚠️  Certificate {certificate_name} not ready within timeout: {e}'
                 )
                 failed_certs.append((cert['name'], e))
 
         if failed_certs:
             names = ', '.join(name for name, _ in failed_certs)
             raise RuntimeError(
-                f'The following certificates failed to become ready: {names}'
-            )
+                f'The following certificates failed to become ready: {names}')
 
         print('✅ All component certificates processing completed')
 
     def _get_required_certificates(self) -> List[Dict[str, Any]]:
         """Get list of all required certificates for DSPA components.
 
-        These certificate names and DNS names match exactly what the
-        data-science-pipelines-operator expects when podToPodTLS is
-        enabled.
+        Proxy volume secrets are required even when podToPodTLS is
+        disabled. Database and internal gRPC certificates are added when
+        it is enabled.
         """
         certificates = []
 
@@ -256,6 +249,15 @@ spec:
             'namespace': self.deployment_namespace
         }])
 
+        if not self.deployer.args.pod_to_pod_tls_enabled:
+            proxy_names = {
+                f'ds-pipelines-proxy-tls-{self.dspa_name}',
+                f'ds-pipelines-envoy-proxy-tls-{self.dspa_name}',
+            }
+            certificates = [
+                certificate for certificate in certificates
+                if certificate['name'] in proxy_names
+            ]
         return certificates
 
     def _create_ca_issuer_from_service_ca(self):
@@ -264,7 +266,9 @@ spec:
 
         # Get list of namespaces where we need CA issuers
         namespaces = [self.deployment_namespace]
-        if self.deployer.args.deploy_external_db and self.deployer.external_db_namespace not in namespaces:
+        if (self.deployer.args.pod_to_pod_tls_enabled and
+                self.deployer.args.deploy_external_db and
+                self.deployer.external_db_namespace not in namespaces):
             namespaces.append(self.deployer.external_db_namespace)
 
         # Copy the service CA secret to all required namespaces and create issuers
@@ -303,13 +307,16 @@ spec:
             check=False)
 
         if result.returncode == 0:
-            print(f'⏭️  Secret {secret_name} already exists in {target_ns}, skipping copy')
+            print(
+                f'⏭️  Secret {secret_name} already exists in {target_ns}, skipping copy'
+            )
             return
 
         # Get the secret using argument list (no shell interpolation)
-        result = self.deployer.deployment_manager.run_command(
-            ['kubectl', 'get', 'secret', secret_name, '-n', source_ns,
-             '-o', 'yaml'])
+        result = self.deployer.deployment_manager.run_command([
+            'kubectl', 'get', 'secret', secret_name, '-n', source_ns, '-o',
+            'yaml'
+        ])
 
         # Parse YAML in Python and update namespace safely
         secret_data = yaml.safe_load(result.stdout)
@@ -393,7 +400,9 @@ spec:
 
             # Get list of namespaces where we need ConfigMaps
             namespaces = [self.deployment_namespace]
-            if self.deployer.args.deploy_external_db and self.deployer.external_db_namespace not in namespaces:
+            if (self.deployer.args.pod_to_pod_tls_enabled and
+                    self.deployer.args.deploy_external_db and
+                    self.deployer.external_db_namespace not in namespaces):
                 namespaces.append(self.deployer.external_db_namespace)
 
             # Create ConfigMap in all required namespaces
@@ -427,6 +436,7 @@ data:
         certificates = self._get_required_certificates()
 
         for cert in certificates:
+            certificate_name = cert['name']
             try:
                 cert_namespace = cert.get('namespace',
                                           self.deployment_namespace)
@@ -442,11 +452,11 @@ data:
 
                 if result.returncode == 0 and result.stdout.strip() == 'True':
                     print(
-                        f'✅ Certificate {cert["name"]} is ready in namespace {cert_namespace}'
+                        f'✅ Certificate {certificate_name} is ready in namespace {cert_namespace}'
                     )
                 else:
                     print(
-                        f'⚠️  Certificate {cert["name"]} is not ready in namespace {cert_namespace}'
+                        f'⚠️  Certificate {certificate_name} is not ready in namespace {cert_namespace}'
                     )
                     # Get more details
                     self.deployer.deployment_manager.run_command([
@@ -465,17 +475,61 @@ data:
 
                 if secret_result.returncode == 0:
                     print(
-                        f'✅ Secret {cert["name"]} exists in namespace {cert_namespace}'
+                        f'✅ Secret {certificate_name} exists in namespace {cert_namespace}'
                     )
                 else:
                     print(
-                        f'❌ Secret {cert["name"]} does not exist in namespace {cert_namespace}'
+                        f'❌ Secret {certificate_name} does not exist in namespace {cert_namespace}'
                     )
 
             except Exception as e:
-                print(f'⚠️  Error verifying certificate {cert["name"]}: {e}')
+                print(
+                    f'⚠️  Error verifying certificate {certificate_name}: {e}')
 
         print('🔍 Certificate verification completed')
+
+    def debug_certificates(self):
+        """Print certificate diagnostics without exposing secret contents."""
+        print('🔍 Collecting certificate and cert-manager diagnostics...')
+        namespaces = {self.deployment_namespace}
+        namespaces.update(certificate['namespace']
+                          for certificate in self._get_required_certificates())
+        commands = [[
+            'kubectl', 'get', 'dspa', self.dspa_name, '-n',
+            self.deployment_namespace, '-o', 'jsonpath={.status.conditions}'
+        ], [
+            'kubectl', 'get', 'clusterissuer', 'service-ca-issuer', '-o', 'yaml'
+        ]]
+        for namespace in sorted(namespaces):
+            commands.extend([[
+                'kubectl', 'get', 'issuers,certificates,certificaterequests',
+                '-n', namespace, '-o', 'wide'
+            ], ['kubectl', 'describe', 'certificates', '-n', namespace],
+                             [
+                                 'kubectl', 'get', 'secrets', '-n', namespace,
+                                 '-o',
+                                 'custom-columns=NAME:.metadata.name,TYPE:.type'
+                             ],
+                             [
+                                 'kubectl', 'get', 'events', '-n', namespace,
+                                 '--sort-by=.lastTimestamp'
+                             ]])
+        commands.append(
+            ['kubectl', 'get', 'pods', '-n', 'cert-manager', '-o', 'wide'])
+        for deployment in ('cert-manager', 'cert-manager-webhook'):
+            commands.append([
+                'kubectl', 'logs', f'deployment/{deployment}', '-n',
+                'cert-manager', '--tail=100', '--all-containers=true',
+                '--prefix=true'
+            ])
+        for command in commands:
+            try:
+                self.deployer.deployment_manager.run_command(
+                    command + ['--request-timeout=10s'],
+                    check=False,
+                    timeout=20)
+            except Exception as error:
+                print(f'⚠️  Could not collect diagnostic: {error}')
 
     def configure_mariadb_for_tls(self):
         """Configure MariaDB deployment to use TLS certificates.
@@ -549,7 +603,8 @@ data:
                                 },
                             ],
                             'containers': [{
-                                'name': 'mariadb',
+                                'name':
+                                    'mariadb',
                                 'volumeMounts': [
                                     {
                                         'name': 'tls-certs',
@@ -576,8 +631,8 @@ data:
             print('🔧 Patching MariaDB deployment to enable TLS...')
             self.deployer.deployment_manager.run_command([
                 'kubectl', 'patch', 'deployment', 'mariadb', '-n',
-                self.deployer.external_db_namespace, '--type=strategic',
-                '-p', json.dumps(patch_obj)
+                self.deployer.external_db_namespace, '--type=strategic', '-p',
+                json.dumps(patch_obj)
             ])
 
             # Wait for MariaDB to restart with new configuration
@@ -685,29 +740,27 @@ data:
                                                              check=False)
 
                 self.deployer.deployment_manager.run_command([
-                    'kubectl', 'delete', 'secret', cert['name'], '-n',
-                    cert_ns
+                    'kubectl', 'delete', 'secret', cert['name'], '-n', cert_ns
                 ],
                                                              check=False)
 
             # Collect all namespaces that need issuer/CA cleanup
             cleanup_namespaces = [self.deployment_namespace]
-            if self.deployer.args.deploy_external_db and \
+            if self.deployer.args.pod_to_pod_tls_enabled and \
+               self.deployer.args.deploy_external_db and \
                     self.deployer.external_db_namespace not in cleanup_namespaces:
                 cleanup_namespaces.append(self.deployer.external_db_namespace)
 
             for ns in cleanup_namespaces:
                 # Delete issuers
                 self.deployer.deployment_manager.run_command([
-                    'kubectl', 'delete', 'issuer', 'service-ca-issuer', '-n',
-                    ns
+                    'kubectl', 'delete', 'issuer', 'service-ca-issuer', '-n', ns
                 ],
                                                              check=False)
 
                 # Delete copied service-ca-root secret
                 self.deployer.deployment_manager.run_command([
-                    'kubectl', 'delete', 'secret', 'service-ca-root', '-n',
-                    ns
+                    'kubectl', 'delete', 'secret', 'service-ca-root', '-n', ns
                 ],
                                                              check=False)
 

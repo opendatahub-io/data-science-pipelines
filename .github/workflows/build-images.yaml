@@ -66,7 +66,7 @@ env:
 jobs:
   build-images-with-tag:
     continue-on-error: false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     strategy:

@@ -25,7 +25,7 @@ permissions:
 jobs:
   fetch_data:
     name: Fetch PR eligibility
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       pr_number: ${{ steps.ci_result.outputs.pr_number }}
       eligible: ${{ steps.ci_result.outputs.eligible }}
@@ -150,7 +150,7 @@ jobs:
 
   reset_ci_passed_label:
     name: Reset stale 'ci-passed' label
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Remove existing 'ci-passed' label
         shell: bash
@@ -187,7 +187,7 @@ jobs:
 
   add_ci_passed_label:
     name: Add 'ci-passed' label
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: fetch_data
     steps:
       - name: Add 'ci-passed' label

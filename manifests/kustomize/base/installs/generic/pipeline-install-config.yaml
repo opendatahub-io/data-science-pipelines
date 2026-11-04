@@ -159,3 +159,9 @@ data:
   ## Example: '{"sidecar.istio.io/inject":"true"}'
   DRIVER_POD_LABELS: ""
   DRIVER_POD_ANNOTATIONS: ""
+  ## Default StorageClass for PersistentVolumeClaims created by CreatePVC
+  ## pipeline tasks. Leave empty (default) to let Kubernetes apply the
+  ## cluster's default StorageClass. A storage_class_name supplied by the
+  ## pipeline, including an explicit empty string (opt-out), always takes
+  ## precedence over this value.
+  defaultPVCStorageClass: ""

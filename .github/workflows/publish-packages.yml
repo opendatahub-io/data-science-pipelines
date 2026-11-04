@@ -28,7 +28,7 @@ env:
 jobs:
   publish-kfp-pipeline-spec:
     if: ${{ github.event.inputs.packages == 'all' || github.event.inputs.packages == 'kfp-pipeline-spec' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
@@ -71,7 +71,7 @@ jobs:
 
   publish-kfp-server-api:
     if: ${{ github.event.inputs.packages == 'all' || github.event.inputs.packages == 'kfp-server-api' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
@@ -116,7 +116,7 @@ jobs:
     if: ${{ github.event.inputs.packages == 'all' || github.event.inputs.packages == 'kfp' }}
     # Uncomment once all packages in PyPi are configured to be released from this repo.
     # needs: [publish-kfp-pipeline-spec, publish-kfp-server-api]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
@@ -161,7 +161,7 @@ jobs:
     if: ${{ github.event.inputs.packages == 'all' || github.event.inputs.packages == 'kfp-kubernetes' }}
     # Uncomment once all packages in PyPi are configured to be released from this repo.
     # needs: [publish-kfp-pipeline-spec, publish-kfp]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write

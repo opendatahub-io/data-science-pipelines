@@ -11,7 +11,7 @@ env:
 jobs:
   fetch-data:
     name: Fetch workflow payload
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: >
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
@@ -56,7 +56,7 @@ jobs:
 
   commit_checker:
     name: Run Commit Checker report
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: fetch-data
     env:
       PR_NUMBER: ${{ needs.fetch-data.outputs.pr_number }}
@@ -83,7 +83,7 @@ jobs:
           ### Commit Checker results:
 
           ```
-          **NOTE**: These are the results of the commit checker scans. 
+          **NOTE**: These are the results of the commit checker scans.
           If these are not commits from upstream kfp, then please ensure
           you adhere to the commit checker formatting
           ```

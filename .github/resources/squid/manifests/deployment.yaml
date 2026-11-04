@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squid
+  namespace: squid
+spec:
+  replicas: 1
+  minReadySeconds: 5
+  selector:
+    matchLabels:
+      app: squid
+  template:
+    metadata:
+      labels:
+        app: squid
+    spec:
+      securityContext:
+        # Fedora's Squid worker runs as UID/GID 23. Make emptyDir volumes writable.
+        fsGroup: 23
+      containers:
+        - name: squid
+          image: registry.domain.local/squid:test
+          ports:
+            - containerPort: 3128
+          readinessProbe:
+            tcpSocket:
+              port: 3128
+            periodSeconds: 2
+          volumeMounts:
+            - name: squid-cache
+              mountPath: /var/cache/squid
+            - name: squid-log
+              mountPath: /var/log/squid
+      volumes:
+        - name: squid-cache
+          emptyDir: { }
+        - name: squid-log
+          emptyDir: { }

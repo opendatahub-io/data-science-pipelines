@@ -139,14 +139,15 @@ type ClientManagerInterface interface {
 }
 
 type ResourceManagerOptions struct {
-	CollectMetrics       bool                              `json:"collect_metrics,omitempty"`
-	CacheDisabled        bool                              `json:"cache_disabled,omitempty"`
-	DefaultWorkspace     *corev1.PersistentVolumeClaimSpec `json:"default_workspace,omitempty"`
-	MLPipelineTLSEnabled bool                              `json:"ml_pipeline_tls_enabled,omitempty"`
-	DefaultRunAsUser     *int64                            `json:"default_run_as_user,omitempty"`
-	DefaultRunAsGroup    *int64                            `json:"default_run_as_group,omitempty"`
-	DefaultRunAsNonRoot  *bool                             `json:"default_run_as_non_root,omitempty"`
-	DefaultHostUsers     *bool                             `json:"default_host_users,omitempty"`
+	CollectMetrics         bool                              `json:"collect_metrics,omitempty"`
+	CacheDisabled          bool                              `json:"cache_disabled,omitempty"`
+	DefaultWorkspace       *corev1.PersistentVolumeClaimSpec `json:"default_workspace,omitempty"`
+	MLPipelineTLSEnabled   bool                              `json:"ml_pipeline_tls_enabled,omitempty"`
+	DefaultRunAsUser       *int64                            `json:"default_run_as_user,omitempty"`
+	DefaultRunAsGroup      *int64                            `json:"default_run_as_group,omitempty"`
+	DefaultRunAsNonRoot    *bool                             `json:"default_run_as_non_root,omitempty"`
+	DefaultHostUsers       *bool                             `json:"default_host_users,omitempty"`
+	DefaultPVCStorageClass *string                           `json:"default_pvc_storage_class,omitempty"`
 }
 
 type ResourceManager struct {
@@ -641,13 +642,14 @@ func (r *ResourceManager) CreatePipelineAndPipelineVersion(p *model.Pipeline, pv
 		pv.PipelineSpecURI = model.LargeText(pipelineSpecURI)
 	}
 	templateOptions := template.TemplateOptions{
-		CacheDisabled:        r.options.CacheDisabled,
-		DefaultWorkspace:     r.options.DefaultWorkspace,
-		MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
-		DefaultRunAsUser:     r.options.DefaultRunAsUser,
-		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
-		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
-		DefaultHostUsers:     r.options.DefaultHostUsers,
+		CacheDisabled:          r.options.CacheDisabled,
+		DefaultWorkspace:       r.options.DefaultWorkspace,
+		MLPipelineTLSEnabled:   r.options.MLPipelineTLSEnabled,
+		DefaultRunAsUser:       r.options.DefaultRunAsUser,
+		DefaultRunAsGroup:      r.options.DefaultRunAsGroup,
+		DefaultRunAsNonRoot:    r.options.DefaultRunAsNonRoot,
+		DefaultHostUsers:       r.options.DefaultHostUsers,
+		DefaultPVCStorageClass: r.options.DefaultPVCStorageClass,
 	}
 	tmpl, err := template.New(pipelineSpecBytes, templateOptions)
 	if err != nil {
@@ -1794,13 +1796,14 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 		}
 
 		templateOptions := template.TemplateOptions{
-			CacheDisabled:        r.options.CacheDisabled,
-			DefaultWorkspace:     r.options.DefaultWorkspace,
-			MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
-			DefaultRunAsUser:     r.options.DefaultRunAsUser,
-			DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
-			DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
-			DefaultHostUsers:     r.options.DefaultHostUsers,
+			CacheDisabled:          r.options.CacheDisabled,
+			DefaultWorkspace:       r.options.DefaultWorkspace,
+			MLPipelineTLSEnabled:   r.options.MLPipelineTLSEnabled,
+			DefaultRunAsUser:       r.options.DefaultRunAsUser,
+			DefaultRunAsGroup:      r.options.DefaultRunAsGroup,
+			DefaultRunAsNonRoot:    r.options.DefaultRunAsNonRoot,
+			DefaultHostUsers:       r.options.DefaultHostUsers,
+			DefaultPVCStorageClass: r.options.DefaultPVCStorageClass,
 		}
 		tmpl, err := template.New(manifest, templateOptions)
 		if err != nil {
@@ -3186,13 +3189,14 @@ func (r *ResourceManager) fetchTemplateFromPipelineSpec(pipelineSpec *model.Pipe
 		}
 	}
 	templateOptions := template.TemplateOptions{
-		CacheDisabled:        r.options.CacheDisabled,
-		DefaultWorkspace:     r.options.DefaultWorkspace,
-		MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
-		DefaultRunAsUser:     r.options.DefaultRunAsUser,
-		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
-		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
-		DefaultHostUsers:     r.options.DefaultHostUsers,
+		CacheDisabled:          r.options.CacheDisabled,
+		DefaultWorkspace:       r.options.DefaultWorkspace,
+		MLPipelineTLSEnabled:   r.options.MLPipelineTLSEnabled,
+		DefaultRunAsUser:       r.options.DefaultRunAsUser,
+		DefaultRunAsGroup:      r.options.DefaultRunAsGroup,
+		DefaultRunAsNonRoot:    r.options.DefaultRunAsNonRoot,
+		DefaultHostUsers:       r.options.DefaultHostUsers,
+		DefaultPVCStorageClass: r.options.DefaultPVCStorageClass,
 	}
 	tmpl, err := template.New([]byte(manifest), templateOptions)
 	if err != nil {
@@ -3405,13 +3409,14 @@ func (r *ResourceManager) CreatePipelineVersion(pv *model.PipelineVersion) (*mod
 
 	// Create a template
 	templateOptions := template.TemplateOptions{
-		CacheDisabled:        r.options.CacheDisabled,
-		DefaultWorkspace:     r.options.DefaultWorkspace,
-		MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
-		DefaultRunAsUser:     r.options.DefaultRunAsUser,
-		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
-		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
-		DefaultHostUsers:     r.options.DefaultHostUsers,
+		CacheDisabled:          r.options.CacheDisabled,
+		DefaultWorkspace:       r.options.DefaultWorkspace,
+		MLPipelineTLSEnabled:   r.options.MLPipelineTLSEnabled,
+		DefaultRunAsUser:       r.options.DefaultRunAsUser,
+		DefaultRunAsGroup:      r.options.DefaultRunAsGroup,
+		DefaultRunAsNonRoot:    r.options.DefaultRunAsNonRoot,
+		DefaultHostUsers:       r.options.DefaultHostUsers,
+		DefaultPVCStorageClass: r.options.DefaultPVCStorageClass,
 	}
 	tmpl, err := template.New(pipelineSpecBytes, templateOptions)
 	if err != nil {

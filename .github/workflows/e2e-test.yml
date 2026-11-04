@@ -77,6 +77,7 @@ jobs:
     uses: ./.github/workflows/image-builds.yml
 
   end-to-end-scenario-tests:
+    runs-on: ubuntu-24.04
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -273,6 +274,8 @@ jobs:
           cache_enabled: ${{ matrix.cache_enabled }}
           test_directory: ${{ env.E2E_TESTS_DIR }}
           test_label: ${{ steps.configure.outputs.TEST_LABEL }}
+          # Use the image preloaded by deploy so the proxy test need not pull from ECR.
+          base_image: ${{ matrix.proxy == 'true' && 'python:3.11' || '' }}
           num_parallel_nodes: ${{ steps.configure.outputs.NUMBER_OF_NODES }}
           default_namespace: ${{ steps.configure.outputs.NAMESPACE }}
           python_version: ${{ env.PYTHON_VERSION }}
@@ -285,10 +288,8 @@ jobs:
           deployment_mode: ${{ steps.deploy.outputs.deployment_mode }}
 
   end-to-end-critical-scenario-multi-user-tests:
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
+    runs-on: ubuntu-24.04
+    needs: build
     strategy:
       matrix:
         k8s_version: ["v1.36.1"]
@@ -406,10 +407,8 @@ jobs:
     # Temporarily skip MLflow tests until configure-mlflow.sh handles HTTP
     # basic-auth/none deployments without requiring a TLS secret.
     if: ${{ false }}
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
+    runs-on: ubuntu-24.04
+    needs: build
     strategy:
       matrix:
         k8s_version: [ "v1.36.1" ]

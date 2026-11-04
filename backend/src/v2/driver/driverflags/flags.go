@@ -58,6 +58,7 @@ type Values struct {
 	DefaultRunAsGroup       *int64
 	DefaultRunAsNonRoot     *string
 	DefaultHostUsers        *string
+	DefaultPVCStorageClass  *string
 }
 
 // RegisterDriverFlags registers the driver CLI flags on the provided flag set.
@@ -93,5 +94,6 @@ func RegisterDriverFlags(fs *flag.FlagSet) *Values {
 		DefaultRunAsGroup:       fs.Int64("default_run_as_group", -1, "Admin-configured default runAsGroup for user containers. -1 means not set."),
 		DefaultRunAsNonRoot:     fs.String("default_run_as_non_root", "", "Admin-configured default runAsNonRoot for user containers. Empty means not set."),
 		DefaultHostUsers:        fs.String("default_host_users", "", "Administrator-configured default hostUsers for user workload pods. Empty means not set. Set to false to run pods in a dedicated Linux user namespace."),
+		DefaultPVCStorageClass:  fs.String("default_pvc_storage_class", "", "Admin-configured default StorageClass for PVCs created by CreatePVC pipeline tasks. Empty means not set."),
 	}
 }

@@ -23,7 +23,7 @@ env:
   IMAGE_DRIVER: quay.io/opendatahub/ds-pipelines-driver
 jobs:
   copy-tag-to-quay:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.repository == 'opendatahub-io/data-science-pipelines'
     steps:
       - name: Git checkout

@@ -93,6 +93,8 @@ func TestAddContainerExecutorTemplate(t *testing.T) {
 			executorTemplate, exists := c.templates["system-container-impl"]
 			assert.True(t, exists, "Template should exist with the returned name")
 			assert.NotNil(t, executorTemplate, "Executor template should not be nil")
+			assert.Equal(t, "container-executor", executorTemplate.Metadata.Labels[systemPodRoleLabelKey])
+			assert.Equal(t, "system-container-impl", executorTemplate.Metadata.Annotations[systemTemplateNameAnnotationKey])
 
 		})
 	}

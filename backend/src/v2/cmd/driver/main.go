@@ -101,6 +101,7 @@ var (
 	defaultRunAsGroup    = driverFlagValues.DefaultRunAsGroup
 	defaultRunAsNonRoot  = driverFlagValues.DefaultRunAsNonRoot
 	defaultHostUsers     = driverFlagValues.DefaultHostUsers
+	defaultPVCStorageClass = driverFlagValues.DefaultPVCStorageClass
 )
 
 func main() {
@@ -206,6 +207,17 @@ func validateRequiredFlags(provided map[string]bool, driverType string) error {
 		}
 	}
 	return nil
+}
+
+// defaultPVCStorageClassFromFlag converts the --default_pvc_storage_class flag value
+// into the driver Options field. Returns nil when the flag is empty or
+// whitespace-only, meaning no server default is configured.
+func defaultPVCStorageClassFromFlag(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 // getCurrentWorkflowMetadata returns metadata for the Argo Workflow backing the
@@ -537,6 +549,9 @@ func drive() (err error) {
 				return fmt.Errorf("invalid --default_host_users value %q: %w", *defaultHostUsers, err)
 			}
 			options.DefaultHostUsers = &v
+		}
+		if providedFlags["default_pvc_storage_class"] {
+			options.DefaultPVCStorageClass = defaultPVCStorageClassFromFlag(*defaultPVCStorageClass)
 		}
 		execution, err = driver.Container(ctx, options, clientManager)
 	default:

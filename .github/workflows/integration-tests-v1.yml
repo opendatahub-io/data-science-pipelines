@@ -33,6 +33,7 @@ jobs:
     uses: ./.github/workflows/image-builds.yml
 
   initialization-integration-tests-v1:
+    runs-on: ubuntu-24.04
     needs: build
     runs-on: ubuntu-latest
     permissions:

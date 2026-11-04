@@ -83,6 +83,7 @@ type Options struct {
 	DefaultRunAsGroup          *int64
 	DefaultRunAsNonRoot        *bool
 	DefaultHostUsers           *bool
+	DefaultPVCStorageClass     *string
 	CaCertPath                 string
 	PluginDispatcher           plugins.TaskPluginDispatcher
 }

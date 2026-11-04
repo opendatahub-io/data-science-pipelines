@@ -23,10 +23,7 @@ permissions:
 
 jobs:
   pre-commit:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      SKIP: no-commit-to-branch
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:

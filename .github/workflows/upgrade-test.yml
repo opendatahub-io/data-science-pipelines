@@ -23,7 +23,11 @@ on:
       - '.github/resources/**'
       - 'backend/api/v2beta1/**'
       - 'backend/src/**'
+      - 'backend/metadata_writer/**'
+      - 'backend/test/config/**'
+      - 'backend/test/constants/**'
       - 'backend/test/v2/api/**'
+      - 'backend/test/testutil/**'
       - 'manifests/kustomize/**'
       - 'test_data/sdk_compiled_pipelines/**'
       - '!**/*.md'
@@ -44,10 +48,7 @@ jobs:
     # TODO(#14029): Re-enable once the MLMD-to-native migration and startup gate are implemented.
     if: ${{ vars.KFP_ENABLE_MLMD_UPGRADE_TESTS == 'true' }}
     needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         k8s_version: [ "v1.36.1" ]
@@ -118,6 +119,19 @@ jobs:
         run: ./.github/resources/scripts/forward-port.sh "kubeflow" "ml-pipeline" 8888 8888
         continue-on-error: true
 
+      - name: Verify initial release is non-modular
+        if: ${{ steps.deploy-release.outcome == 'success' }}
+        shell: bash
+        run: |
+          AIPIPELINES_CRD=$(kubectl get crd aipipelines.components.platform.opendatahub.io --ignore-not-found -o name)
+          if [ -n "$AIPIPELINES_CRD" ]; then
+            MODULE_NAME=$(kubectl get aipipelines/default-aipipelines --ignore-not-found -o name)
+            if [ -n "$MODULE_NAME" ]; then
+              echo "ERROR: default-aipipelines exists before the upgrade; expected the stable release to use legacy architecture"
+              exit 1
+            fi
+          fi
+
       - name: Prepare for Upgrade
         id: prepare-upgrade
         if: ${{ steps.forward-api-port.outcome == 'success' }}
@@ -131,6 +145,20 @@ jobs:
           pkill -f "port-forward"
         continue-on-error: true
 
+      - name: Capture pod before upgrade
+        id: pre-upgrade-pod
+        if: ${{ steps.prepare-upgrade.outcome == 'success' }}
+        shell: bash
+        run: |
+          DEPLOYMENT_NAME="${{ steps.deploy-release.outputs.deployment_name }}"
+          NAMESPACE="${{ env.NAMESPACE }}"
+          OLD_POD_UID=$(kubectl get pod -l "app=$DEPLOYMENT_NAME" -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.uid}')
+          if [ -z "$OLD_POD_UID" ]; then
+            echo "ERROR: No API pod found before the upgrade"
+            exit 1
+          fi
+          echo "pod_uid=$OLD_POD_UID" >> "$GITHUB_OUTPUT"
+
       - name: Deploy from Branch
         uses: ./.github/actions/deploy
         if: ${{ steps.create-cluster.outcome == 'success' }}
@@ -139,7 +167,48 @@ jobs:
           image_path: ${{ needs.build.outputs.IMAGE_PATH }}
           image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
           image_registry: ${{ needs.build.outputs.IMAGE_REGISTRY }}
-          forward_port: 'true'
+          forward_port: 'false'
+          skip_operator_deployment: ${{ env.SKIP_OPERATOR_DEPLOYMENT }}
+          pod_to_pod_tls_enabled: ${{ matrix.tls_enabled }}
+          enable_modular_architecture: 'true'
+
+      - name: Wait for upgrade rollout and re-establish port-forwarding
+        if: ${{ steps.deploy.outcome == 'success' }}
+        id: post-upgrade-port-forward
+        shell: bash
+        run: |
+          DEPLOYMENT_NAME="${{ steps.deploy.outputs.deployment_name }}"
+          NAMESPACE="${{ env.NAMESPACE }}"
+
+          OLD_POD_UID="${{ steps.pre-upgrade-pod.outputs.pod_uid }}"
+          echo "Pre-upgrade pod UID: $OLD_POD_UID"
+
+          echo "Waiting for operator to roll the deployment..."
+          for i in $(seq 1 36); do
+            NEW_POD_UID=$(kubectl get pod -l "app=$DEPLOYMENT_NAME" -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.uid}' 2>/dev/null || echo "")
+            if [ -n "$NEW_POD_UID" ] && [ "$NEW_POD_UID" != "$OLD_POD_UID" ]; then
+              echo "New pod detected (UID: $NEW_POD_UID) after $((i * 5))s"
+              break
+            fi
+            if [ "$i" -eq 36 ]; then
+              echo "ERROR: Pod UID did not change after 180s — operator did not roll the deployment"
+              exit 1
+            fi
+            sleep 5
+          done
+
+          echo "Waiting for rollout to complete..."
+          kubectl rollout status "deployment/$DEPLOYMENT_NAME" -n "$NAMESPACE" --timeout=300s
+
+          echo "Waiting for pod to be ready..."
+          kubectl wait --for=condition=ready pod -l "app=$DEPLOYMENT_NAME" -n "$NAMESPACE" --timeout=120s --field-selector=status.phase=Running
+
+          echo "Killing stale port-forward processes..."
+          pkill -f "kubectl port-forward.*8888" || true
+          sleep 3
+
+          echo "Re-establishing port-forward..."
+          ./.github/resources/scripts/forward-port.sh "$NAMESPACE" "$DEPLOYMENT_NAME" 8888 8888
 
       - name: Verify Upgrade
         uses: ./.github/actions/test-and-report
@@ -151,3 +220,11 @@ jobs:
           default_namespace: ${{ env.NAMESPACE }}
           python_version: ${{ env.PYTHON_VERSION }}
           report_name: "Upgrade Verification"
+          tls_enabled: ${{ matrix.tls_enabled }}
+          ca_cert_path: ${{ env.CA_CERT_PATH }}
+          # Deployment metadata from deploy action
+          deployment_name: ${{ steps.deploy.outputs.deployment_name }}
+          deployment_service_account_name: ${{ steps.deploy.outputs.service_account_name }}
+          pipeline_runner_service_account_name: ${{ steps.deploy.outputs.pipeline_runner_service_account }}
+          deployment_mode: ${{ steps.deploy.outputs.deployment_mode }}
+          expected_platform_release_version: ${{ steps.deploy.outputs.expected_platform_release_version }}

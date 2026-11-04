@@ -43,8 +43,17 @@ function check_namespace {
 function display_pod_info {
     local NAMESPACE=$1
 
-    kubectl_with_timeout get pods -n "${NAMESPACE}" || \
-        echo "Unable to list pod status in namespace '${NAMESPACE}'."
+    echo "Pod Information for Namespace: ${NAMESPACE}" > "$OUTPUT_FILE"
+    {
+        # Test cleanup can delete failed workflow pods before this script runs.
+        # Namespace events retain their image-pull and scheduling failures.
+        echo "----- NAMESPACE EVENTS -----"
+        kubectl get events -n "${NAMESPACE}" --sort-by=.lastTimestamp --request-timeout=10s || true
+        echo "----- SERVICE ENDPOINTS -----"
+        kubectl get services,endpointslices -n "${NAMESPACE}" -o wide --request-timeout=10s || true
+    } | tee -a "$OUTPUT_FILE"
+
+    kubectl get pods -n "${NAMESPACE}"
 
     local POD_NAMES
 
@@ -57,8 +66,6 @@ function display_pod_info {
         echo "No pods found in namespace '${NAMESPACE}'." | tee -a "$OUTPUT_FILE"
         return
     fi
-
-    echo "Pod Information for Namespace: ${NAMESPACE}" | tee -a "$OUTPUT_FILE"
 
     for POD_NAME in ${POD_NAMES}; do
         {
