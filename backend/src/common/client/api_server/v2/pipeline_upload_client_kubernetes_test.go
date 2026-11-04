@@ -140,6 +140,9 @@ func TestUploadPipelineVersionKubernetesClient_InvalidTagsReturnsError(t *testin
 	if err == nil {
 		t.Fatalf("expected UploadPipelineVersion() to fail for invalid tags JSON")
 	}
+	if !assert.Contains(t, err.Error(), "Failed to parse pipeline version tags") {
+		t.Errorf("got error %q", err)
+	}
 
 	var versions k8sapi.PipelineVersionList
 	if err := fakeClient.List(context.Background(), &versions, &ctrlclient.ListOptions{Namespace: namespace}); err != nil {
@@ -178,6 +181,9 @@ func TestUploadPipelineVersionKubernetesClient_InvalidTagValueLengthReturnsError
 	_, err := client.UploadPipelineVersion(specPath, params)
 	if err == nil {
 		t.Fatalf("expected UploadPipelineVersion() to fail for tag value longer than 63 characters")
+	}
+	if !assert.Contains(t, err.Error(), "Failed to validate pipeline version tags") {
+		t.Errorf("got error %q", err)
 	}
 
 	var versions k8sapi.PipelineVersionList

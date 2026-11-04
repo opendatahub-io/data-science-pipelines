@@ -29,7 +29,9 @@ jobs:
 
   webhook-tests:
     runs-on: ubuntu-24.04
-    needs: build
+    permissions:
+      actions: read
+      contents: read
     strategy:
       matrix:
         k8s_version: [ "v1.33.12", "v1.36.1" ]

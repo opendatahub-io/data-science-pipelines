@@ -38,6 +38,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -90,17 +91,17 @@ var (
 	logLevel           = driverFlagValues.LogLevel
 
 	// proxy
-	httpProxy            = driverFlagValues.HTTPProxy
-	httpsProxy           = driverFlagValues.HTTPSProxy
-	noProxy              = driverFlagValues.NoProxy
-	publishLogs          = driverFlagValues.PublishLogs
-	cacheDisabledFlag    = driverFlagValues.CacheDisabled
-	mlPipelineTLSEnabled = driverFlagValues.MLPipelineTLSEnabled
-	caCertPath           = driverFlagValues.CACertPath
-	defaultRunAsUser     = driverFlagValues.DefaultRunAsUser
-	defaultRunAsGroup    = driverFlagValues.DefaultRunAsGroup
-	defaultRunAsNonRoot  = driverFlagValues.DefaultRunAsNonRoot
-	defaultHostUsers     = driverFlagValues.DefaultHostUsers
+	httpProxy              = driverFlagValues.HTTPProxy
+	httpsProxy             = driverFlagValues.HTTPSProxy
+	noProxy                = driverFlagValues.NoProxy
+	publishLogs            = driverFlagValues.PublishLogs
+	cacheDisabledFlag      = driverFlagValues.CacheDisabled
+	mlPipelineTLSEnabled   = driverFlagValues.MLPipelineTLSEnabled
+	caCertPath             = driverFlagValues.CACertPath
+	defaultRunAsUser       = driverFlagValues.DefaultRunAsUser
+	defaultRunAsGroup      = driverFlagValues.DefaultRunAsGroup
+	defaultRunAsNonRoot    = driverFlagValues.DefaultRunAsNonRoot
+	defaultHostUsers       = driverFlagValues.DefaultHostUsers
 	defaultPVCStorageClass = driverFlagValues.DefaultPVCStorageClass
 )
 

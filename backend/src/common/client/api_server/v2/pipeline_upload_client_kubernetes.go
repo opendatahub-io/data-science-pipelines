@@ -17,6 +17,7 @@ package api_server_v2
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -102,6 +103,19 @@ func deriveNameDisplayAndDescription(providedName, providedDisplayName, provided
 	return name, displayName, description
 }
 
+func parseTagsJSONString(tagsJSON *string) (map[string]string, error) {
+	if tagsJSON == nil || *tagsJSON == "" {
+		return nil, nil
+	}
+
+	var tags map[string]string
+	if err := json.Unmarshal([]byte(*tagsJSON), &tags); err != nil {
+		return nil, err
+	}
+
+	return tags, nil
+}
+
 func NewPipelineUploadClientKubernetes(clientConfig clientcmd.ClientConfig, namespace string) (
 	PipelineUploadInterface, error,
 ) {
@@ -133,9 +147,7 @@ func (c *PipelineUploadClientKubernetes) UploadFile(filePath string, parameters 
 
 	processedFile, err := server.ReadPipelineFile(path.Base(filePath), file, common.MaxFileLength)
 	if err != nil {
-		return nil, util.NewUserError(err,
-			fmt.Sprintf("Failed to upload pipeline. Params: '%v'", parameters),
-			"Failed to upload pipeline")
+		return nil, util.NewUserErrorWithSingleMessage(err, "Failed to read pipeline spec file")
 	}
 
 	parameters.Uploadfile = runtime.NamedReader(path.Base(filePath), io.NopCloser(bytes.NewReader(processedFile)))
@@ -158,17 +170,22 @@ func (c *PipelineUploadClientKubernetes) Upload(parameters *params.UploadPipelin
 
 	defer parameters.Uploadfile.Close()
 
-	tags, err := apimodel.ParseTagsJSON(parameters.Tags)
+	tags, err := parseTagsJSONString(parameters.Tags)
 	if err != nil {
 		return nil, util.NewUserError(err,
-			fmt.Sprintf("Failed to upload pipeline. Params: '%v'", parameters),
+			fmt.Sprintf("Failed to parse pipeline tags. Params: '%v'", parameters),
+			"Failed to upload pipeline")
+	}
+	if err := apimodel.ValidateTags(tags); err != nil {
+		return nil, util.NewUserError(err,
+			fmt.Sprintf("Failed to validate pipeline tags. Params: '%v'", parameters),
 			"Failed to upload pipeline")
 	}
 
 	if _, err := template.NewV2SpecTemplate(pipelineSpec, template.TemplateOptions{}); err != nil {
 		return nil, util.NewUserError(err,
-			fmt.Sprintf("Failed to upload pipeline. Params: '%v'", parameters),
-			"Failed to upload pipeline")
+			fmt.Sprintf("Failed to parse pipeline version. Params: '%v'", parameters),
+			"Failed to parse pipeline version")
 	}
 
 	name, displayName, description := deriveNameDisplayAndDescription(
@@ -224,8 +241,8 @@ func (c *PipelineUploadClientKubernetes) Upload(parameters *params.UploadPipelin
 	if err != nil {
 		err = c.cleanupFailedPipelineUpload(&pipeline, err)
 		return nil, util.NewUserError(err,
-			fmt.Sprintf("Failed to upload pipeline. Params: '%v'", parameters),
-			"Failed to upload pipeline")
+			fmt.Sprintf("Failed to parse pipeline version. Params: '%v'", parameters),
+			"Failed to parse pipeline version")
 	}
 
 	err = c.ctrlClient.Create(ctx, pipelineVersion)
@@ -258,9 +275,7 @@ func (c *PipelineUploadClientKubernetes) UploadPipelineVersion(filePath string, 
 
 	processedFile, err := server.ReadPipelineFile(path.Base(filePath), file, common.MaxFileLength)
 	if err != nil {
-		return nil, util.NewUserError(err,
-			fmt.Sprintf("Failed to upload pipeline version. Params: '%v'", parameters),
-			"Failed to upload pipeline version")
+		return nil, util.NewUserErrorWithSingleMessage(err, "Failed to read pipeline spec file")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), api_server.APIServerDefaultTimeout)
@@ -293,10 +308,15 @@ func (c *PipelineUploadClientKubernetes) UploadPipelineVersion(filePath string, 
 
 	modelPipeline := pipeline.ToModel()
 
-	tags, err := apimodel.ParseTagsJSON(parameters.Tags)
+	tags, err := parseTagsJSONString(parameters.Tags)
 	if err != nil {
 		return nil, util.NewUserError(err,
-			fmt.Sprintf("Failed to upload pipeline version. Params: '%v'", parameters),
+			fmt.Sprintf("Failed to parse pipeline version tags. Params: '%v'", parameters),
+			"Failed to upload pipeline version")
+	}
+	if err := apimodel.ValidateTags(tags); err != nil {
+		return nil, util.NewUserError(err,
+			fmt.Sprintf("Failed to validate pipeline version tags. Params: '%v'", parameters),
 			"Failed to upload pipeline version")
 	}
 
@@ -322,8 +342,8 @@ func (c *PipelineUploadClientKubernetes) UploadPipelineVersion(filePath string, 
 	pipelineVersion, err := k8sapi.FromPipelineVersionModel(*modelPipeline, modelPipelineVersion)
 	if err != nil {
 		return nil, util.NewUserError(err,
-			fmt.Sprintf("Failed to upload pipeline version. Params: '%v'", parameters),
-			"Failed to upload pipeline version")
+			fmt.Sprintf("Failed to parse pipeline version. Params: '%v'", parameters),
+			"Failed to parse pipeline version")
 	}
 
 	err = c.ctrlClient.Create(ctx, pipelineVersion)
@@ -357,8 +377,8 @@ func (c *PipelineUploadClientKubernetes) UploadPipelineVersion(filePath string, 
 		rv.PipelineSpec = spec.AsMap()
 	} else if err != nil {
 		return nil, util.NewUserError(err,
-			fmt.Sprintf("Failed to upload pipeline version. Params: '%v'", parameters),
-			"Failed to upload pipeline version")
+			fmt.Sprintf("Failed to parse pipeline version. Params: '%v'", parameters),
+			"Failed to parse pipeline version")
 	}
 
 	return rv, nil

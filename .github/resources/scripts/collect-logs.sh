@@ -48,12 +48,12 @@ function display_pod_info {
         # Test cleanup can delete failed workflow pods before this script runs.
         # Namespace events retain their image-pull and scheduling failures.
         echo "----- NAMESPACE EVENTS -----"
-        kubectl get events -n "${NAMESPACE}" --sort-by=.lastTimestamp --request-timeout=10s || true
+        kubectl_with_timeout get events -n "${NAMESPACE}" --sort-by=.lastTimestamp || true
         echo "----- SERVICE ENDPOINTS -----"
-        kubectl get services,endpointslices -n "${NAMESPACE}" -o wide --request-timeout=10s || true
+        kubectl_with_timeout get services,endpointslices -n "${NAMESPACE}" -o wide || true
     } | tee -a "$OUTPUT_FILE"
 
-    kubectl get pods -n "${NAMESPACE}"
+    kubectl_with_timeout get pods -n "${NAMESPACE}"
 
     local POD_NAMES
 

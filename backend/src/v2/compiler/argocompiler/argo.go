@@ -58,7 +58,7 @@ type Options struct {
 	// Optional: admin-configured default runAsNonRoot for customer containers.
 	// Nil means not set (feature disabled).
 	DefaultRunAsNonRoot *bool
-	DefaultHostUsers *bool
+	DefaultHostUsers    *bool
 	// Optional: administrator-configured labels and annotations for driver pods.
 	// Nil means not set (feature disabled). The API server reads this from its own
 	// configuration and passes it in, so callers that compile outside the API server,

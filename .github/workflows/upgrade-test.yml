@@ -49,6 +49,9 @@ jobs:
     if: ${{ vars.KFP_ENABLE_MLMD_UPGRADE_TESTS == 'true' }}
     needs: build
     runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
     strategy:
       matrix:
         k8s_version: [ "v1.36.1" ]

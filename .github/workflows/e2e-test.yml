@@ -79,7 +79,6 @@ jobs:
   end-to-end-scenario-tests:
     runs-on: ubuntu-24.04
     needs: build
-    runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
@@ -289,7 +288,9 @@ jobs:
 
   end-to-end-critical-scenario-multi-user-tests:
     runs-on: ubuntu-24.04
-    needs: build
+    permissions:
+      actions: read
+      contents: read
     strategy:
       matrix:
         k8s_version: ["v1.36.1"]
@@ -408,7 +409,9 @@ jobs:
     # basic-auth/none deployments without requiring a TLS secret.
     if: ${{ false }}
     runs-on: ubuntu-24.04
-    needs: build
+    permissions:
+      actions: read
+      contents: read
     strategy:
       matrix:
         k8s_version: [ "v1.36.1" ]
