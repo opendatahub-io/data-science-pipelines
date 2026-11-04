@@ -16,9 +16,12 @@ COPY . .
 
 WORKDIR ./frontend
 
+RUN npm install --global "$(node -p 'require("./package.json").packageManager')"
+
 # Retry with cache clean as a workaround for an intermittent npm EEXIST/ENOENT
 # race condition where parallel download workers collide on the same cache entry.
-RUN npm ci && npm run postinstall || (npm cache clean --force && npm ci && npm run postinstall)
+# npm ci runs the root postinstall script, which installs server and mock-backend deps.
+RUN npm ci || (npm cache clean --force && npm ci)
 RUN npm run build
 
 RUN mkdir -p ./server/dist && \
@@ -27,6 +30,10 @@ RUN mkdir -p ./server/dist && \
     echo ${TAG_NAME} > ./server/dist/TAG_NAME
 
 FROM node:${NODE_VERSION}-${BASE_IMAGE}
+
+COPY --from=build ./src/frontend/package.json /tmp/frontend-package.json
+RUN npm install --global "$(node -p 'require("/tmp/frontend-package.json").packageManager')" && \
+    rm /tmp/frontend-package.json
 
 COPY --from=build ./src/frontend/server /server
 COPY --from=build ./src/frontend/build /client

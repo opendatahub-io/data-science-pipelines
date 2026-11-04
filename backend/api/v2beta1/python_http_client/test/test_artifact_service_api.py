@@ -28,17 +28,52 @@ class TestArtifactServiceApi(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test_artifact_service_get_artifact(self):
-        """Test case for artifact_service_get_artifact
+    def test_batch_create_artifact_tasks(self):
+        """Test case for batch_create_artifact_tasks
+
+        Creates multiple artifact-task relationships in bulk.  # noqa: E501
+        """
+        pass
+
+    def test_batch_create_artifacts(self):
+        """Test case for batch_create_artifacts
+
+        Creates multiple artifacts in bulk.  # noqa: E501
+        """
+        pass
+
+    def test_create_artifact(self):
+        """Test case for create_artifact
+
+        Creates a new artifact.  # noqa: E501
+        """
+        pass
+
+    def test_create_artifact_task(self):
+        """Test case for create_artifact_task
+
+        Creates an artifact-task relationship.  # noqa: E501
+        """
+        pass
+
+    def test_get_artifact(self):
+        """Test case for get_artifact
 
         Finds a specific Artifact by ID.  # noqa: E501
         """
         pass
 
-    def test_artifact_service_list_artifacts(self):
-        """Test case for artifact_service_list_artifacts
+    def test_list_artifact_tasks(self):
+        """Test case for list_artifact_tasks
 
-        Finds all artifacts within the specified namespace. Namespace field is required. In multi-user mode, the caller is required to have RBAC verb \"list\" on the \"artifacts\" resource for the specified namespace.  # noqa: E501
+        Lists artifact-task relationships.  # noqa: E501
+        """
+        pass
+
+    def test_list_artifacts(self):
+        """Test case for list_artifacts
+
+        Finds all artifacts within the specified namespace.  # noqa: E501
         """
         pass
 

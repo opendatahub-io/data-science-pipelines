@@ -216,7 +216,7 @@ func TestLoadSamples(t *testing.T) {
 	// Expect another Pipeline version added for Pipeline 1
 	opts, err := list.NewOptions(&model.PipelineVersion{}, 10, "id", nil)
 	require.NoError(t, err)
-	_, totalSize, _, err := rm.ListPipelineVersions(pipeline1.UUID, opts, nil)
+	_, totalSize, _, err := rm.ListPipelineVersions(pipeline1.UUID, opts)
 	require.NoError(t, err)
 	require.Equal(t, totalSize, 2)
 
@@ -230,12 +230,12 @@ func TestLoadSamples(t *testing.T) {
 	// Expect another Pipeline version added for Pipeline 2
 	_, err = rm.GetPipelineVersionByName(pipeline2.UUID, pc.Pipelines[1].VersionName)
 	require.NoError(t, err)
-	_, totalSize, _, err = rm.ListPipelineVersions(pipeline2.UUID, opts, nil)
+	_, totalSize, _, err = rm.ListPipelineVersions(pipeline2.UUID, opts)
 	require.NoError(t, err)
 	require.Equal(t, totalSize, 2)
 
 	// Confirm previous pipeline version count has not been affected
-	_, totalSize, _, err = rm.ListPipelineVersions(pipeline1.UUID, opts, nil)
+	_, totalSize, _, err = rm.ListPipelineVersions(pipeline1.UUID, opts)
 	require.NoError(t, err)
 	require.Equal(t, totalSize, 2)
 
@@ -251,7 +251,7 @@ func TestLoadSamples(t *testing.T) {
 	require.NoError(t, err)
 
 	// Expect no change
-	_, totalSize, _, err = rm.ListPipelineVersions(pipeline2.UUID, opts, nil)
+	_, totalSize, _, err = rm.ListPipelineVersions(pipeline2.UUID, opts)
 	require.NoError(t, err)
 	require.Equal(t, totalSize, 2)
 }
@@ -297,7 +297,7 @@ func TestLoadSamplesMultiplePipelineVersionsInConfig(t *testing.T) {
 	opts, err := list.NewOptions(&model.PipelineVersion{}, 10, "id", nil)
 	require.NoError(t, err)
 
-	_, totalSize, _, err := rm.ListPipelineVersions(pipeline.UUID, opts, nil)
+	_, totalSize, _, err := rm.ListPipelineVersions(pipeline.UUID, opts)
 	require.NoError(t, err)
 	require.Equal(t, totalSize, 2)
 }

@@ -19,16 +19,12 @@ import (
 	"testing"
 
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
-	"github.com/kubeflow/pipelines/backend/src/v2/common/plugins"
-	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
-	pb "github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
+	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
+	"github.com/kubeflow/pipelines/backend/src/common/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 // TestCreatePVCStorageClassSemantics verifies the storage-class handling of
@@ -91,56 +87,56 @@ func TestCreatePVCStorageClassSemantics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			k8sClient := k8sfake.NewSimpleClientset()
-			mlmdClient := newCreatePVCTestMLMDClient()
+			tc := NewTestContextWithRootExecuted(t, &pipelinespec.PipelineJob_RuntimeConfig{}, "test_data/nested_k8s_pvc_outputs.yaml")
+			_, nestedTask := tc.RunDagDriver("nested", tc.RootTask)
+			require.NoError(t, tc.Push("createpvc"))
+			t.Cleanup(func() {
+				_, ok := tc.Pop()
+				require.True(t, ok)
+			})
 
-			parameterValues := map[string]*structpb.Value{
-				"access_modes": structpb.NewListValue(&structpb.ListValue{
-					Values: []*structpb.Value{structpb.NewStringValue("ReadWriteOnce")},
-				}),
-				"size": structpb.NewStringValue("5Mi"),
-			}
+			taskSpec := tc.GetLast().GetTaskSpec()
 			if tt.storageClassInput != nil {
-				parameterValues["storage_class_name"] = structpb.NewStringValue(*tt.storageClassInput)
+				if taskSpec.Inputs == nil {
+					taskSpec.Inputs = &pipelinespec.TaskInputsSpec{}
+				}
+				if taskSpec.Inputs.Parameters == nil {
+					taskSpec.Inputs.Parameters = map[string]*pipelinespec.TaskInputsSpec_InputParameterSpec{}
+				}
+				taskSpec.Inputs.Parameters["storage_class_name"] = &pipelinespec.TaskInputsSpec_InputParameterSpec{
+					Kind: &pipelinespec.TaskInputsSpec_InputParameterSpec_RuntimeValue{
+						RuntimeValue: &pipelinespec.ValueOrRuntimeParameter{
+							Value: &pipelinespec.ValueOrRuntimeParameter_Constant{
+								Constant: structpb.NewStringValue(*tt.storageClassInput),
+							},
+						},
+					},
+				}
 			}
 
-			execution := Execution{
-				ExecutorInput: &pipelinespec.ExecutorInput{
-					Inputs: &pipelinespec.ExecutorInput_Inputs{
-						ParameterValues: parameterValues,
-					},
-				},
-			}
-
-			pvcName, _, status, err := createPVC(
-				context.Background(),
-				k8sClient,
-				execution,
-				&Options{
-					PipelineName:   "pipeline-1",
-					RunID:          "run-1",
-					TaskName:       "createpvc-1",
-					Namespace:      "kubeflow",
-					DAGExecutionID: 1,
-					Task: &pipelinespec.PipelineTaskSpec{
-						TaskInfo: &pipelinespec.PipelineTaskInfo{Name: "createpvc-1"},
-					},
-					Container: &pipelinespec.PipelineDeploymentConfig_PipelineContainerSpec{
-						Image: "argostub/createpvc",
-					},
-					CacheDisabled:          true,
-					PluginDispatcher:       plugins.NoOpDispatcher{},
-					DefaultPVCStorageClass: tt.serverDefault,
-				},
-				&mockCacheClient{},
-				mlmdClient,
-				&metadata.ExecutionConfig{},
-			)
+			kubernetesExecutorConfig, err := util.LoadKubernetesExecutorConfig(tc.GetLast().GetComponentSpec(), tc.PlatformSpec)
 			require.NoError(t, err)
-			require.Equal(t, pb.Execution_COMPLETE, status)
+			opts := tc.setupContainerOptions(nestedTask, taskSpec, kubernetesExecutorConfig)
+			opts.CacheDisabled = true
+			opts.DefaultPVCStorageClass = tt.serverDefault
+
+			execution, err := Container(context.Background(), opts, tc.ClientManager)
+			require.NoError(t, err)
+			require.NotNil(t, execution)
+			require.NotEmpty(t, execution.TaskID)
+
+			task, err := tc.ClientManager.KFPAPIClient().GetTask(context.Background(), &apiv2beta1.GetTaskRequest{
+				TaskId: execution.TaskID,
+				RunId:  tc.Run.GetRunId(),
+			})
+			require.NoError(t, err)
+			require.Equal(t, apiv2beta1.PipelineTask_SUCCEEDED, task.GetState())
+
+			pvcName, ok := taskOutputParameterValue(task, "name")
+			require.True(t, ok)
 			require.NotEmpty(t, pvcName)
 
-			pvc, err := k8sClient.CoreV1().PersistentVolumeClaims("kubeflow").Get(
+			pvc, err := tc.ClientManager.K8sClient().CoreV1().PersistentVolumeClaims(TestNamespace).Get(
 				context.Background(), pvcName, metav1.GetOptions{},
 			)
 			require.NoError(t, err)
@@ -151,30 +147,4 @@ func TestCreatePVCStorageClassSemantics(t *testing.T) {
 
 func newString(value string) *string {
 	return &value
-}
-
-// newCreatePVCTestMLMDClient returns an MLMD client that satisfies the
-// pipeline and execution bookkeeping performed by createPVC.
-func newCreatePVCTestMLMDClient() *metadata.Client {
-	mockSvc := &MockMetadataClient{
-		GetContextByTypeAndNameFunc: func(ctx context.Context, in *pb.GetContextByTypeAndNameRequest, opts ...grpc.CallOption) (*pb.GetContextByTypeAndNameResponse, error) {
-			return &pb.GetContextByTypeAndNameResponse{Context: &pb.Context{Id: proto.Int64(1234)}}, nil
-		},
-		GetParentContextsByContextFunc: func(ctx context.Context, in *pb.GetParentContextsByContextRequest, opts ...grpc.CallOption) (*pb.GetParentContextsByContextResponse, error) {
-			return &pb.GetParentContextsByContextResponse{}, nil
-		},
-		PutParentContextsFunc: func(ctx context.Context, in *pb.PutParentContextsRequest, opts ...grpc.CallOption) (*pb.PutParentContextsResponse, error) {
-			return &pb.PutParentContextsResponse{}, nil
-		},
-		PutExecutionTypeFunc: func(ctx context.Context, in *pb.PutExecutionTypeRequest, opts ...grpc.CallOption) (*pb.PutExecutionTypeResponse, error) {
-			return &pb.PutExecutionTypeResponse{TypeId: proto.Int64(7)}, nil
-		},
-		PutExecutionFunc: func(ctx context.Context, in *pb.PutExecutionRequest, opts ...grpc.CallOption) (*pb.PutExecutionResponse, error) {
-			return &pb.PutExecutionResponse{}, nil
-		},
-		GetExecutionsByIDFunc: func(ctx context.Context, in *pb.GetExecutionsByIDRequest, opts ...grpc.CallOption) (*pb.GetExecutionsByIDResponse, error) {
-			return &pb.GetExecutionsByIDResponse{Executions: []*pb.Execution{{Id: proto.Int64(55)}}}, nil
-		},
-	}
-	return metadata.NewTestClient(mockSvc)
 }

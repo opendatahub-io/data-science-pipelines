@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"time"
 
-	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	workflowapi "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 	"github.com/go-openapi/strfmt"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -52,6 +52,10 @@ func UInt32Pointer(i uint32) *uint32 {
 }
 
 func Int32Pointer(i int32) *int32 {
+	return &i
+}
+
+func IntPointer(i int) *int {
 	return &i
 }
 

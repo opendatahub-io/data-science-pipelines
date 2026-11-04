@@ -146,6 +146,8 @@ class DSPDeployer:
 
     def _should_use_operator_deployment(self) -> bool:
         """Determine whether to use DSPO (operator) or direct deployment."""
+        if self.args.db_type == 'pgx':
+            return False
         if self.args.enable_modular_architecture and (
                 self.skip_operator_deployment or self.args.multi_user or
                 self.args.proxy):
@@ -173,7 +175,7 @@ class DSPDeployer:
         """Deploy Data Science Pipelines using direct manifests."""
         print('🚀 Deploying Data Science Pipelines using direct manifests...')
 
-        deploy_args = []
+        deploy_args = ['--db-type', self.args.db_type]
         if self.args.proxy:
             deploy_args.append('--proxy')
         if not self.args.cache_enabled:
@@ -329,6 +331,9 @@ class DSPDeployer:
             metadata['EXPECTED_PLATFORM_RELEASE_VERSION'] = (
                 self.expected_platform_release_version)
 
+        if not use_operator and self.args.db_type == 'pgx':
+            metadata['DATABASE_NAME'] = 'postgres'
+
         for key, value in metadata.items():
             output_to_github_actions(key, value)
 
@@ -398,6 +403,9 @@ def main():
         help='Namespace for external Argo Workflows deployment')
 
     # KFP options
+    parser.add_argument(
+        '--db-type', default='mysql', choices=['mysql', 'pgx'],
+        help='Database driver; PostgreSQL uses direct manifest deployment')
     parser.add_argument(
         '--pipeline-store',
         default='database',

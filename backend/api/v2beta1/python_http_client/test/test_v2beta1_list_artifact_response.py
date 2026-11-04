@@ -37,27 +37,20 @@ class TestV2beta1ListArtifactResponse(unittest.TestCase):
         if include_optional :
             return V2beta1ListArtifactResponse(
                 artifacts = [
-                    kfp_server_api.models.v2beta1_artifact.v2beta1Artifact(
+                    kfp_server_api.models.v2beta1_artifact.V2beta1Artifact(
                         artifact_id = '0', 
-                        storage_provider = '0', 
-                        storage_path = '0', 
+                        name = '0', 
+                        description = '0', 
+                        type = 'TYPE_UNSPECIFIED', 
                         uri = '0', 
-                        download_url = '0', 
-                        namespace = '0', 
-                        artifact_type = '0', 
-                        artifact_size = '0', 
+                        metadata = {
+                            'key' : None
+                            }, 
+                        number_value = 1.337, 
                         created_at = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'), 
-                        last_updated_at = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'), 
-                        error = kfp_server_api.models.google_rpc_status.googleRpcStatus(
-                            code = 56, 
-                            message = '0', 
-                            details = [
-                                {
-                                    'key' : None
-                                    }
-                                ], ), 
-                        render_url = '0', )
+                        namespace = '0', )
                     ], 
+                total_size = 56, 
                 next_page_token = '0'
             )
         else :

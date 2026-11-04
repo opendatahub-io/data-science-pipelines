@@ -15,6 +15,9 @@ on:
       - 'rhoai-*'
     paths:
       - 'frontend/**'
+      - 'manifests/kustomize/base/installs/multi-user/pipelines-profile-controller/sync.py'
+      - 'api/v2alpha1/*.proto'
+      - 'kubernetes_platform/proto/*.proto'
       - 'backend/api/v1beta1/swagger/**'
       - 'backend/api/v2beta1/swagger/**'
       - '.github/workflows/frontend.yml'
@@ -33,12 +36,23 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Set up Node.js
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@v7
       with:
         node-version-file: frontend/.nvmrc
+
+    - name: Set up Python for profile-controller regression tests
+      uses: actions/setup-python@v7
+      with:
+        python-version: '3.13'
+
+    - name: Set up npm
+      working-directory: frontend
+      run: |
+        npm install --global "$(node -p 'require("./package.json").packageManager')"
+        npm --version
 
     - name: Check for toolchain version drift
       if: github.event_name == 'pull_request'
@@ -62,6 +76,19 @@ jobs:
           src/apisv2beta1 \
           server/src/generated/apis \
           server/src/generated/apisv2beta1
+
+    - name: Verify pipeline and platform spec generation
+      working-directory: frontend
+      run: |
+        # Protobuf only needs Ubuntu sources, not the runner's third-party repositories.
+        test -s /etc/apt/sources.list.d/ubuntu.sources
+        apt_sources=(
+          -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources
+          -o Dir::Etc::sourceparts=-
+        )
+        sudo apt-get "${apt_sources[@]}" update
+        sudo apt-get "${apt_sources[@]}" install --yes protobuf-compiler
+        bash scripts/check-spec-generation.sh
 
     - name: Run Frontend Tests
       run: cd ./frontend && npm run test:ci

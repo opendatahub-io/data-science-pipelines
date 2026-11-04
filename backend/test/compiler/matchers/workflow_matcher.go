@@ -23,7 +23,7 @@ import (
 	"github.com/kubeflow/pipelines/backend/test/logger"
 	"github.com/kubeflow/pipelines/backend/test/v2/api/matcher"
 
-	"github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 	"github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 )
@@ -45,6 +45,7 @@ func CompareWorkflows(actual *v1alpha1.Workflow, expected *v1alpha1.Workflow) {
 	sort.Slice(actual.Spec.Arguments.Parameters, func(i, j int) bool {
 		return actual.Spec.Arguments.Parameters[i].Name < actual.Spec.Arguments.Parameters[j].Name
 	})
+	gomega.Expect(actual.Spec.Arguments.Parameters).To(gomega.HaveLen(len(expected.Spec.Arguments.Parameters)), "Workflow argument parameter count is not same")
 	for paramIndex, param := range expected.Spec.Arguments.Parameters {
 		gomega.Expect(actual.Spec.Arguments.Parameters[paramIndex].Name).To(gomega.Equal(param.Name), "Parameter Name is not same")
 		gomega.Expect(actual.Spec.Arguments.Parameters[paramIndex].Description).To(gomega.Equal(param.Description), "Parameter Description is not same")

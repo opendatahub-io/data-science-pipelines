@@ -12,16 +12,25 @@ kubectl -n "$NAMESPACE" run kfp-proxy-curl --image=curlimages/curl:8.7.1 --resta
 kubectl -n "$NAMESPACE" wait --for=condition=Ready pod/kfp-proxy-curl --timeout=300s
 
 # Test 1: Verify artifact proxy health endpoint
-HEALTH_RESPONSE=$(kubectl -n "$NAMESPACE" exec kfp-proxy-curl -- \
-  curl -fsS -H 'kubeflow-userid: user@example.com' \
-  "http://ml-pipeline-ui-artifact.${NAMESPACE}.svc.cluster.local/apis/v1beta1/healthz")
+HEALTH_RESPONSE=""
+for attempt in $(seq 1 30); do
+  if HEALTH_RESPONSE=$(kubectl -n "$NAMESPACE" exec kfp-proxy-curl -- \
+    curl -fsS -H 'kubeflow-userid: user@example.com' \
+    "http://ml-pipeline-ui-artifact.${NAMESPACE}.svc.cluster.local/apis/v1beta1/healthz") && \
+    jq -e '.apiServerReady == true' >/dev/null <<<"$HEALTH_RESPONSE"; then
+    break
+  fi
 
-if ! echo "$HEALTH_RESPONSE" | grep -q '"apiServerReady":true'; then
-  echo "ERROR: apiServerReady=false"
-  echo "Response: $HEALTH_RESPONSE"
-  kubectl -n "$NAMESPACE" logs deploy/ml-pipeline-ui-artifact -c ml-pipeline-ui-artifact --tail=50 || true
-  exit 1
-fi
+  if [[ "$attempt" -eq 30 ]]; then
+    echo "ERROR: Artifact proxy API server was not ready after 30 attempts"
+    echo "Response: $HEALTH_RESPONSE"
+    kubectl -n "$NAMESPACE" logs deploy/ml-pipeline-ui-artifact -c ml-pipeline-ui-artifact --tail=50 || true
+    exit 1
+  fi
+
+  echo "Waiting for artifact proxy API server to become ready... ($attempt/30)"
+  sleep 5
+done
 
 # Test 2: Verify proxy can list pipelines
 PIPELINES_RESPONSE=$(kubectl -n "$NAMESPACE" exec kfp-proxy-curl -- \
@@ -71,10 +80,17 @@ if [[ "$WORKFLOW_PHASE" != "Succeeded" ]]; then
   exit 1
 fi
 
-KEY=$(kubectl -n "$NAMESPACE" get workflow "$WORKFLOW_NAME" -o jsonpath='{.status.nodes.*.outputs.artifacts[?(@.name=="out")].s3.key}')
-ART_URL="http://ml-pipeline-ui-artifact.${NAMESPACE}.svc.cluster.local/artifacts/get?source=minio&bucket=mlpipeline&key=${KEY}"
+KEY=$(
+  kubectl -n "$NAMESPACE" get workflow "$WORKFLOW_NAME" -o json |
+    jq -r '[.status.nodes[].outputs.artifacts[]? | select(.name=="out") | .s3.key] | first // empty'
+)
+if [[ -z "$KEY" ]]; then
+  echo "ERROR: Could not locate S3 key for artifact 'out' in workflow status"
+  exit 1
+fi
+ARTIFACT_URL="http://ml-pipeline-ui-artifact.${NAMESPACE}.svc.cluster.local/artifacts/get?source=minio&bucket=mlpipeline&key=${KEY}"
 if ! kubectl -n "$NAMESPACE" exec kfp-proxy-curl -- sh -c \
-  "curl -fsS -H 'kubeflow-userid: user@example.com' '${ART_URL}' 2>/dev/null | grep -qx 'artifact-proxy-e2e-test-content'"; then
+  "curl -fsS -H 'kubeflow-userid: user@example.com' '${ARTIFACT_URL}' 2>/dev/null | grep -qx 'artifact-proxy-e2e-test-content'"; then
   echo "ERROR: Artifact content validation failed"
   kubectl -n "$NAMESPACE" logs deploy/ml-pipeline-ui-artifact -c ml-pipeline-ui-artifact --tail=50 || true
   exit 1

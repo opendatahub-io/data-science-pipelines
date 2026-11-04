@@ -1,4 +1,4 @@
-// Copyright 2024 The Kubeflow Authors
+// Copyright 2025 The Kubeflow Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,269 +16,832 @@ package server
 
 import (
 	"context"
-	"fmt"
-	"net/url"
-	"strconv"
-	"strings"
-	"time"
 
 	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
+	"github.com/kubeflow/pipelines/backend/src/apiserver/auth"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
+	"github.com/kubeflow/pipelines/backend/src/apiserver/model"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/resource"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
-	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
-	"github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/encoding/protojson"
 	authorizationv1 "k8s.io/api/authorization/v1"
-	corev1 "k8s.io/api/core/v1"
 )
-
-var (
-	getArtifactRequests = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "artifact_server_get_requests",
-		Help: "The total number of GetArtifact requests",
-	})
-	listArtifactRequests = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "artifact_server_list_requests",
-		Help: "The total number of ListArtifacts requests",
-	})
-)
-
-type ArtifactServerOptions struct {
-	CollectMetrics bool `json:"collect_metrics,omitempty"`
-}
 
 type ArtifactServer struct {
 	resourceManager *resource.ResourceManager
-	options         *ArtifactServerOptions
 	apiv2beta1.UnimplementedArtifactServiceServer
 }
 
-// Value constraints by MLMD:
-// https://github.com/kubeflow/pipelines/blob/38ef986eaa00e8e8e634a17a7837111b6380685a/third_party/ml-metadata/ml_metadata/proto/metadata_store.proto#L873
-const (
-	DefaultListArtifactSize = 20
-	ArtifactSizeMaximum     = 100
-	ContextSizeMaximum      = 100
-	ArtifactSizeMinimum     = 1
-)
+// NewArtifactServer creates a new ArtifactServer.
+func NewArtifactServer(resourceManager *resource.ResourceManager) *ArtifactServer {
+	return &ArtifactServer{resourceManager: resourceManager}
+}
 
-// ListArtifacts lists artifacts. Namespace filtering is assessed based on querying mlmd
-// for all contexts within the provided namespace then fetching all artifacts
-// associated with each context.
-// TODO: Add namespace custom property to artifacts to skip context fetching step.
-func (s *ArtifactServer) ListArtifacts(ctx context.Context, r *apiv2beta1.ListArtifactRequest) (*apiv2beta1.ListArtifactResponse, error) {
-	if s.options.CollectMetrics {
-		listArtifactRequests.Inc()
+// CreateArtifact creates a new artifact.
+func (s *ArtifactServer) CreateArtifact(ctx context.Context, request *apiv2beta1.CreateArtifactRequest) (*apiv2beta1.Artifact, error) {
+	err := s.validateCreateArtifactRequest(request)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to create artifact due to validation error")
 	}
 
-	if r.Namespace == "" {
-		return nil, fmt.Errorf("Missing required namespace parameter.")
+	// Extract namespace for authorization
+	namespace := s.resourceManager.ReplaceNamespace(request.GetArtifact().GetNamespace())
+
+	// Bind TokenReview to the request run before namespace-scoped artifact auth so
+	// run-scoped projected runtime tokens can create artifacts for their run.
+	ctx = withRunScopedTokenAudience(ctx, request.GetRunId())
+
+	// Check authorization - artifacts are accessible if user can access runs in the namespace
+	resourceAttributes := &authorizationv1.ResourceAttributes{
+		Namespace: namespace,
+		Verb:      common.RbacResourceVerbCreate,
+	}
+	if err = s.canAccessArtifacts(ctx, "", resourceAttributes); err != nil {
+		return nil, util.Wrap(err, "Failed to authorize the request")
 	}
 
-	err := s.canAccessArtifact(ctx, r.Namespace, &authorizationv1.ResourceAttributes{Verb: common.RbacResourceVerbList})
+	task, err := s.validateArtifactOwnershipNoAuth(request.GetRunId(), request.GetTaskId(), namespace)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to validate artifact ownership")
+	}
+	if err := s.canAccessRun(ctx, task.RunUUID, &authorizationv1.ResourceAttributes{Verb: common.RbacResourceVerbUpdate}); err != nil {
+		return nil, util.Wrap(err, "Failed to authorize access to the task run")
+	}
+
+	modelArtifact, err := toModelArtifact(request.GetArtifact())
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to create artifact due to conversion error")
+	}
+
+	// Set the validated namespace
+	modelArtifact.Namespace = namespace
+
+	// Build the IOProducer with task name
+	producer := &apiv2beta1.IOProducer{
+		TaskName: task.Name,
+	}
+	outputType := util.OutputIOTypeForIteration(request.IterationIndex)
+	// Add iteration index if provided. Iteration outputs must use
+	// ITERATOR_OUTPUT so hydration groups them by iteration.
+	if request.IterationIndex != nil {
+		producer.Iteration = request.IterationIndex
+	}
+
+	artifactTask := &apiv2beta1.ArtifactTask{
+		TaskId: task.UUID,
+		RunId:  task.RunUUID,
+		// An artifact at creation is an output of the associated task.
+		Type:     outputType,
+		Producer: producer,
+		Key:      request.GetProducerKey(),
+	}
+
+	modelAT, err := toModelArtifactTask(artifactTask)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to convert artifact_task")
+	}
+
+	var artifact *model.Artifact
+	if request.GetReuseIfExists() {
+		artifact, _, err = s.resourceManager.FindOrCreateArtifactWithTask(modelArtifact, modelAT)
+	} else {
+		artifact, _, err = s.resourceManager.CreateArtifactWithTask(modelArtifact, modelAT)
+	}
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to create artifact and artifact-task")
+	}
+
+	return toAPIArtifact(artifact)
+}
+
+// CreateArtifactsBulk creates multiple artifacts in bulk.
+func (s *ArtifactServer) CreateArtifactsBulk(ctx context.Context, request *apiv2beta1.CreateArtifactsBulkRequest) (*apiv2beta1.CreateArtifactsBulkResponse, error) {
+	if request == nil || len(request.GetArtifacts()) == 0 {
+		return nil, util.NewInvalidInputError("CreateArtifactsBulkRequest must contain at least one artifact")
+	}
+
+	bulkNamespace := ""
+	for i, artifactReq := range request.GetArtifacts() {
+		err := s.validateCreateArtifactRequest(artifactReq)
+		if err != nil {
+			return nil, util.Wrapf(err, "Failed to create artifact %d due to validation error", i)
+		}
+
+		namespace := s.resourceManager.ReplaceNamespace(artifactReq.GetArtifact().GetNamespace())
+		if bulkNamespace == "" {
+			bulkNamespace = namespace
+			continue
+		}
+		if namespace != bulkNamespace {
+			return nil, util.NewInvalidInputError(
+				"CreateArtifactsBulkRequest must use a single namespace: expected %s, got %s",
+				bulkNamespace,
+				namespace,
+			)
+		}
+	}
+
+	resourceAttributes := &authorizationv1.ResourceAttributes{
+		Namespace: bulkNamespace,
+		Verb:      common.RbacResourceVerbCreate,
+	}
+	ctx = withRunScopedTokenAudience(ctx, singleRunIDFromCreateArtifactRequests(request.GetArtifacts()))
+	if err := s.canAccessArtifacts(ctx, "", resourceAttributes); err != nil {
+		return nil, util.Wrap(err, "Failed to authorize the request")
+	}
+
+	modelArtifacts := make([]*model.Artifact, 0, len(request.GetArtifacts()))
+	modelArtifactTasks := make([]*model.ArtifactTask, 0, len(request.GetArtifacts()))
+	authorizedRunIDs := make(map[string]struct{})
+
+	authorizeRunUpdate := func(runID string) error {
+		if runID == "" {
+			return nil
+		}
+		if _, ok := authorizedRunIDs[runID]; ok {
+			return nil
+		}
+		if err := s.canAccessRun(ctx, runID, &authorizationv1.ResourceAttributes{Verb: common.RbacResourceVerbUpdate}); err != nil {
+			return util.Wrap(err, "Failed to authorize access to the task run")
+		}
+		authorizedRunIDs[runID] = struct{}{}
+		return nil
+	}
+
+	// Validate and create each artifact
+	for i, artifactReq := range request.GetArtifacts() {
+		if artifactReq.GetReuseIfExists() {
+			return nil, util.NewInvalidInputError(
+				"CreateArtifactsBulk does not support reuse_if_exists; use CreateArtifact for find-or-create",
+			)
+		}
+
+		// Extract namespace for authorization
+		namespace := s.resourceManager.ReplaceNamespace(artifactReq.GetArtifact().GetNamespace())
+
+		task, err := s.validateArtifactOwnershipNoAuth(artifactReq.GetRunId(), artifactReq.GetTaskId(), namespace)
+		if err != nil {
+			return nil, util.Wrapf(err, "Failed to validate ownership for artifact %d", i)
+		}
+		if err := authorizeRunUpdate(task.RunUUID); err != nil {
+			return nil, util.Wrapf(err, "Failed to validate ownership for artifact %d", i)
+		}
+
+		modelArtifact, err := toModelArtifact(artifactReq.GetArtifact())
+		if err != nil {
+			return nil, util.Wrapf(err, "Failed to create artifact %d due to conversion error", i)
+		}
+
+		// Set the validated namespace
+		modelArtifact.Namespace = namespace
+
+		// Build the IOProducer with task name
+		producer := &apiv2beta1.IOProducer{
+			TaskName: task.Name,
+		}
+		outputType := util.OutputIOTypeForIteration(artifactReq.IterationIndex)
+		// Add iteration index if provided. Iteration outputs must use
+		// ITERATOR_OUTPUT so hydration groups them by iteration.
+		if artifactReq.IterationIndex != nil {
+			producer.Iteration = artifactReq.IterationIndex
+		}
+
+		artifactTask := &apiv2beta1.ArtifactTask{
+			TaskId: task.UUID,
+			RunId:  task.RunUUID,
+			// An artifact at creation is an output of the associated task.
+			Type:     outputType,
+			Producer: producer,
+			Key:      artifactReq.GetProducerKey(),
+		}
+
+		modelAT, err := toModelArtifactTask(artifactTask)
+		if err != nil {
+			return nil, util.Wrapf(err, "Failed to convert artifact_task for artifact %d", i)
+		}
+		modelArtifacts = append(modelArtifacts, modelArtifact)
+		modelArtifactTasks = append(modelArtifactTasks, modelAT)
+	}
+
+	createdArtifacts, _, err := s.resourceManager.CreateArtifactsWithTasks(modelArtifacts, modelArtifactTasks)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to create artifacts and artifact-tasks")
+	}
+
+	response := &apiv2beta1.CreateArtifactsBulkResponse{
+		Artifacts: make([]*apiv2beta1.Artifact, 0, len(createdArtifacts)),
+	}
+	for i, artifact := range createdArtifacts {
+		apiArtifact, err := toAPIArtifact(artifact)
+		if err != nil {
+			return nil, util.Wrapf(err, "Failed to convert artifact %d to API", i)
+		}
+		response.Artifacts = append(response.Artifacts, apiArtifact)
+	}
+
+	return response, nil
+}
+
+func (s *ArtifactServer) validateArtifactOwnershipNoAuth(runID, taskID, artifactNamespace string) (*model.Task, error) {
+	task, err := s.resourceManager.GetTask(taskID)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to get task")
+	}
+	if task.RunUUID != runID {
+		return nil, util.NewInvalidInputError("Task ID does not belong to this Run ID")
+	}
+	if !common.IsMultiUserMode() {
+		return task, nil
+	}
+
+	run, err := s.resourceManager.GetRun(task.RunUUID)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to get run")
+	}
+
+	taskNamespace := task.Namespace
+	if taskNamespace == "" {
+		taskNamespace = run.Namespace
+	}
+	if taskNamespace != artifactNamespace || run.Namespace != artifactNamespace {
+		return nil, util.NewInvalidInputError(
+			"artifact, task, and run must be in the same namespace: artifact=%s task=%s run=%s",
+			artifactNamespace,
+			taskNamespace,
+			run.Namespace,
+		)
+	}
+
+	return task, nil
+}
+
+// validateArtifactTaskNamespaceOwnership enforces same-namespace linkage for
+// artifact-task creates in multi-user mode. Empty namespaces (including legacy
+// upgrade rows) are rejected; the effective task namespace is resolved from the
+// owning run when the task row itself has an empty namespace.
+func (s *ArtifactServer) validateArtifactTaskNamespaceOwnership(task *model.Task, artifact *model.Artifact) (string, error) {
+	if !common.IsMultiUserMode() {
+		return task.Namespace, nil
+	}
+
+	run, err := s.resourceManager.GetRun(task.RunUUID)
+	if err != nil {
+		return "", util.Wrap(err, "Failed to get run for artifact-task namespace validation")
+	}
+
+	taskNamespace := task.Namespace
+	if taskNamespace == "" {
+		taskNamespace = run.Namespace
+	}
+	if artifact.Namespace == "" || taskNamespace == "" || run.Namespace == "" {
+		return "", util.NewInvalidInputError(
+			"artifact, task, and run must be in the same namespace: artifact=%s task=%s run=%s",
+			artifact.Namespace,
+			taskNamespace,
+			run.Namespace,
+		)
+	}
+	if taskNamespace != artifact.Namespace || run.Namespace != artifact.Namespace {
+		return "", util.NewInvalidInputError(
+			"artifact, task, and run must be in the same namespace: artifact=%s task=%s run=%s",
+			artifact.Namespace,
+			taskNamespace,
+			run.Namespace,
+		)
+	}
+	return taskNamespace, nil
+}
+
+// GetArtifact finds a specific artifact by ID.
+func (s *ArtifactServer) GetArtifact(ctx context.Context, request *apiv2beta1.GetArtifactRequest) (*apiv2beta1.Artifact, error) {
+	artifactID := request.GetArtifactId()
+	if artifactID == "" {
+		return nil, util.NewInvalidInputError("Artifact ID is required")
+	}
+
+	artifact, err := s.resourceManager.GetArtifact(artifactID)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to get artifact")
+	}
+
+	// Check authorization using the artifact's namespace
+	resourceAttributes := &authorizationv1.ResourceAttributes{
+		Namespace: artifact.Namespace,
+		Verb:      common.RbacResourceVerbGet,
+	}
+	if err = s.canAccessArtifacts(ctx, artifactID, resourceAttributes); err != nil {
+		return nil, util.Wrap(err, "Failed to authorize the request")
+	}
+
+	return toAPIArtifact(artifact)
+}
+
+// ListArtifacts finds all artifacts within the specified namespace.
+func (s *ArtifactServer) ListArtifacts(ctx context.Context, request *apiv2beta1.ListArtifactRequest) (*apiv2beta1.ListArtifactResponse, error) {
+	// Handle namespace and authorization
+	namespace := s.resourceManager.ReplaceNamespace(request.GetNamespace())
+
+	// Check authorization
+	resourceAttributes := &authorizationv1.ResourceAttributes{
+		Namespace: namespace,
+		Verb:      common.RbacResourceVerbList,
+	}
+	if err := s.canAccessArtifacts(ctx, "", resourceAttributes); err != nil {
+		return nil, util.Wrap(err, "Failed to authorize the request")
+	}
+
+	// Fast path for exact URI lookups (used by importer matching): avoid the
+	// paginated ListArtifacts + COUNT path for a single equality predicate.
+	if uri, ok := exactURIEqualsFilter(request.GetFilter()); ok {
+		artifacts, err := s.resourceManager.GetArtifactsByURI(namespace, uri)
+		if err != nil {
+			return nil, util.Wrap(err, "Get artifacts by URI failed")
+		}
+		return &apiv2beta1.ListArtifactResponse{
+			Artifacts: toAPIArtifacts(artifacts),
+			TotalSize: int32(len(artifacts)),
+		}, nil
+	}
+
+	opts, err := validatedListOptions(&model.Artifact{}, request.PageToken, int(request.PageSize), request.SortBy, request.Filter, "v2beta1")
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to create list options")
+	}
+
+	filterContext, err := validateFilterV2Beta1Artifact(namespace)
+	if err != nil {
+		return nil, util.Wrap(err, "Validating filter failed")
+	}
+
+	artifacts, totalSize, nextPageToken, err := s.resourceManager.ListArtifacts([]*model.FilterContext{filterContext}, opts)
+	if err != nil {
+		return nil, util.Wrap(err, "List artifacts failed")
+	}
+
+	return &apiv2beta1.ListArtifactResponse{
+		Artifacts:     toAPIArtifacts(artifacts),
+		TotalSize:     int32(totalSize),
+		NextPageToken: nextPageToken,
+	}, nil
+}
+
+// exactURIEqualsFilter returns the URI when filterSpec is solely an EQUALS
+// predicate on the uri field; otherwise ok is false.
+func exactURIEqualsFilter(filterSpec string) (string, bool) {
+	if filterSpec == "" {
+		return "", false
+	}
+	filter := &apiv2beta1.Filter{}
+	if err := protojson.Unmarshal([]byte(filterSpec), filter); err != nil {
+		return "", false
+	}
+	if len(filter.GetPredicates()) != 1 {
+		return "", false
+	}
+	predicate := filter.GetPredicates()[0]
+	if predicate.GetKey() != "uri" || predicate.GetOperation() != apiv2beta1.Predicate_EQUALS {
+		return "", false
+	}
+	uri := predicate.GetStringValue()
+	if uri == "" {
+		return "", false
+	}
+	return uri, true
+}
+
+// CreateArtifactTask creates an artifact-task relationship.
+func (s *ArtifactServer) CreateArtifactTask(ctx context.Context, request *apiv2beta1.CreateArtifactTaskRequest) (*apiv2beta1.ArtifactTask, error) {
+	if request == nil || request.GetArtifactTask() == nil {
+		return nil, util.NewInvalidInputError("CreateArtifactTaskRequest and artifact_task are required")
+	}
+	at := request.GetArtifactTask()
+	if at.GetArtifactId() == "" {
+		return nil, util.NewInvalidInputError("artifact_task.artifact_id is required")
+	}
+	if at.GetTaskId() == "" {
+		return nil, util.NewInvalidInputError("artifact_task.task_id is required")
+	}
+	if at.GetRunId() == "" {
+		return nil, util.NewInvalidInputError("artifact_task.run_id is required")
+	}
+	if at.GetType() == apiv2beta1.IOType_UNSPECIFIED {
+		return nil, util.NewInvalidInputError("artifact_task.type is required")
+	}
+	if at.GetProducer() == nil {
+		return nil, util.NewInvalidInputError("artifact_task.producer is required")
+	}
+	if at.GetKey() == "" {
+		return nil, util.NewInvalidInputError("artifact_task.key is required")
+	}
+
+	// Fetch task and artifact for validation and authorization
+	task, err := s.resourceManager.GetTask(at.GetTaskId())
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to fetch task for CreateArtifactTask")
+	}
+	if task.RunUUID != at.GetRunId() {
+		return nil, util.NewInvalidInputError("artifact_task.run_id must match the task's run_id")
+	}
+	artifact, err := s.resourceManager.GetArtifact(at.GetArtifactId())
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to fetch artifact for CreateArtifactTask")
+	}
+
+	taskNamespace, err := s.validateArtifactTaskNamespaceOwnership(task, artifact)
+	if err != nil {
+		return nil, err
+	}
+
+	// Authorize create in the task's namespace
+	resourceAttributes := &authorizationv1.ResourceAttributes{
+		Namespace: taskNamespace,
+		Verb:      common.RbacResourceVerbCreate,
+	}
+	ctx = withRunScopedTokenAudience(ctx, at.GetRunId())
+	if err = s.canAccessArtifacts(ctx, "", resourceAttributes); err != nil {
+		return nil, util.Wrap(err, "Failed to authorize the request")
+	}
+	if err = s.canAccessRun(ctx, at.GetRunId(), &authorizationv1.ResourceAttributes{Verb: common.RbacResourceVerbUpdate}); err != nil {
+		return nil, util.Wrap(err, "Failed to authorize the request")
+	}
+
+	modelAT, err := toModelArtifactTask(at)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to convert artifact_task")
+	}
+	modelAT.RunUUID = task.RunUUID
+
+	created, err := s.resourceManager.CreateArtifactTask(modelAT)
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to create artifact-task")
+	}
+	return toAPIArtifactTask(created), nil
+}
+
+// ListArtifactTasks lists artifact-task relationships.
+func (s *ArtifactServer) ListArtifactTasks(ctx context.Context, request *apiv2beta1.ListArtifactTasksRequest) (*apiv2beta1.ListArtifactTasksResponse, error) {
+	opts, err := validatedListOptions(&model.ArtifactTask{}, request.PageToken, int(request.PageSize), request.SortBy, request.Filter, "v2beta1")
+	if err != nil {
+		return nil, util.Wrap(err, "Failed to create list options")
+	}
+
+	// Reject empty-string filter elements before auth. Empty IDs would otherwise
+	// skip authorization and collapse into an unscoped store query.
+	if err = validateNonEmptyIDFilters(request.TaskIds, "task_ids"); err != nil {
+		return nil, err
+	}
+	if err = validateNonEmptyIDFilters(request.RunIds, "run_ids"); err != nil {
+		return nil, err
+	}
+	if err = validateNonEmptyIDFilters(request.ArtifactIds, "artifact_ids"); err != nil {
+		return nil, err
+	}
+
+	// Authorization check - we need to verify access to the runs/namespaces involved
+	// For now, require at least one filter to determine namespace context
+	if len(request.TaskIds) == 0 && len(request.RunIds) == 0 && len(request.ArtifactIds) == 0 {
+		return nil, util.NewInvalidInputError("At least one filter (task_ids, run_ids, or artifact_ids) is required")
+	}
+
+	// Check authorization based on provided filters
+	err = s.authorizeArtifactTaskAccess(ctx, request.TaskIds, request.RunIds, request.ArtifactIds)
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to authorize the request")
 	}
 
-	orderByField := r.OrderByField.String()
-
-	orderByAsc := true
-	if r.OrderBy == "desc" {
-		orderByAsc = false
-	}
-
-	maxResultSize := r.MaxResultSize
-	if maxResultSize < ArtifactSizeMinimum {
-		maxResultSize = DefaultListArtifactSize
-	} else if maxResultSize > ArtifactSizeMaximum {
-		maxResultSize = ArtifactSizeMaximum
-	}
-
-	contextFilterQuery := fmt.Sprintf("custom_properties.namespace.string_value = \"%s\"", r.Namespace)
-
-	nextPageToken := new(string)
-	var contextIds []string
-	for nextPageToken != nil {
-		var err1 error
-		var contexts []*ml_metadata.Context
-		contexts, nextPageToken, err1 = s.resourceManager.GetContexts(
-			ctx,
-			ContextSizeMaximum,
-			false,
-			"",
-			contextFilterQuery,
-			*nextPageToken)
-		if err1 != nil {
-			return nil, util.Wrap(err1, "Failed to list artifacts.")
-		}
-		for _, c := range contexts {
-			contextIds = append(contextIds, strconv.FormatInt(*c.Id, 10))
-		}
-	}
-
-	if len(contextIds) == 0 {
-		return nil, fmt.Errorf("Failed to find any artifacts within the specified namespace.")
-	}
-
-	artifactFilterQuery := fmt.Sprintf("contexts_a.id in (%s)", strings.Join(contextIds, ","))
-
-	artifacts, nextPageToken, err := s.resourceManager.GetArtifacts(
-		ctx,
-		maxResultSize,
-		orderByAsc,
-		orderByField,
-		artifactFilterQuery,
-		r.NextPageToken)
-
+	filterContexts, err := validateFilterV2Beta1ArtifactTask(request.TaskIds, request.RunIds, request.ArtifactIds)
 	if err != nil {
-		return nil, util.Wrap(err, "Failed to list artifacts.")
+		return nil, util.Wrap(err, "Validating filter failed")
 	}
 
-	var artifactsResp []*apiv2beta1.Artifact
-	for _, artifact := range artifacts {
-		bucketConfig, namespace, err1 := s.resourceManager.GetArtifactSessionInfo(ctx, artifact)
-		if err1 != nil || bucketConfig == nil {
-			return nil, util.NewInternalServerError(fmt.Errorf("failed to retrieve session info error: %v", err1), "")
-		}
-		artifactResp, err1 := s.generateResponseArtifact(ctx, artifact, bucketConfig, namespace, apiv2beta1.GetArtifactRequest_ARTIFACT_VIEW_UNSPECIFIED)
-		if err1 != nil {
-			return nil, util.NewInternalServerError(fmt.Errorf("encountered error parsing artifact: %v", err1), "")
-		}
-		artifactsResp = append(artifactsResp, artifactResp)
+	// Convert IOType from proto to model if provided
+	var ioType *model.IOType
+	if request.Type != apiv2beta1.IOType_UNSPECIFIED {
+		modelIOType := model.IOType(request.Type)
+		ioType = &modelIOType
 	}
 
-	resp := &apiv2beta1.ListArtifactResponse{
-		Artifacts: artifactsResp,
+	artifactTasks, totalSize, nextPageToken, err := s.resourceManager.ListArtifactTasks(filterContexts, ioType, opts)
+	if err != nil {
+		return nil, util.Wrap(err, "List artifact tasks failed")
 	}
 
-	if nextPageToken != nil {
-		resp.NextPageToken = *nextPageToken
-	}
-	return resp, nil
+	return &apiv2beta1.ListArtifactTasksResponse{
+		ArtifactTasks: toAPIArtifactTasks(artifactTasks),
+		TotalSize:     int32(totalSize),
+		NextPageToken: nextPageToken,
+	}, nil
 }
 
-func (s *ArtifactServer) GetArtifact(ctx context.Context, r *apiv2beta1.GetArtifactRequest) (*apiv2beta1.Artifact, error) {
-	if s.options.CollectMetrics {
-		getArtifactRequests.Inc()
+// CreateArtifactTasksBulk creates multiple artifact-task relationships in bulk.
+func (s *ArtifactServer) CreateArtifactTasksBulk(ctx context.Context, request *apiv2beta1.CreateArtifactTasksBulkRequest) (*apiv2beta1.CreateArtifactTasksBulkResponse, error) {
+	if request == nil || len(request.GetArtifactTasks()) == 0 {
+		return nil, util.NewInvalidInputError("CreateArtifactTasksBulkRequest must contain at least one artifact task")
 	}
 
-	artifactId, err := strconv.ParseInt(r.ArtifactId, 10, 64)
-	if err != nil {
-		return nil, util.Wrap(err, fmt.Sprintf("failed to parse artifact parameter in request: %v", err))
-	}
-	artifacts, err := s.resourceManager.GetArtifactById(ctx, []int64{artifactId})
+	// Validate all artifact tasks and check authorization
+	modelArtifactTasks := make([]*model.ArtifactTask, 0, len(request.GetArtifactTasks()))
+	bulkRunID := ""
+	bulkNamespace := ""
+	for _, apiAT := range request.GetArtifactTasks() {
+		if apiAT.GetArtifactId() == "" {
+			return nil, util.NewInvalidInputError("artifact_task.artifact_id is required")
+		}
+		if apiAT.GetTaskId() == "" {
+			return nil, util.NewInvalidInputError("artifact_task.task_id is required")
+		}
+		if apiAT.GetRunId() == "" {
+			return nil, util.NewInvalidInputError("artifact_task.run_id is required")
+		}
+		if apiAT.GetType() == apiv2beta1.IOType_UNSPECIFIED {
+			return nil, util.NewInvalidInputError("artifact_task.type is required")
+		}
+		if apiAT.GetProducer() == nil {
+			return nil, util.NewInvalidInputError("artifact_task.producer is required")
+		}
+		if apiAT.GetKey() == "" {
+			return nil, util.NewInvalidInputError("artifact_task.key is required")
+		}
 
-	// note artifacts length will never be greater than one
-	// since artifact ID uniquely identifies one artifact but we add a check for completeness
-	if err != nil || artifacts == nil || len(artifacts) > 1 {
-		return nil, util.NewResourceNotFoundError(fmt.Sprintf("failed to find artifact with id %d: %v", artifactId, err), r.ArtifactId)
+		// Fetch task and artifact for validation and authorization
+		task, err := s.resourceManager.GetTask(apiAT.GetTaskId())
+		if err != nil {
+			return nil, util.Wrap(err, "Failed to fetch task for CreateArtifactTasksBulk")
+		}
+		if task.RunUUID != apiAT.GetRunId() {
+			return nil, util.NewInvalidInputError("artifact_task.run_id must match the task's run_id")
+		}
+		artifact, err := s.resourceManager.GetArtifact(apiAT.GetArtifactId())
+		if err != nil {
+			return nil, util.Wrap(err, "Failed to fetch artifact for CreateArtifactTasksBulk")
+		}
+		if task.RunUUID != apiAT.GetRunId() {
+			return nil, util.NewInvalidInputError("artifact_task.run_id must match the task's run_id")
+		}
+		if bulkRunID == "" {
+			bulkRunID = task.RunUUID
+		} else if task.RunUUID != bulkRunID {
+			return nil, util.NewInvalidInputError("CreateArtifactTasksBulkRequest must use a single run_id")
+		}
+
+		taskNamespace, err := s.validateArtifactTaskNamespaceOwnership(task, artifact)
+		if err != nil {
+			return nil, err
+		}
+		if bulkNamespace == "" {
+			bulkNamespace = taskNamespace
+		} else if taskNamespace != bulkNamespace {
+			return nil, util.NewInvalidInputError("CreateArtifactTasksBulkRequest must use a single namespace")
+		}
+
+		modelAT, err := toModelArtifactTask(apiAT)
+		if err != nil {
+			return nil, util.Wrap(err, "Failed to convert artifact_task")
+		}
+		modelAT.RunUUID = task.RunUUID
+		modelArtifactTasks = append(modelArtifactTasks, modelAT)
 	}
 
-	artifact := artifacts[0]
-	sessionInfo, namespace, err := s.resourceManager.GetArtifactSessionInfo(ctx, artifact)
-	if err != nil || sessionInfo == nil {
-		return nil, util.NewInternalServerError(fmt.Errorf("failed to retrieve session info error: %v", err), "")
+	resourceAttributes := &authorizationv1.ResourceAttributes{
+		Namespace: bulkNamespace,
+		Verb:      common.RbacResourceVerbCreate,
 	}
-
-	err = s.canAccessArtifact(ctx, namespace, &authorizationv1.ResourceAttributes{Verb: common.RbacResourceVerbGet})
-	if err != nil {
+	ctx = withRunScopedTokenAudience(ctx, bulkRunID)
+	if err := s.canAccessArtifacts(ctx, "", resourceAttributes); err != nil {
+		return nil, util.Wrap(err, "Failed to authorize the request")
+	}
+	if err := s.canAccessRun(ctx, bulkRunID, &authorizationv1.ResourceAttributes{Verb: common.RbacResourceVerbUpdate}); err != nil {
 		return nil, util.Wrap(err, "Failed to authorize the request")
 	}
 
-	artifactResp, err := s.generateResponseArtifact(ctx, artifact, sessionInfo, namespace, r.GetView())
+	// Create all artifact tasks in bulk
+	createdArtifactTasks, err := s.resourceManager.CreateArtifactTasks(modelArtifactTasks)
 	if err != nil {
-		return nil, util.NewInternalServerError(fmt.Errorf("encountered error parsing artifact: %v", err), "")
+		return nil, util.Wrap(err, "Failed to create artifact-tasks in bulk")
 	}
 
-	return artifactResp, nil
+	return &apiv2beta1.CreateArtifactTasksBulkResponse{
+		ArtifactTasks: toAPIArtifactTasks(createdArtifactTasks),
+	}, nil
 }
 
-func NewArtifactServer(resourceManager *resource.ResourceManager, options *ArtifactServerOptions) *ArtifactServer {
-	return &ArtifactServer{resourceManager: resourceManager, options: options}
+// Authorization helper functions
+
+// withRunScopedTokenAudience attaches the requested run ID for TokenReview when
+// a request run ID is known. This lets namespace-scoped artifact authorization
+// succeed for projected runtime tokens before canAccessRun runs.
+func withRunScopedTokenAudience(ctx context.Context, runID string) context.Context {
+	return auth.WithRequestedRunID(ctx, runID)
 }
 
-// generateResponseArtifact will return artifact metadata when given an mlmd artifact
-// with the artifact's associated namespace and bucketconfig. When includeShareUrl is true
-// the metadata will include a signed URL for the associated artifact.
-func (s *ArtifactServer) generateResponseArtifact(
-	ctx context.Context,
-	artifact *ml_metadata.Artifact,
-	bucketConfig *objectstore.Config,
-	namespace string,
-	view apiv2beta1.GetArtifactRequest_ArtifactView,
-) (*apiv2beta1.Artifact, error) {
-	params, err := objectstore.StructuredS3Params(bucketConfig.SessionInfo.Params)
-	if err != nil {
-		return nil, err
+func singleRunIDFromCreateArtifactRequests(requests []*apiv2beta1.CreateArtifactRequest) string {
+	if len(requests) == 0 {
+		return ""
 	}
-
-	var secret *corev1.Secret
-	if !params.FromEnv {
-		secret, err = s.resourceManager.GetSecret(ctx, namespace, params.SecretName)
-		if err != nil {
-			return nil, err
+	runID := requests[0].GetRunId()
+	for _, request := range requests[1:] {
+		if request.GetRunId() != runID {
+			return ""
 		}
 	}
-	key, err := objectstore.ArtifactKeyFromURI(*artifact.Uri)
-	if err != nil {
-		return nil, err
-	}
-	size, err := s.resourceManager.GetObjectSize(ctx, bucketConfig, secret, *artifact.Uri)
-	if err != nil {
-		return nil, err
-	}
-	artifactResp := &apiv2beta1.Artifact{
-		ArtifactId:      strconv.FormatInt(*artifact.Id, 10),
-		ArtifactType:    *artifact.Type,
-		ArtifactSize:    size,
-		StorageProvider: strings.TrimSuffix(bucketConfig.Scheme, "://"),
-		StoragePath:     key,
-		Uri:             *artifact.Uri,
-		Namespace:       namespace,
-		CreatedAt:       timestamppb.New(time.UnixMilli(*artifact.CreateTimeSinceEpoch)),
-		LastUpdatedAt:   timestamppb.New(time.UnixMilli(*artifact.LastUpdateTimeSinceEpoch)),
-	}
-
-	expiry := time.Second * time.Duration(common.GetSignedURLExpiryTimeSeconds())
-	switch view {
-	case apiv2beta1.GetArtifactRequest_DOWNLOAD:
-		queryParams := make(url.Values)
-		queryParams.Set("response-content-disposition", "attachment")
-		shareUrl, err := s.resourceManager.GetSignedUrl(ctx, bucketConfig, secret, expiry, *artifact.Uri, queryParams)
-		if err != nil {
-			return nil, err
-		}
-		artifactResp.DownloadUrl = shareUrl
-
-	case apiv2beta1.GetArtifactRequest_RENDER:
-		queryParams := make(url.Values)
-		queryParams.Set("response-content-disposition", "inline")
-		renderUrl, err := s.resourceManager.GetSignedUrl(ctx, bucketConfig, secret, expiry, *artifact.Uri, queryParams)
-		if err != nil {
-			return nil, err
-		}
-		artifactResp.RenderUrl = renderUrl
-	}
-
-	return artifactResp, nil
+	return runID
 }
 
-// Checks if a user can access an Artifact.
-func (s *ArtifactServer) canAccessArtifact(ctx context.Context, namespace string, resourceAttributes *authorizationv1.ResourceAttributes) error {
+// canAccessRun checks if the user can access runs in the given namespace
+// Following the same pattern as BaseRunServer.canAccessRun
+func (s *ArtifactServer) canAccessRun(ctx context.Context, runID string, resourceAttributes *authorizationv1.ResourceAttributes) error {
 	if !common.IsMultiUserMode() {
 		// Skip authz if not multi-user mode.
 		return nil
 	}
-	resourceAttributes.Namespace = namespace
+
+	if runID != "" {
+		run, err := s.resourceManager.GetRun(runID)
+		if err != nil {
+			return util.Wrapf(err, "Failed to authorize with the run ID %v", runID)
+		}
+		if s.resourceManager.IsEmptyNamespace(run.Namespace) {
+			experiment, err := s.resourceManager.GetExperiment(run.ExperimentId)
+			if err != nil {
+				return util.NewInvalidInputError("run %v has an empty namespace and the parent experiment %v could not be fetched: %s", runID, run.ExperimentId, err.Error())
+			}
+			resourceAttributes.Namespace = experiment.Namespace
+		} else {
+			resourceAttributes.Namespace = run.Namespace
+		}
+		if resourceAttributes.Name == "" {
+			resourceAttributes.Name = run.K8SName
+		}
+		ctx = auth.WithRequestedRunID(ctx, runID)
+	}
+
+	if s.resourceManager.IsEmptyNamespace(resourceAttributes.Namespace) {
+		return util.NewInvalidInputError("A resource cannot have an empty namespace in multi-user mode")
+	}
+
+	resourceAttributes.Group = common.RbacPipelinesGroup
+	resourceAttributes.Version = common.RbacPipelinesVersion
+	resourceAttributes.Resource = common.RbacResourceTypeRuns
+	err := s.resourceManager.IsAuthorized(ctx, resourceAttributes)
+	if err != nil {
+		return util.Wrapf(err, "Failed to access resource. Check if you have access to namespace %s", resourceAttributes.Namespace)
+	}
+	if err := auth.EnforceAuthenticatedRunScope(ctx, runID); err != nil {
+		return util.Wrapf(err, "Failed to access run %s", runID)
+	}
+	return nil
+}
+
+func (s *ArtifactServer) canAccessArtifacts(ctx context.Context, artifactID string, resourceAttributes *authorizationv1.ResourceAttributes) error {
+	if !common.IsMultiUserMode() {
+		// Skip authz if not multi-user mode.
+		return nil
+	}
+
+	if artifactID != "" {
+		artifact, err := s.resourceManager.GetArtifact(artifactID)
+		if err != nil {
+			return util.Wrapf(err, "Failed to authorize with the artifact ID %v", artifactID)
+		}
+		if s.resourceManager.IsEmptyNamespace(artifact.Namespace) {
+			return util.NewInvalidInputError("artifact %v has an empty namespace", artifactID)
+		}
+		resourceAttributes.Namespace = artifact.Namespace
+	}
+
+	if s.resourceManager.IsEmptyNamespace(resourceAttributes.Namespace) {
+		return util.NewInvalidInputError("A resource cannot have an empty namespace in multi-user mode")
+	}
+
 	resourceAttributes.Group = common.RbacPipelinesGroup
 	resourceAttributes.Version = common.RbacPipelinesVersion
 	resourceAttributes.Resource = common.RbacResourceTypeArtifacts
 	err := s.resourceManager.IsAuthorized(ctx, resourceAttributes)
 	if err != nil {
-		return util.Wrapf(err, "Failed to access artifact. Check if you have access to namespace %s", resourceAttributes.Namespace)
+		return util.Wrapf(err, "Failed to access resource. Check if you have access to namespace %s", resourceAttributes.Namespace)
+	}
+	if runID, ok := auth.RequestedRunIDFromContext(ctx); ok {
+		if err := auth.EnforceAuthenticatedRunScope(ctx, runID); err != nil {
+			return util.Wrapf(err, "Failed to access artifacts for run %s", runID)
+		}
+	}
+	return nil
+}
+
+// authorizeArtifactTaskAccess authorizes access to artifact-task relationships
+// TODO(HumairAK): Make this more efficient by doing bulk calls to the database,
+// and aggregating namespaces down to unique namespace calls
+func (s *ArtifactServer) authorizeArtifactTaskAccess(ctx context.Context, taskIDs, runIDs, artifactIDs []string) error {
+	authorizedRunIDs := make(map[string]struct{})
+	authorizedNamespaces := make(map[string]struct{})
+
+	authorizeRunID := func(runID string) error {
+		if runID == "" {
+			return nil
+		}
+		if _, ok := authorizedRunIDs[runID]; ok {
+			return nil
+		}
+		resourceAttributes := &authorizationv1.ResourceAttributes{
+			Verb: common.RbacResourceVerbGet,
+		}
+		if err := s.canAccessRun(ctx, runID, resourceAttributes); err != nil {
+			return err
+		}
+		authorizedRunIDs[runID] = struct{}{}
+		return nil
+	}
+
+	authorizeNamespace := func(namespace string) error {
+		if namespace == "" {
+			return nil
+		}
+		if _, ok := authorizedNamespaces[namespace]; ok {
+			return nil
+		}
+		resourceAttributes := &authorizationv1.ResourceAttributes{
+			Namespace: namespace,
+			Verb:      common.RbacResourceVerbGet,
+		}
+		if err := s.canAccessRun(ctx, "", resourceAttributes); err != nil {
+			return err
+		}
+		authorizedNamespaces[namespace] = struct{}{}
+		return nil
+	}
+
+	// Check authorization for run IDs (direct access)
+	for _, runID := range runIDs {
+		if err := authorizeRunID(runID); err != nil {
+			return err
+		}
+	}
+
+	// Check authorization for task IDs (get namespace from task)
+	for _, taskID := range taskIDs {
+		task, err := s.resourceManager.GetTask(taskID)
+		if err != nil {
+			return util.Wrap(err, "Failed to get task for authorization")
+		}
+		if err = authorizeRunID(task.RunUUID); err != nil {
+			return err
+		}
+	}
+
+	// Check authorization for artifact IDs (get namespace from artifact)
+	for _, artifactID := range artifactIDs {
+		artifact, err := s.resourceManager.GetArtifact(artifactID)
+		if err != nil {
+			return util.Wrap(err, "Failed to get artifact for authorization")
+		}
+		if err = authorizeNamespace(artifact.Namespace); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *ArtifactServer) validateCreateArtifactRequest(request *apiv2beta1.CreateArtifactRequest) error {
+	if request == nil {
+		return util.NewInvalidInputError("CreateArtifactRequest is nil")
+	}
+	artifact := request.GetArtifact()
+	if artifact == nil {
+		return util.NewInvalidInputError("Artifact is required")
+	}
+	if artifact.GetArtifactId() != "" {
+		return util.NewInvalidInputError("Artifact ID should not be set on create")
+	}
+	if artifact.GetNamespace() == "" {
+		return util.NewInvalidInputError("Artifact namespace is required")
+	}
+	if request.GetArtifact().GetType() == apiv2beta1.Artifact_TYPE_UNSPECIFIED {
+		return util.NewInvalidInputError("Artifact type is required")
+	}
+	if request.GetArtifact().GetName() == "" {
+		return util.NewInvalidInputError("Artifact name is required")
+	}
+	if request.GetRunId() == "" {
+		return util.NewInvalidInputError("Run ID is required")
+	}
+	if request.GetTaskId() == "" {
+		return util.NewInvalidInputError("Task ID is required")
+	}
+	if request.GetProducerKey() == "" {
+		return util.NewInvalidInputError("Producer key is required")
+	}
+	// Metrics validation
+	if request.GetArtifact().GetType() == apiv2beta1.Artifact_Metric &&
+		request.GetArtifact().NumberValue == nil {
+		return util.NewInvalidInputError("number_value is required for a Metric artifact")
+	}
+	if (request.GetArtifact().GetType() == apiv2beta1.Artifact_ClassificationMetric ||
+		request.GetArtifact().GetType() == apiv2beta1.Artifact_SlicedClassificationMetric) &&
+		request.GetArtifact().GetMetadata() == nil {
+		return util.NewInvalidInputError("No metric or metadata was found for %s artifact", request.GetArtifact().GetType())
+	}
+	if request.GetProducerKey() == "" {
+		return util.NewInvalidInputError("Producer key is required")
 	}
 	return nil
 }
