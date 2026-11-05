@@ -43,7 +43,7 @@ const (
 
 // ################## UPGRADE TEST PREPARATION ##################
 
-var _ = Describe("Upgrade Test Preparation >", Label(constants.UpgradePreparation, constants.FullRegression), func() {
+var _ = Describe("Upgrade Test Preparation >", Label(constants.UpgradePreparation, constants.Tier1, constants.FullRegression), func() {
 	Context("Prepare test data >", func() {
 
 		It("Upload pipelines and create experiments", func() {
@@ -66,7 +66,7 @@ var _ = Describe("Upgrade Test Preparation >", Label(constants.UpgradePreparatio
 
 // ################## UPGRADE TEST VERIFICATION ##################
 
-var _ = Describe("Upgrade Test Verification >", Label(constants.UpgradeVerification, constants.FullRegression), func() {
+var _ = Describe("Upgrade Test Verification >", Label(constants.UpgradeVerification, constants.Tier1, constants.FullRegression), func() {
 	Context("Verify resources after upgrade >", func() {
 		It("Verify that Pipelines & experiments should persist correctly", func() {
 			verifyExperiments()

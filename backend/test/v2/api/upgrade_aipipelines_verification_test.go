@@ -35,7 +35,7 @@ const (
 	aipipelinesUpgradeTimeout      = 8 * time.Minute
 )
 
-var _ = Describe("Upgrade Test Verification >", Label(constants.UpgradeVerification, constants.FullRegression), func() {
+var _ = Describe("Upgrade Test Verification >", Label(constants.UpgradeVerification, constants.Tier1, constants.FullRegression), func() {
 	Context("Verify modular AIPipelines after platform upgrade >", func() {
 		It("verifies the default AIPipelines module is reconciled and reports the upgraded platform release", func() {
 			ctx := context.Background()

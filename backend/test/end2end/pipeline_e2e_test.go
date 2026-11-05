@@ -41,6 +41,88 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// e2eSmokePipelinePaths are Smoke IRs relative to valid/. Folder sweeps skip
+// these same paths so Smoke stays Smoke-only (single source of truth).
+var e2eSmokePipelinePaths = []string{
+	"essential/iris_pipeline_compiled.yaml",
+	"essential/component_with_pip_index_urls.yaml",
+	"critical/flip_coin.yaml",
+	"critical/pipeline_with_artifact_upload_download.yaml",
+	"critical/parallel_for_after_dependency.yaml",
+}
+
+// e2eTier1PipelinePaths are former Sanity IRs relative to valid/ that are not
+// already covered by Smoke or the Essential Tier1 sweep. Folder sweeps skip
+// these same paths so they stay Tier1-only (single source of truth).
+var e2eTier1PipelinePaths = []string{
+	"parallel_and_nested/pipeline_in_pipeline.yaml",
+	"critical/pipeline_with_secret_as_env.yaml",
+	"critical/pipeline_with_input_status_state.yaml",
+	"critical/notebook_component_simple.yaml",
+}
+
+// e2eDisconnectedPipelinePaths are Smoke-tier IRs for air-gapped product lanes.
+// Each entry must appear in e2eSmokePipelinePaths (see unit tests).
+var e2eDisconnectedPipelinePaths = []string{
+	"essential/component_with_pip_index_urls.yaml",
+	"critical/flip_coin.yaml",
+}
+
+var (
+	e2eSmokePipelinePathSet = e2ePipelinePathSet(e2eSmokePipelinePaths)
+	e2eTier1PipelinePathSet = e2ePipelinePathSet(e2eTier1PipelinePaths)
+	e2eMultiUserCriticalPathSet = e2eCriticalSubsetPathSet(e2eSmokePipelinePaths, e2eTier1PipelinePaths)
+)
+
+func e2ePipelinePathSet(paths []string) map[string]struct{} {
+	pathSet := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		pathSet[filepath.Clean(path)] = struct{}{}
+	}
+	return pathSet
+}
+
+func e2eCriticalSubsetPathSet(pathGroups ...[]string) map[string]struct{} {
+	pathSet := make(map[string]struct{})
+	for _, group := range pathGroups {
+		for _, path := range group {
+			cleaned := filepath.Clean(path)
+			if strings.HasPrefix(cleaned, "critical/") {
+				pathSet[cleaned] = struct{}{}
+			}
+		}
+	}
+	return pathSet
+}
+
+// e2eRelativePathUnderValid returns pipelineFile under pipelineDir as a path
+// relative to valid/ (for example essential/iris_pipeline_compiled.yaml).
+func e2eRelativePathUnderValid(pipelineDir, pipelineFile string) string {
+	cleanedDir := filepath.Clean(pipelineDir)
+	relativeDir := cleanedDir
+	if cleanedDir == "valid" {
+		relativeDir = ""
+	} else if strings.HasPrefix(cleanedDir, "valid"+string(filepath.Separator)) {
+		relativeDir = cleanedDir[len("valid")+1:]
+	}
+	if relativeDir == "" {
+		return filepath.Clean(pipelineFile)
+	}
+	return filepath.Clean(filepath.Join(relativeDir, pipelineFile))
+}
+
+func e2ePathInSet(pathSet map[string]struct{}, pipelineDir, pipelineFile string) bool {
+	_, found := pathSet[e2eRelativePathUnderValid(pipelineDir, pipelineFile)]
+	return found
+}
+
+// e2eRelativePathInMultiUserCriticalSet reports IRs that product multi-user jobs
+// still select with --label-filter=E2ECritical alongside Smoke or Tier1 gates.
+func e2eRelativePathInMultiUserCriticalSet(relativePath string) bool {
+	_, found := e2eMultiUserCriticalPathSet[filepath.Clean(relativePath)]
+	return found
+}
+
 var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func() {
 	var testContext *apitests.TestContext
 
@@ -108,20 +190,26 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 
 	// ################## TESTS ##################
 
-	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(E2eEssential), func() {
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(E2eEssential, Tier1), func() {
 		var pipelineDir = "valid/essential"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
+			if e2ePathInSet(e2eSmokePipelinePathSet, pipelineDir, pipelineFile) {
+				continue
+			}
 			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})
 		}
 	})
 
-	Context("Upload a nested or a parallel pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(E2eParallelNested), func() {
+	Context("Upload a nested or a parallel pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(E2eParallelNested, Tier2), func() {
 		var pipelineDir = "valid/parallel_and_nested"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
+			if e2ePathInSet(e2eTier1PipelinePathSet, pipelineDir, pipelineFile) {
+				continue
+			}
 			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})
@@ -129,10 +217,16 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 	})
 
 	// Few of the following pipelines randomly fail in Multi User Mode during CI run - which is why a FlakeAttempt is added, but we need to investigate, create ticket and fix it in the future
-	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label("Sample", E2eCritical), func() {
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label("Sample", E2eCritical, Tier2), func() {
 		var pipelineDir = "valid/critical"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
+			if e2ePathInSet(e2eSmokePipelinePathSet, pipelineDir, pipelineFile) {
+				continue
+			}
+			if e2ePathInSet(e2eTier1PipelinePathSet, pipelineDir, pipelineFile) {
+				continue
+			}
 			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})
@@ -141,51 +235,48 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 
 	Context("Upload a pipeline file, run it and verify that pipeline run succeeds Smoke >", FlakeAttempts(2), Label(Smoke), func() {
 		var pipelineDir = "valid"
-		pipelineFiles := []string{
-			"essential/iris_pipeline_compiled.yaml",
-			"essential/component_with_pip_index_urls.yaml",
-			"critical/flip_coin.yaml",
-			"critical/pipeline_with_artifact_upload_download.yaml",
-			"critical/parallel_for_after_dependency.yaml",
-		}
-		for _, pipelineFile := range pipelineFiles {
-			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
+		for _, pipelineFile := range e2eSmokePipelinePaths {
+			pipelineFile := pipelineFile
+			if e2eRelativePathInMultiUserCriticalSet(pipelineFile) {
+				It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), Label(Smoke, E2eCritical), func() {
+					validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
+				})
+				continue
+			}
+			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), Label(Smoke), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})
 		}
 	})
 
-	Context("Upload a pipeline file, run it and verify that pipeline run succeeds on a Disconnected cluster>", FlakeAttempts(2), Label(Disconnected), func() {
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds on a Disconnected cluster>", FlakeAttempts(2), Label(Disconnected, Smoke), func() {
 		var pipelineDir = "valid"
-		pipelineFiles := []string{
-			"essential/component_with_pip_index_urls.yaml",
-			"critical/flip_coin.yaml",
-		}
-		for _, pipelineFile := range pipelineFiles {
+		for _, pipelineFile := range e2eDisconnectedPipelinePaths {
 			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})
 		}
 	})
 
-	Context("Upload a pipeline file, run it and verify that pipeline run succeeds >", FlakeAttempts(2), Label(Sanity), func() {
+	// Former Sanity IRs that are not already covered by Smoke or the Essential
+	// Tier1 sweep. component_with_pip_index_urls stays Smoke-only.
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds Tier1 >", FlakeAttempts(2), Label(Tier1), func() {
 		var pipelineDir = "valid"
-		pipelineFiles := []string{
-			"essential/component_with_pip_index_urls.yaml",
-			"essential/lightweight_python_functions_pipeline.yaml",
-			"parallel_and_nested/pipeline_in_pipeline.yaml",
-			"critical/pipeline_with_secret_as_env.yaml",
-			"critical/pipeline_with_input_status_state.yaml",
-			"critical/notebook_component_simple.yaml",
-		}
-		for _, pipelineFile := range pipelineFiles {
-			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), func() {
+		for _, pipelineFile := range e2eTier1PipelinePaths {
+			pipelineFile := pipelineFile
+			if e2eRelativePathInMultiUserCriticalSet(pipelineFile) {
+				It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), Label(Tier1, E2eCritical), func() {
+					validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
+				})
+				continue
+			}
+			It(fmt.Sprintf("Upload %s pipeline", pipelineFile), FlakeAttempts(2), Label(Tier1), func() {
 				validatePipelineRunSuccess(pipelineFile, pipelineDir, testContext)
 			})
 		}
 	})
 
-	Context("Upload a pipeline file, run it and verify that pipeline run succeeds Smoke >", FlakeAttempts(1), Label(Integration), func() {
+	Context("Upload a pipeline file, run it and verify that pipeline run succeeds Smoke >", FlakeAttempts(1), Label(Integration, Tier1), func() {
 		var pipelineDir = "valid/integration"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
@@ -195,7 +286,7 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		}
 	})
 
-	Context("Create a pipeline run with HTTP proxy >", Label(E2eProxy), func() {
+	Context("Create a pipeline run with HTTP proxy >", Label(E2eProxy, Tier2), func() {
 		var pipelineDir = "valid"
 		pipelineFile := "env-var.yaml"
 		It(fmt.Sprintf("Create a pipeline run with http proxy, using specs: %s", pipelineFile), func() {
@@ -225,7 +316,7 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 		})
 	})
 
-	Context("Upload a pipeline file, run it and verify that pipeline run fails >", Label(E2eFailed), func() {
+	Context("Upload a pipeline file, run it and verify that pipeline run fails >", Label(E2eFailed, Tier3), func() {
 		var pipelineDir = "valid/failing"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
@@ -251,7 +342,10 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 
 	// E2eGpu-labeled specs run even when the package has no --label-filter; see
 	// AGENTS.md (Local testing → Backend Ginkgo test suites → End-to-end tests).
-	Context("GPU component test >", Label(E2eGpu), func() {
+	// Also tagged Tier2 for product gates; CPU/Kind Tier2 lanes should filter
+	// with `Tier2 && !gpu && !dra-check` so these fixtures are not scheduled
+	// without GPUs.
+	Context("GPU component test >", Label(E2eGpu, Tier2), func() {
 		var pipelineDir = "valid/gpu"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		for _, pipelineFile := range pipelineFiles {
@@ -265,8 +359,9 @@ var _ = Describe("Upload and Verify Pipeline Run >", Label(FullRegression), func
 	})
 
 	// Filter with --label-filter=dra-check. Requires a cluster with a DRA
-	// driver installed (e.g. Kind + dra-example-driver).
-	Context("DRA scheduling check >", Label(E2eDraCheck), func() {
+	// driver installed (e.g. Kind + dra-example-driver). Also tagged Tier2;
+	// CPU/Kind Tier2 lanes should use `Tier2 && !gpu && !dra-check`.
+	Context("DRA scheduling check >", Label(E2eDraCheck, Tier2), func() {
 		var pipelineDir = "valid/dra"
 		pipelineFiles := testutil.GetListOfFilesInADir(filepath.Join(testutil.GetPipelineFilesDir(), pipelineDir))
 		Expect(pipelineFiles).NotTo(BeEmpty(), "no pipeline files found in %s", pipelineDir)
