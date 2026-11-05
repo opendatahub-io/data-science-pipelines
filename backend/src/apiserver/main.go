@@ -130,7 +130,7 @@ func parseTLSCipherSuites(commaSeparated string) ([]uint16, error) {
 	}
 	var ids []uint16
 	var unknown []string
-	for _, name := range strings.Split(commaSeparated, ",") {
+	for name := range strings.SplitSeq(commaSeparated, ",") {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
@@ -166,6 +166,22 @@ func buildTLSConfig() (*tls.Config, error) {
 		suites, err := parseTLSCipherSuites(trimmed)
 		if err != nil {
 			return nil, fmt.Errorf("invalid --tlsCipherSuites: %w", err)
+		}
+		// This configuration is shared by the HTTP and webhook servers, which
+		// serve HTTP/2 (h2 is in NextProtos) via net/http ServeTLS. Go 1.26
+		// fails HTTP/2 setup during ServeTLS when a non-empty TLS 1.2 cipher
+		// list has no ECDHE AES-128-GCM suite; reject it here with a clear
+		// error instead of failing at listener startup.
+		hasHTTP2Suite := false
+		for _, id := range suites {
+			if id == tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 ||
+				id == tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 {
+				hasHTTP2Suite = true
+				break
+			}
+		}
+		if !hasHTTP2Suite {
+			return nil, fmt.Errorf("--tlsCipherSuites cannot serve HTTP/2: the TLS 1.2 cipher list must include TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 or TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256")
 		}
 		cfg.CipherSuites = suites
 	}
