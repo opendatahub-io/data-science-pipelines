@@ -282,3 +282,39 @@ func TestBuildTLSConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestInitCertsWithoutCertsStillValidatesTLSFlags(t *testing.T) {
+	origCert, origKey := tlsCertPath, tlsCertKeyPath
+	origMin, origCiphers := tlsMinVersion, tlsCipherSuites
+	t.Cleanup(func() {
+		tlsCertPath, tlsCertKeyPath = origCert, origKey
+		tlsMinVersion, tlsCipherSuites = origMin, origCiphers
+	})
+	empty, ciphers := "", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+	tlsCertPath, tlsCertKeyPath = &empty, &empty
+
+	// Invalid flags must fail startup even with certificates (and thus TLS
+	// serving) disabled.
+	bogus := "BOGUS_CIPHER"
+	tlsMinVersion, tlsCipherSuites = &empty, &bogus
+	if _, err := initCerts(); err == nil {
+		t.Fatal("initCerts() expected an error for an invalid cipher list with no certificates")
+	}
+
+	// Incompatible with HTTP/2 must also fail.
+	tlsMinVersion, tlsCipherSuites = &empty, &ciphers
+	if _, err := initCerts(); err == nil {
+		t.Fatal("initCerts() expected an error for a cipher list that cannot serve HTTP/2 with no certificates")
+	}
+
+	// Valid flags keep the no-cert behavior of disabling TLS.
+	valid := "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+	tlsMinVersion, tlsCipherSuites = &empty, &valid
+	cfg, err := initCerts()
+	if err != nil {
+		t.Fatalf("initCerts() unexpected error: %v", err)
+	}
+	if cfg != nil {
+		t.Fatalf("initCerts() = %v, want nil with no certificates", cfg)
+	}
+}

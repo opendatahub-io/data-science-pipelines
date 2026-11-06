@@ -191,7 +191,11 @@ func buildTLSConfig() (*tls.Config, error) {
 func initCerts() (*tls.Config, error) {
 	switch {
 	case *tlsCertPath == "" && *tlsCertKeyPath == "":
-		// User can choose not to provide certs
+		// User can choose not to provide certs. The TLS flags are still
+		// validated so invalid input fails startup even with TLS disabled.
+		if _, err := buildTLSConfig(); err != nil {
+			return nil, fmt.Errorf("failed to build TLS config: %v", err)
+		}
 		return nil, nil
 	case *tlsCertPath == "":
 		return nil, fmt.Errorf("missing tlsCertPath when specifying cert paths, both tlsCertPath and tlsCertKeyPath are required")
