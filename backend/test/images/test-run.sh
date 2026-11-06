@@ -64,26 +64,10 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-# Only the dedicated upgrade orchestration labels switch suites; do not match
-# substrings such as "!UpgradePreparation" inside compound Tier1 filters.
+# Only the dedicated upgrade orchestration labels switch suites; match exact
+# labels only (compound API filters use substrings like !UpgradePreparation).
 upgrade_test_label() {
-  case "$1" in
-    UpgradePreparation|UpgradeVerification) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-# Tier1 and API compound gates are not the air-gap Smoke lane; do not replace them
-# with --label-filter=disconnected on disconnected clusters.
-disconnected_preserve_requested_label() {
-  local filter="$1"
-  if [[ "$filter" == *Tier1* ]]; then
-    return 0
-  fi
-  if [[ "$filter" == *"!UpgradePreparation"* ]] || [[ "$filter" == *"!UpgradeVerification"* ]]; then
-    return 0
-  fi
-  return 1
+  [[ "$1" == "UpgradePreparation" || "$1" == "UpgradeVerification" ]]
 }
 
 source "./check_disconnected_cluster.sh"
@@ -96,14 +80,11 @@ if [[ "$DISCONNECTED_RESULT" == "true" ]]; then
   if ! upgrade_test_label "$TEST_LABEL"; then
     if [ -z "$REQUESTED_TEST_LABEL" ]; then
       TEST_LABEL="disconnected"
-    elif [[ "$REQUESTED_TEST_LABEL" == *disconnected* ]]; then
-      :
-    elif disconnected_preserve_requested_label "$REQUESTED_TEST_LABEL"; then
-      echo "Disconnected cluster: preserving explicit label filter (fail-closed via --fail-on-empty if no specs match): $REQUESTED_TEST_LABEL"
-      TEST_LABEL="$REQUESTED_TEST_LABEL"
     elif [[ "$REQUESTED_TEST_LABEL" == "smoke" ]]; then
       TEST_LABEL="smoke && disconnected"
     fi
+    # Any other explicit --label-filter is unchanged. --fail-on-empty fails the
+    # lane if it matches zero specs on the air-gap cluster.
   fi
   CLUSTER_BASE_DOMAIN=""
   for attempt in 1 2 3; do
