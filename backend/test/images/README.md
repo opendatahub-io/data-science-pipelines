@@ -147,6 +147,7 @@ cluster upgrade and `--label-filter=UpgradeVerification` after upgrade (see `bac
 and `upgrade_aipipelines_verification_test.go`). Those specs are also tagged **Tier1** for the quality-gate sheet.
 Standard **Tier1** API or E2E jobs on connected clusters should use
 `Tier1 && !UpgradePreparation && !UpgradeVerification` so upgrade orchestration stays on dedicated upgrade lanes only.
+**Kind CI E2E Tier1** uses `Tier1 && !integration` (Ray integration specs need a cluster with that CRD; see `.github/workflows/e2e-test.yml` and `AGENTS.md`)—distinct from the API compound filter above.
 GitHub Actions runs upgrade labels in
 [`.github/workflows/upgrade-test.yml`](../../../.github/workflows/upgrade-test.yml).
 
