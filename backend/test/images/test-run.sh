@@ -1,9 +1,15 @@
 #!/bin/bash
 
+REQUESTED_TEST_DIRECTORY="${TEST_DIRECTORY-}"
+
 set -o allexport
 source .env
 source "./patch-csv.sh"
 set +o allexport
+
+if [ -n "$REQUESTED_TEST_DIRECTORY" ]; then
+  TEST_DIRECTORY="$REQUESTED_TEST_DIRECTORY"
+fi
 
 export DEPLOYMENT_NAME="ds-pipeline-$DSPA_NAME"
 
@@ -24,6 +30,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --label-filter=*)
       TEST_LABEL="${1#*=}"
+      REQUESTED_TEST_LABEL="$TEST_LABEL"
       shift
       ;;
     --dsp-tag=*)
@@ -57,6 +64,12 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+# Only the dedicated upgrade orchestration labels switch suites; match exact
+# labels only (compound API filters use substrings like !UpgradePreparation).
+upgrade_test_label() {
+  [[ "$1" == "UpgradePreparation" || "$1" == "UpgradeVerification" ]]
+}
+
 source "./check_disconnected_cluster.sh"
 DISCONNECTED_RESULT="$(check_disconnected_cluster)" || {
   echo "ERROR: check_disconnected_cluster failed (exit $?), aborting"
@@ -64,8 +77,14 @@ DISCONNECTED_RESULT="$(check_disconnected_cluster)" || {
 }
 if [[ "$DISCONNECTED_RESULT" == "true" ]]; then
   echo "Disconnected cluster detected"
-  if [[ "$TEST_LABEL" != *"Upgrade"* ]]; then
-    TEST_LABEL="disconnected"
+  if ! upgrade_test_label "$TEST_LABEL"; then
+    if [ -z "$REQUESTED_TEST_LABEL" ]; then
+      TEST_LABEL="disconnected"
+    elif [[ "$REQUESTED_TEST_LABEL" == "smoke" ]]; then
+      TEST_LABEL="smoke && disconnected"
+    fi
+    # Any other explicit --label-filter is unchanged. --fail-on-empty fails the
+    # lane if it matches zero specs on the air-gap cluster.
   fi
   CLUSTER_BASE_DOMAIN=""
   for attempt in 1 2 3; do
@@ -88,7 +107,8 @@ if [[ "$DISCONNECTED_RESULT" == "true" ]]; then
   DISCONNECTED_CLUSTER="true"
 fi
 
-if [[ "$TEST_LABEL" == *"Upgrade"* ]]; then
+# Default TEST_DIRECTORY comes from .env (end2end). Upgrade jobs run v2/api only.
+if upgrade_test_label "$TEST_LABEL"; then
   TEST_DIRECTORY="v2/api"
 else
   RANDOM_SUFFIX=$(head /dev/urandom | tr -dc a-z0-9 | head -c 8)
@@ -282,6 +302,7 @@ echo "Running Tests now..."
 go run github.com/onsi/ginkgo/v2/ginkgo -r -v -p \
   --nodes=$NUM_PARALLEL_NODES \
   --keep-going \
+  --fail-on-empty \
   --label-filter="$TEST_LABEL" \
   -- -namespace="$NAMESPACE" \
   -apiUrl="$API_URL" \

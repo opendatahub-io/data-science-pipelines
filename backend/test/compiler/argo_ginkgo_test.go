@@ -38,7 +38,7 @@ var _ = BeforeEach(func() {
 	proxy.InitializeConfigWithEmptyForTests()
 })
 
-var _ = Describe("Verify Spec Compilation to Workflow >", Label(POSITIVE, WorkflowCompiler), func() {
+var _ = Describe("Verify Spec Compilation to Workflow >", Label(POSITIVE, WorkflowCompiler, Tier1), func() {
 	allPipelineFiles := testutil.GetListOfAllFilesInDir(filepath.Join(pipelineFilesRootDir, pipelineDirectory))
 
 	testParams := []struct {

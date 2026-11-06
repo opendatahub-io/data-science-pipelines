@@ -18,9 +18,13 @@ package constants
 const (
 	// Smoke - quality gate tag for smoke testing
 	Smoke string = "smoke"
-	// Sanity - quality gate tag for sanity level testing
-	Sanity string = "sanity"
-	// Disconnected - quality gate tag for disconnected testing
+	// Tier1 - high-priority tests excluding Smoke
+	Tier1 string = "Tier1"
+	// Tier2 - medium- and low-priority positive tests
+	Tier2 string = "Tier2"
+	// Tier3 - negative and destructive tests
+	Tier3 string = "Tier3"
+	// Disconnected - air-gapped cluster lane (orchestration); specs also carry Smoke
 	Disconnected string = "disconnected"
 	// Integration - quality gate tag for integration testing with other components
 	Integration = "integration"
@@ -39,8 +43,8 @@ const (
 	// E2eDraCheck - DRA (Dynamic Resource Allocation) checks (e.g. Kind + dra-example-driver).
 	E2eDraCheck string = "dra-check"
 
-	WorkflowCompiler       string = "WorkflowCompiler"
-	WorkflowCompilerVisits string = "WorkflowCompilerVisits"
+	WorkflowCompiler       string = "WorkflowCompiler"       // compiler CI lane; golden sweep also tagged Tier1
+	WorkflowCompilerVisits string = "WorkflowCompilerVisits" // compiler visitor specs also tagged Tier2
 
 	APIServerTests string = "ApiServerTests"
 
@@ -51,8 +55,8 @@ const (
 	PipelineUpload       string = "PipelineUpload"
 	ReportTests          string = "Report"
 
-	UpgradePreparation  string = "UpgradePreparation"
-	UpgradeVerification string = "UpgradeVerification"
+	UpgradePreparation  string = "UpgradePreparation"  // product upgrade prep lane; also tagged Tier1
+	UpgradeVerification string = "UpgradeVerification" // product upgrade verify lane; also tagged Tier1
 
 	// MLflow - quality gate tag for MLflow integration testing
 	MLflow string = "MLflow"

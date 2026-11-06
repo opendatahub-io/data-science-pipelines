@@ -7,7 +7,7 @@
 
 ### Document metadata
 
-- Last updated: 2026-10-29
+- Last updated: 2026-11-03
 - Scope: KFP master branch (v2 engine), backend (Go), SDK (Python), frontend (React 19)
 
 ### Maintenance (agents and contributors)
@@ -234,7 +234,13 @@ ginkgo -v ./backend/test/compiler -- -createGoldenFiles=false
 ginkgo -v ./backend/test/v2/api
 
 # Example: run only Smoke-labeled tests with ginkgo
-ginkgo -v --label-filter="Smoke" ./backend/test/v2/api
+ginkgo -v --label-filter="smoke" ./backend/test/v2/api
+
+# Standard Tier1 API gate (excludes two-phase upgrade orchestration)
+ginkgo -v --label-filter="Tier1 && !UpgradePreparation && !UpgradeVerification" ./backend/test/v2/api
+
+ginkgo -v --label-filter="Tier2" ./backend/test/v2/api
+ginkgo -v --label-filter="Tier3" ./backend/test/v2/api
 ```
 
 - End-to-end tests:
@@ -243,7 +249,20 @@ ginkgo -v --label-filter="Smoke" ./backend/test/v2/api
 ginkgo -v ./backend/test/end2end -- -namespace=kubeflow -isDebugMode=true
 ```
 
-Without `--label-filter`, `gpu`-labeled E2E tests run as well (they request accelerators) and may pend or fail on CPU-only clusters; pass `--label-filter` to limit what runs (for example `Smoke`, or `gpu` on GPU-capable clusters). NVIDIA vs AMD fixtures: pass `-gpuVendor` flag to `nvidia` (default), `amd`, or `both` so only matching IRs run (`pytorch_nvidia_gpu_availability.yaml` / `pytorch_amd_gpu_availability.yaml`). Any value other than `amd`/`both`/`all` falls back to `nvidia`.
+Without `--label-filter`, `gpu`-labeled E2E tests run as well (they request accelerators) and may pend or fail on CPU-only clusters; pass `--label-filter` to limit what runs (for example `smoke`, `Tier1`, or `gpu` on GPU-capable clusters).
+
+**E2E label filters (product vs Kind):**
+
+- Smoke: Kind CI uses `--label-filter='smoke && !disconnected'`; product Smoke lanes use `smoke` (air-gap duplicates use `disconnected`).
+- Tier1: Product E2E uses bare `--label-filter=Tier1` (essential sweep + explicit Tier1 IRs + integration/Ray on OpenShift). Kind Tier1 uses `--label-filter='Tier1 && !integration'` (no Ray CRD on Kind). IRs that multi-user **`E2ECritical`** jobs still need carry **`E2ECritical`** plus **`smoke`** or **`Tier1`** on the same spec.
+
+**API label filters (product):**
+
+- Normal Tier1 API jobs must use `--label-filter='Tier1 && !UpgradePreparation && !UpgradeVerification'`. Dedicated upgrade jobs keep `UpgradePreparation` / `UpgradeVerification` only.
+
+**Other E2E filters:**
+
+- CPU-only or Kind Tier2 runs should use `--label-filter='Tier2 && !gpu && !dra-check'` so accelerator and DRA fixtures stay out of that gate; GPU-capable product lanes can keep `--label-filter=Tier2`, and the dedicated `dra-check` lane covers DRA. NVIDIA vs AMD fixtures: pass `-gpuVendor` flag to `nvidia` (default), `amd`, or `both` so only matching IRs run (`pytorch_nvidia_gpu_availability.yaml` / `pytorch_amd_gpu_availability.yaml`). Any value other than `amd`/`both`/`all` falls back to `nvidia`.
 
 Test data is centralized under:
 
@@ -666,8 +685,8 @@ docformatter --check --recursive sdk/python/ --exclude "compiler_test.py"
 - Run SDK tests: `pytest -v sdk/python/kfp`
 - Run backend unit tests: `go test -v $(go list ./backend/... | grep -v backend/test/)`
 - Run compiler tests: `ginkgo -v ./backend/test/compiler`
-- Run API tests: `ginkgo -v --label-filter="Smoke" ./backend/test/v2/api`
-- Run E2E tests: `ginkgo -v ./backend/test/end2end -- -namespace=kubeflow` (CPU-only: add `--label-filter`, e.g. `Smoke`, to avoid `gpu` tests)
+- Run API tests: `ginkgo -v --label-filter="smoke" ./backend/test/v2/api`
+- Run E2E tests: `ginkgo -v ./backend/test/end2end -- -namespace=kubeflow` (CPU-only: add `--label-filter`, e.g. `smoke` or `Tier1`, to avoid `gpu` tests)
 - Check formatting:
   `yapf --recursive --diff sdk/python/ && pycln --check sdk/python && isort --check --profile google sdk/python`
 - Frontend dev server: `cd frontend && npm start`

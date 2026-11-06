@@ -89,6 +89,7 @@ MatchMaps(actualMap, expectedMap, "pipeline parameters")
 
 **Static Test Labels:**
 - `test_type.go`: Test categories (Smoke, CriticalOnly, FullRegression)
+- `test_features.go`: Quality gates (`smoke`, `Tier1`, `Tier2`, `Tier3`)
 
 **Example Test Labeling:**
 ```go
@@ -108,7 +109,7 @@ var _ = Describe("Pipeline API Tests", Label(POSITIVE, "Pipeline"), func() {
 
 **Current List of Labels**
 ```
-Smoke, CriticalOnly, FullRegression, POSITIVE, "Negative", "PipelineUpload", API_SERVER_TESTS
+Smoke, smoke, Tier1, Tier2, Tier3, CriticalOnly, FullRegression, POSITIVE, "Negative", "PipelineUpload", API_SERVER_TESTS
 ```
 
 ### Reports Generation
@@ -166,10 +167,14 @@ Each API service has dedicated test files with comprehensive endpoint coverage:
 
 ### Test Categorization
 
-**By Test Type:**
-- **Smoke Tests**: Critical path validation
-- **Regression Tests**: Comprehensive feature coverage
-- **Integration Tests**: Cross-service interaction validation
+**By Quality Gate:**
+- **Smoke**: Critical path validation
+- **Tier1**: High-priority tests excluding Smoke (normal API Tier1 jobs: `Tier1 && !UpgradePreparation && !UpgradeVerification`)
+- **Tier2**: Medium- and low-priority positive tests
+- **Tier3**: Negative and destructive tests
+- **Regression**: Comprehensive feature coverage (`FullRegression`)
+
+The legacy **`Sanity`** Ginkgo label is removed. Migrate **`--label-filter=sanity`** to **`smoke`** (Smoke gate) or **`Tier1 && !UpgradePreparation && !UpgradeVerification`** on **`./backend/test/v2/api`** for normal API Tier1—not bare **`Tier1`** on API unless upgrade orchestration is excluded by the job. Cross-component integration (for example Ray on OpenShift) is labeled on **`./backend/test/end2end`** only; Kind Tier1 E2E uses **`Tier1 && !integration`**. See `backend/test/images/README.md` for product E2E **`Tier1`**.
 
 ## Test Creation Process
 
@@ -325,7 +330,13 @@ go test -v ./backend/test/v2/api/ \
 
 ```bash
 # Run only smoke tests
-ginkgo -v --label-filter="Smoke" ./backend/test/v2/api/
+ginkgo -v --label-filter="smoke" ./backend/test/v2/api/
+
+# Standard Tier1 API gate (excludes two-phase upgrade orchestration)
+ginkgo -v --label-filter="Tier1 && !UpgradePreparation && !UpgradeVerification" ./backend/test/v2/api/
+
+ginkgo -v --label-filter="Tier2" ./backend/test/v2/api/
+ginkgo -v --label-filter="Tier3" ./backend/test/v2/api/
 
 # Run pipeline-specific tests
 ginkgo -v --label-filter="Pipeline" ./backend/test/v2/api/

@@ -111,7 +111,7 @@ var _ = Describe("MLflow Integration >", Label(MLflow, FullRegression), func() {
 
 	// ################## TESTS ##################
 
-	Context("Single task pipeline with MLflow enabled >", Label(MLflowCore), func() {
+	Context("Single task pipeline with MLflow enabled >", Label(MLflowCore, Tier1), func() {
 		It("Should populate plugins_output.mlflow with experiment_id, root_run_id, and state=PLUGIN_SUCCEEDED", func() {
 			pipelineID, versionID := uploadSingleTaskPipeline()
 			experimentName := fmt.Sprintf("mlflow-test-%s", randomName)
@@ -214,7 +214,7 @@ var _ = Describe("MLflow Integration >", Label(MLflow, FullRegression), func() {
 		})
 	})
 
-	Context("Multi-task pipeline with MLflow >", Label(MLflowCore), func() {
+	Context("Multi-task pipeline with MLflow >", Label(MLflowCore, Tier1), func() {
 		// producer_consumer_param_pipeline.yaml has 2 executor tasks: producer → consumer
 		const expectedTaskCount = 2
 
@@ -265,7 +265,7 @@ var _ = Describe("MLflow Integration >", Label(MLflow, FullRegression), func() {
 		})
 	})
 
-	Context("Backward compatibility — no plugins_input >", Label(MLflowCore), func() {
+	Context("Backward compatibility — no plugins_input >", Label(MLflowCore, Tier1), func() {
 		It("Should succeed and populate plugins_output with defaults when no plugins_input is provided", func() {
 			pipelineID, versionID := uploadSingleTaskPipeline()
 			pipelineRuntimeInputs := testutil.GetPipelineRunTimeInputs(
@@ -303,7 +303,7 @@ var _ = Describe("MLflow Integration >", Label(MLflow, FullRegression), func() {
 		})
 	})
 
-	Context("MLflow opt-out via disabled flag >", Label(MLflowCore), func() {
+	Context("MLflow opt-out via disabled flag >", Label(MLflowCore, Tier1), func() {
 		It("Should succeed with no MLflow output when plugins_input.mlflow.disabled=true", func() {
 			pipelineID, versionID := uploadSingleTaskPipeline()
 			pluginsInput := e2e_utils.BuildMLflowPluginsInputDisabled()
@@ -332,7 +332,7 @@ var _ = Describe("MLflow Integration >", Label(MLflow, FullRegression), func() {
 		})
 	})
 
-	Context("Parallel-for pipeline with MLflow >", Label(MLflowParallelLoop), func() {
+	Context("Parallel-for pipeline with MLflow >", Label(MLflowParallelLoop, Tier2), func() {
 		// parallel_for_after_dependency.yaml has a parallel-for loop with 3 iterations
 		// and 2 dependent tasks.
 		const parallelForPipelineFile = "parallel_for_after_dependency.yaml"
@@ -413,7 +413,7 @@ var _ = Describe("MLflow Integration >", Label(MLflow, FullRegression), func() {
 		})
 	})
 
-	Context("Failed pipeline with MLflow >", Label(MLflowFailure), func() {
+	Context("Failed pipeline with MLflow >", Label(MLflowFailure, Tier3), func() {
 		const failPipelineFile = "fail_v2.yaml"
 		const failPipelineDir = "valid/failing"
 
@@ -458,7 +458,7 @@ var _ = Describe("MLflow Integration >", Label(MLflow, FullRegression), func() {
 		})
 	})
 
-	Context("Failed pipeline + RetryRun with MLflow >", Label(MLflowFailure), func() {
+	Context("Failed pipeline + RetryRun with MLflow >", Label(MLflowFailure, Tier3), func() {
 		const failPipelineFile = "fail_v2.yaml"
 		const failPipelineDir = "valid/failing"
 
@@ -542,7 +542,7 @@ var _ = Describe("MLflow Integration >", Label(MLflow, FullRegression), func() {
 		})
 	})
 
-	Context("Custom experiment name >", Label(MLflowCore), func() {
+	Context("Custom experiment name >", Label(MLflowCore, Tier1), func() {
 		It("Should create MLflow experiment with the user-specified name", func() {
 			pipelineID, versionID := uploadSingleTaskPipeline()
 			customExpName := fmt.Sprintf("custom-exp-%s", randomName)
@@ -578,7 +578,7 @@ var _ = Describe("MLflow Integration >", Label(MLflow, FullRegression), func() {
 // Additional scenarios from proposals/12862-mlflow-integration/MLflow-KFP-Integration-TestPlan*.md.
 // Uses PDescribe the same way as pipeline_api_test.go.
 
-var _ = PDescribe("MLflow Integration > CreateRun and validation >", Label(MLflow, FullRegression), func() {
+var _ = PDescribe("MLflow Integration > CreateRun and validation >", Label(MLflow, FullRegression, Tier1), func() {
 	Context("Experiment and plugins_input >", func() {
 		It("Should use default admin experiment name when no plugins_input and assert run_url in plugins_output", func() {
 		})
@@ -607,7 +607,7 @@ var _ = PDescribe("MLflow Integration > CreateRun and validation >", Label(MLflo
 	})
 })
 
-var _ = PDescribe("MLflow Integration > Terminal state and sync >", Label(MLflow, FullRegression), func() {
+var _ = PDescribe("MLflow Integration > Terminal state and sync >", Label(MLflow, FullRegression, Tier2), func() {
 	Context("Pipeline outcomes >", func() {
 		It("Should map MLflow parent and nested runs when pipeline is Canceled", func() {
 		})
@@ -626,7 +626,7 @@ var _ = PDescribe("MLflow Integration > Terminal state and sync >", Label(MLflow
 	})
 })
 
-var _ = PDescribe("MLflow Integration > RetryRun >", Label(MLflow, FullRegression), func() {
+var _ = PDescribe("MLflow Integration > RetryRun >", Label(MLflow, FullRegression, Tier3), func() {
 	Context("Edge cases >", func() {
 		It("Should have no MLflow side effects when retrying a failed run with no MLflow plugin output", func() {
 		})
@@ -649,7 +649,7 @@ func runtimeStateAppearsAfter(
 	return false
 }
 
-var _ = PDescribe("MLflow Integration > CloneRun >", Label(MLflow, FullRegression), func() {
+var _ = PDescribe("MLflow Integration > CloneRun >", Label(MLflow, FullRegression, Tier2), func() {
 	Context("Clone behavior >", func() {
 		It("Should inherit plugins_input.mlflow on clone and create a new MLflow parent for the cloned run", func() {
 		})
@@ -658,7 +658,7 @@ var _ = PDescribe("MLflow Integration > CloneRun >", Label(MLflow, FullRegressio
 	})
 })
 
-var _ = PDescribe("MLflow Integration > Recurring runs >", Label(MLflow, FullRegression), func() {
+var _ = PDescribe("MLflow Integration > Recurring runs >", Label(MLflow, FullRegression, Tier2), func() {
 	Context("Scheduled jobs >", func() {
 		It("Should store plugins_input on recurring job and surface it on the scheduled workflow", func() {
 		})
@@ -671,7 +671,7 @@ var _ = PDescribe("MLflow Integration > Recurring runs >", Label(MLflow, FullReg
 	})
 })
 
-var _ = PDescribe("MLflow Integration > Negative and edge cases >", Label(MLflow, FullRegression), func() {
+var _ = PDescribe("MLflow Integration > Negative and edge cases >", Label(MLflow, FullRegression, Tier3), func() {
 	Context("Configuration and validation >", func() {
 		It("Should allow or clearly fail CreateRun when MLflow endpoint is unreachable at create", func() {
 		})
@@ -680,7 +680,7 @@ var _ = PDescribe("MLflow Integration > Negative and edge cases >", Label(MLflow
 	})
 })
 
-var _ = PDescribe("MLflow Integration > Compiled workflow injection >", Label(MLflow, FullRegression), func() {
+var _ = PDescribe("MLflow Integration > Compiled workflow injection >", Label(MLflow, FullRegression, Tier2), func() {
 	Context("Templates and env >", func() {
 		It("Should inject MLflow env only on driver and launcher templates", func() {
 		})
@@ -691,7 +691,7 @@ var _ = PDescribe("MLflow Integration > Compiled workflow injection >", Label(ML
 	})
 })
 
-var _ = PDescribe("MLflow Integration > Cluster and deployment >", Label(MLflow, FullRegression), func() {
+var _ = PDescribe("MLflow Integration > Cluster and deployment >", Label(MLflow, FullRegression, Tier2), func() {
 	Context("Lifecycle and platform >", func() {
 		It("Should leave existing behavior unchanged with no plugins.mlflow (upgrade path)", func() {
 		})

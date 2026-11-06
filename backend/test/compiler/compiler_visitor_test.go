@@ -55,7 +55,7 @@ func (visitor *TestVisitor) AddKubernetesSpec(name string, kubernetesSpec *struc
 	return nil
 }
 
-var _ = Describe("Verify iteration over the pipeline components >", Label(POSITIVE, WorkflowCompiler, WorkflowCompilerVisits), func() {
+var _ = Describe("Verify iteration over the pipeline components >", Label(POSITIVE, WorkflowCompiler, WorkflowCompilerVisits, Tier2), func() {
 	Context("Validate that compiler starts with the correct root", func() {
 
 		testParams := []struct {
