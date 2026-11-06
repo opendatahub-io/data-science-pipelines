@@ -81,6 +81,8 @@ var (
 	managedPipelinesDir           = flag.String("managedPipelinesDir", "", "Directory containing managed-pipelines.json manifest")
 	tlsCertPath                   = flag.String("tlsCertPath", "", "Path to the public TLS cert.")
 	tlsCertKeyPath                = flag.String("tlsCertKeyPath", "", "Path to the private TLS key cert.")
+	tlsMinVersion                 = flag.String("tlsMinVersion", "VersionTLS12", "Minimum TLS version (VersionTLS12 or VersionTLS13)")
+	tlsCipherSuites               = flag.String("tlsCipherSuites", "", "Comma-separated list of TLS cipher suites (Go names from crypto/tls.CipherSuites and InsecureCipherSuites). Only applies to TLS 1.0-1.2; TLS 1.3 cipher suites are not configurable in Go. If empty, Go defaults are used.")
 	collectMetricsFlag            = flag.Bool("collectMetricsFlag", true, "Whether to collect Prometheus metrics in API server.")
 	usePipelinesKubernetesStorage = flag.Bool("pipelinesStoreKubernetes", false, "Store and run pipeline versions in Kubernetes")
 	disableWebhook                = flag.Bool("disableWebhook", false, "Set this if pipelinesStoreKubernetes is on but using a global webhook in a separate pod")
@@ -103,10 +105,97 @@ type HTTPRouterDeps struct {
 	ReadArtifact            http.HandlerFunc
 }
 
+func parseTLSVersion(version string) (uint16, error) {
+	switch strings.TrimSpace(version) {
+	case "", "VersionTLS12":
+		return tls.VersionTLS12, nil
+	case "VersionTLS13":
+		return tls.VersionTLS13, nil
+	default:
+		return 0, fmt.Errorf("unrecognized TLS version %q, valid values are VersionTLS12 and VersionTLS13", version)
+	}
+}
+
+func parseTLSCipherSuites(commaSeparated string) ([]uint16, error) {
+	commaSeparated = strings.TrimSpace(commaSeparated)
+	if commaSeparated == "" {
+		return nil, nil
+	}
+	allCiphers := make(map[string]uint16)
+	for _, cs := range tls.CipherSuites() {
+		allCiphers[cs.Name] = cs.ID
+	}
+	for _, cs := range tls.InsecureCipherSuites() {
+		allCiphers[cs.Name] = cs.ID
+	}
+	var ids []uint16
+	var unknown []string
+	for name := range strings.SplitSeq(commaSeparated, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if id, ok := allCiphers[name]; ok {
+			ids = append(ids, id)
+		} else {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) > 0 {
+		return nil, fmt.Errorf("unknown TLS cipher suite(s): %s. Use Go cipher suite names from crypto/tls.CipherSuites() or InsecureCipherSuites()", strings.Join(unknown, ", "))
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("--tlsCipherSuites was set but no cipher suites were specified")
+	}
+	return ids, nil
+}
+
+func buildTLSConfig() (*tls.Config, error) {
+	minVersion, err := parseTLSVersion(*tlsMinVersion)
+	if err != nil {
+		return nil, fmt.Errorf("invalid --tlsMinVersion: %w", err)
+	}
+	cfg := &tls.Config{
+		MinVersion: minVersion,
+		NextProtos: []string{"h2", "http/1.1"},
+	}
+	if trimmed := strings.TrimSpace(*tlsCipherSuites); trimmed != "" {
+		if cfg.MinVersion >= tls.VersionTLS13 {
+			return nil, fmt.Errorf("--tlsCipherSuites cannot be used with TLS 1.3 (cipher suites are not configurable in Go for TLS 1.3)")
+		}
+		suites, err := parseTLSCipherSuites(trimmed)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --tlsCipherSuites: %w", err)
+		}
+		// This configuration is shared by the HTTP and webhook servers, which
+		// serve HTTP/2 (h2 is in NextProtos) via net/http ServeTLS. Go 1.26
+		// fails HTTP/2 setup during ServeTLS when a non-empty TLS 1.2 cipher
+		// list has no ECDHE AES-128-GCM suite; reject it here with a clear
+		// error instead of failing at listener startup.
+		hasHTTP2Suite := false
+		for _, id := range suites {
+			if id == tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 ||
+				id == tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 {
+				hasHTTP2Suite = true
+				break
+			}
+		}
+		if !hasHTTP2Suite {
+			return nil, fmt.Errorf("--tlsCipherSuites cannot serve HTTP/2: the TLS 1.2 cipher list must include TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 or TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256")
+		}
+		cfg.CipherSuites = suites
+	}
+	return cfg, nil
+}
+
 func initCerts() (*tls.Config, error) {
 	switch {
 	case *tlsCertPath == "" && *tlsCertKeyPath == "":
-		// User can choose not to provide certs
+		// User can choose not to provide certs. The TLS flags are still
+		// validated so invalid input fails startup even with TLS disabled.
+		if _, err := buildTLSConfig(); err != nil {
+			return nil, fmt.Errorf("failed to build TLS config: %v", err)
+		}
 		return nil, nil
 	case *tlsCertPath == "":
 		return nil, fmt.Errorf("missing tlsCertPath when specifying cert paths, both tlsCertPath and tlsCertKeyPath are required")
@@ -118,12 +207,14 @@ func initCerts() (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	tlsCfg := &tls.Config{
-		ServerName:   common.GetMLPipelineServiceName() + "." + common.GetPodNamespace() + ".svc." + common.GetClusterDomain(),
-		Certificates: []tls.Certificate{serverCert},
+	tlsCfg, err := buildTLSConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %v", err)
 	}
-	glog.Info("TLS cert key/pair loaded.")
-	return tlsCfg, err
+	tlsCfg.ServerName = common.GetMLPipelineServiceName() + "." + common.GetPodNamespace() + ".svc." + common.GetClusterDomain()
+	tlsCfg.Certificates = []tls.Certificate{serverCert}
+	glog.Infof("TLS cert key/pair loaded (MinVersion: %s)", *tlsMinVersion)
+	return tlsCfg, nil
 }
 
 func main() {
@@ -549,9 +640,15 @@ func startWebhook(client ctrlclient.Client, clientNoCahe ctrlclient.Client, wg *
 	topMux.Handle("/webhooks/validate-pipelineversion", pvValidateWebhook)
 	topMux.Handle("/webhooks/mutate-pipelineversion", pvMutateWebhook)
 
+	tlsConfig, err := buildTLSConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build TLS config: %v", err)
+	}
+
 	webhookServer := &http.Server{
-		Addr:    *webhookPortFlag,
-		Handler: topMux,
+		Addr:      *webhookPortFlag,
+		Handler:   topMux,
+		TLSConfig: tlsConfig,
 	}
 
 	go func() {
