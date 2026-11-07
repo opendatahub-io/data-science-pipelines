@@ -36,6 +36,7 @@ import {
 import { getArtifactNameFromEvent, LinkedArtifact, ExecutionHelpers } from 'src/mlmd/MlmdUtils';
 import { NodeMlmdInfo } from 'src/pages/RunDetailsV2';
 import { Artifact, Event, Execution, Value } from 'src/third_party/mlmd';
+import { V2beta1RuntimeState } from 'src/apisv2beta1/run';
 
 export const TASK_NAME_KEY = 'task_name';
 export const PARENT_DAG_ID_KEY = 'parent_dag_id';
@@ -215,12 +216,32 @@ function addIterationNodes(rootDagExecution: Execution, flowGraph: PipelineFlowE
 //    How to handle if-condition? and show the state
 //    How to handle parallel-for? and list of workers.
 
+function isRunTerminated(runState?: V2beta1RuntimeState): boolean {
+  return runState === V2beta1RuntimeState.FAILED || runState === V2beta1RuntimeState.CANCELED;
+}
+
+function reconcileExecutionState(
+  executionState: Execution.State | undefined,
+  runState?: V2beta1RuntimeState,
+): Execution.State | undefined {
+  if (!isRunTerminated(runState) || executionState === undefined) {
+    return executionState;
+  }
+  if (executionState === Execution.State.RUNNING || executionState === Execution.State.NEW) {
+    return runState === V2beta1RuntimeState.CANCELED
+      ? Execution.State.CANCELED
+      : Execution.State.FAILED;
+  }
+  return executionState;
+}
+
 export function updateFlowElementsState(
   layers: string[],
   elems: PipelineFlowElement[],
   executions: Execution[],
   events: Event[],
   artifacts: Artifact[],
+  runState?: V2beta1RuntimeState,
 ): PipelineFlowElement[] {
   const executionLayers = getExecutionLayers(layers, executions);
   if (executionLayers.length < layers.length) {
@@ -256,7 +277,10 @@ export function updateFlowElementsState(
         return parent_dag_id === parallelForDagExecution.getId() && iteration_index === iterationId;
       });
       if (matchedExecs && matchedExecs.length > 0) {
-        (updatedElem.data as SubDagFlowElementData).state = matchedExecs[0].getLastKnownState();
+        (updatedElem.data as SubDagFlowElementData).state = reconcileExecutionState(
+          matchedExecs[0].getLastKnownState(),
+          runState,
+        );
       }
       flowGraph.push(updatedElem);
     }
@@ -271,7 +295,10 @@ export function updateFlowElementsState(
         executionLayers,
       );
       if (executions) {
-        (updatedElem.data as ExecutionFlowElementData).state = executions[0]?.getLastKnownState();
+        (updatedElem.data as ExecutionFlowElementData).state = reconcileExecutionState(
+          executions[0]?.getLastKnownState(),
+          runState,
+        );
         (updatedElem.data as ExecutionFlowElementData).mlmdId = executions[0]?.getId();
         // Use ExecutionHelpers.getName() which reads display_name from MLMD custom properties
         (updatedElem.data as ExecutionFlowElementData).label = ExecutionHelpers.getName(
@@ -302,7 +329,10 @@ export function updateFlowElementsState(
         executionLayers,
       );
       if (executions) {
-        (updatedElem.data as SubDagFlowElementData).state = executions[0]?.getLastKnownState();
+        (updatedElem.data as SubDagFlowElementData).state = reconcileExecutionState(
+          executions[0]?.getLastKnownState(),
+          runState,
+        );
         (updatedElem.data as SubDagFlowElementData).mlmdId = executions[0]?.getId();
       }
     }
