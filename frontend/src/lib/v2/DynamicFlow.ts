@@ -237,33 +237,43 @@ export function updateFlowElementsState(
     artifactIdToArtifact,
   );
 
-  let flowGraph: PipelineFlowElement[] = [];
-
   if (canvasIsParallelForDag(executionLayers, layers)) {
     const parallelForDagExecution = executionLayers[executionLayers.length - 1];
-    const executions = taskNameToExecution.get(
+    const parallelExecs = taskNameToExecution.get(
       parallelForDagExecution.getCustomPropertiesMap().get(TASK_NAME_KEY)?.getStringValue() ||
         parallelForDagExecution.getName(),
     );
 
-    for (let elem of elems) {
-      const updatedElem = cloneFlowElement(elem);
-      const iterationId = Number(getIterationIdFromNodeKey(updatedElem.id));
-      const matchedExecs = executions?.filter((exec) => {
+    let anyChanged = false;
+    const flowGraph: PipelineFlowElement[] = elems.map((elem) => {
+      const iterationId = Number(getIterationIdFromNodeKey(elem.id));
+      const matchedExecs = parallelExecs?.filter((exec) => {
         const customProperties = exec.getCustomPropertiesMap();
         const iteration_index = customProperties.get(ITERATION_INDEX_KEY)?.getIntValue();
         const parent_dag_id = customProperties.get(PARENT_DAG_ID_KEY)?.getIntValue();
         return parent_dag_id === parallelForDagExecution.getId() && iteration_index === iterationId;
       });
       if (matchedExecs && matchedExecs.length > 0) {
-        (updatedElem.data as SubDagFlowElementData).state = matchedExecs[0].getLastKnownState();
+        const newState = matchedExecs[0].getLastKnownState();
+        if ((elem.data as SubDagFlowElementData)?.state === newState) {
+          return elem;
+        }
+        anyChanged = true;
+        const updatedElem = cloneFlowElement(elem);
+        (updatedElem.data as SubDagFlowElementData).state = newState;
+        return updatedElem;
       }
-      flowGraph.push(updatedElem);
-    }
-    return flowGraph;
+      return elem;
+    });
+    return anyChanged ? flowGraph : elems;
   }
-  for (let elem of elems) {
-    const updatedElem = cloneFlowElement(elem);
+
+  let anyChanged = false;
+  const flowGraph: PipelineFlowElement[] = elems.map((elem) => {
+    if (!isNode(elem)) {
+      return elem;
+    }
+
     if (NodeTypeNames.EXECUTION === elem.type) {
       const executions = getExecutionsUnderDAG(
         taskNameToExecution,
@@ -271,20 +281,32 @@ export function updateFlowElementsState(
         executionLayers,
       );
       if (executions) {
-        (updatedElem.data as ExecutionFlowElementData).state = executions[0]?.getLastKnownState();
-        (updatedElem.data as ExecutionFlowElementData).mlmdId = executions[0]?.getId();
-        // Use ExecutionHelpers.getName() which reads display_name from MLMD custom properties
-        (updatedElem.data as ExecutionFlowElementData).label = ExecutionHelpers.getName(
-          executions[0],
-        );
+        const newState = executions[0]?.getLastKnownState();
+        const newMlmdId = executions[0]?.getId();
+        const newLabel = ExecutionHelpers.getName(executions[0]);
+        const currentData = elem.data as ExecutionFlowElementData;
+        if (
+          currentData?.state === newState &&
+          currentData?.mlmdId === newMlmdId &&
+          currentData?.label === newLabel
+        ) {
+          return elem;
+        }
+        anyChanged = true;
+        const updatedElem = cloneFlowElement(elem);
+        (updatedElem.data as ExecutionFlowElementData).state = newState;
+        (updatedElem.data as ExecutionFlowElementData).mlmdId = newMlmdId;
+        (updatedElem.data as ExecutionFlowElementData).label = newLabel;
+        return updatedElem;
       }
-    } else if (NodeTypeNames.ARTIFACT === elem.type) {
+      return elem;
+    }
+
+    if (NodeTypeNames.ARTIFACT === elem.type) {
       let linkedArtifact = artifactNodeKeyToArtifact.get(elem.id);
 
-      // Detect whether Artifact is an output of SubDAG, if so, search its source artifact.
       let artifactData = elem.data as ArtifactFlowElementData;
       if (artifactData && artifactData.outputArtifactKey && artifactData.producerSubtask) {
-        // SubDAG output artifact has reference to inner subtask and artifact.
         const subArtifactKey = getArtifactNodeKey(
           artifactData.producerSubtask,
           artifactData.outputArtifactKey,
@@ -292,23 +314,43 @@ export function updateFlowElementsState(
         linkedArtifact = artifactNodeKeyToArtifact.get(subArtifactKey);
       }
 
-      (updatedElem.data as ArtifactFlowElementData).state = linkedArtifact?.artifact?.getState();
-      (updatedElem.data as ArtifactFlowElementData).mlmdId = linkedArtifact?.artifact?.getId();
-    } else if (NodeTypeNames.SUB_DAG === elem.type) {
-      // TODO: Update sub-dag state based on future design.
+      const newState = linkedArtifact?.artifact?.getState();
+      const newMlmdId = linkedArtifact?.artifact?.getId();
+      if (artifactData?.state === newState && artifactData?.mlmdId === newMlmdId) {
+        return elem;
+      }
+      anyChanged = true;
+      const updatedElem = cloneFlowElement(elem);
+      (updatedElem.data as ArtifactFlowElementData).state = newState;
+      (updatedElem.data as ArtifactFlowElementData).mlmdId = newMlmdId;
+      return updatedElem;
+    }
+
+    if (NodeTypeNames.SUB_DAG === elem.type) {
       const executions = getExecutionsUnderDAG(
         taskNameToExecution,
         getTaskLabelByPipelineFlowElement(elem),
         executionLayers,
       );
       if (executions) {
-        (updatedElem.data as SubDagFlowElementData).state = executions[0]?.getLastKnownState();
-        (updatedElem.data as SubDagFlowElementData).mlmdId = executions[0]?.getId();
+        const newState = executions[0]?.getLastKnownState();
+        const newMlmdId = executions[0]?.getId();
+        const currentData = elem.data as SubDagFlowElementData;
+        if (currentData?.state === newState && currentData?.mlmdId === newMlmdId) {
+          return elem;
+        }
+        anyChanged = true;
+        const updatedElem = cloneFlowElement(elem);
+        (updatedElem.data as SubDagFlowElementData).state = newState;
+        (updatedElem.data as SubDagFlowElementData).mlmdId = newMlmdId;
+        return updatedElem;
       }
+      return elem;
     }
-    flowGraph.push(updatedElem);
-  }
-  return flowGraph;
+
+    return elem;
+  });
+  return anyChanged ? flowGraph : elems;
 }
 
 function cloneFlowElement(elem: PipelineFlowElement): PipelineFlowElement {
