@@ -82,7 +82,11 @@ if [[ "$DISCONNECTED_RESULT" == "true" ]]; then
     if [ -z "$REQUESTED_TEST_LABEL" ]; then
       TEST_LABEL="disconnected"
     elif [[ "$REQUESTED_TEST_LABEL" == "smoke" ]]; then
-      TEST_LABEL="smoke && disconnected"
+      if [[ "$TEST_DIRECTORY" == "v2/api" ]]; then
+        TEST_LABEL="smoke"
+      else
+        TEST_LABEL="smoke && disconnected"
+      fi
     fi
     # Any other explicit --label-filter is unchanged. --fail-on-empty fails the
     # lane if it matches zero specs on the air-gap cluster.
@@ -106,6 +110,10 @@ if [[ "$DISCONNECTED_RESULT" == "true" ]]; then
   CUSTOM_PIP_INDEX_URL="https://${BASTION_HOST}:9443/root/pypi/+simple/"
   CUSTOM_PIP_TRUSTED_HOST="${BASTION_HOST}"
   DISCONNECTED_CLUSTER="true"
+elif ! upgrade_test_label "$TEST_LABEL"; then
+  if [[ "$TEST_LABEL" == "smoke" ]]; then
+    TEST_LABEL='smoke && !disconnected'
+  fi
 fi
 
 # Default TEST_DIRECTORY comes from .env (end2end). Upgrade jobs run v2/api only.
