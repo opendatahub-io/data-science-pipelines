@@ -16,6 +16,7 @@ export DEPLOYMENT_NAME="ds-pipeline-$DSPA_NAME"
 SKIP_DEPLOYMENT="${SKIP_DEPLOYMENT:-true}"
 
 TEST_LABEL="smoke"
+REQUESTED_TEST_LABEL=""
 DSPO_OWNER="opendatahub-io"
 DSPO_REPO="data-science-pipelines-operator"
 DSPO_BRANCH="stable"
