@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import MagicMock
@@ -53,15 +54,6 @@ class TestApplyKustomizeWithNamespace(unittest.TestCase):
             os.path.dirname(self.deployer.operator_repo_path),
             ignore_errors=True)
 
-    def test_wrapper_sets_namespace_and_relative_resource(self):
-        self.deployer.apply_kustomize_with_namespace(self.manifest_path,
-                                                     'rhods', 'Argo Lite')
-
-        wrapper_dir = os.path.join(
-            os.path.dirname(self.manifest_path), 'argo-lite-ns-rhods')
-        # Wrapper must be removed after the apply.
-        self.assertFalse(os.path.exists(wrapper_dir))
-
     def test_apply_resource_called_with_wrapper_and_no_namespace(self):
         self.deployer.apply_kustomize_with_namespace(self.manifest_path,
                                                      'rhods', 'Argo Lite')
@@ -79,8 +71,10 @@ class TestApplyKustomizeWithNamespace(unittest.TestCase):
         captured = {}
 
         def capture(manifest_path=None, **kwargs):
-            captured['kustomization'] = yaml.safe_load(
-                open(os.path.join(manifest_path, 'kustomization.yaml')))
+            captured['wrapper_dir'] = manifest_path
+            with open(os.path.join(manifest_path,
+                                   'kustomization.yaml')) as handle:
+                captured['kustomization'] = yaml.safe_load(handle)
 
         self.deployer.deployment_manager.apply_resource.side_effect = capture
         self.deployer.apply_kustomize_with_namespace(self.manifest_path,
@@ -89,6 +83,54 @@ class TestApplyKustomizeWithNamespace(unittest.TestCase):
         self.assertEqual(captured['kustomization']['namespace'], 'rhods')
         self.assertEqual(captured['kustomization']['resources'],
                          [os.path.join('..', 'argo-lite')])
+        self.assertFalse(os.path.exists(captured['wrapper_dir']))
+
+    def test_build_rewrites_namespaces_and_rbac_subjects(self):
+        kubectl = shutil.which('kubectl')
+        self.assertIsNotNone(kubectl, 'Install kubectl to run the build test')
+        fixture = os.path.join(
+            os.path.dirname(__file__), 'testdata', 'namespace')
+        shutil.copytree(
+            fixture, self.deployer.operator_repo_path, dirs_exist_ok=True)
+        manifest_path = os.path.join(self.deployer.operator_repo_path,
+                                     '.github', 'resources', 'argo-lite')
+        captured = {}
+
+        def build(manifest_path=None, **kwargs):
+            result = subprocess.run([kubectl, 'kustomize', manifest_path],
+                                    check=True,
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=30)
+            captured['objects'] = {
+                (item['kind'], item['metadata']['name']): item
+                for item in yaml.safe_load_all(result.stdout)
+            }
+
+        self.deployer.deployment_manager.apply_resource.side_effect = build
+        for namespace in ('opendatahub', 'rhods'):
+            with self.subTest(namespace=namespace):
+                self.deployer.apply_kustomize_with_namespace(
+                    manifest_path, namespace, 'Argo Lite')
+                objects = captured['objects']
+                self.assertEqual(
+                    set(objects), {('ServiceAccount', 'argo'),
+                                   ('RoleBinding', 'argo'),
+                                   ('ClusterRole', 'argo'),
+                                   ('ClusterRoleBinding', 'argo')})
+                for kind in ('ServiceAccount', 'RoleBinding'):
+                    self.assertEqual(
+                        objects[(kind, 'argo')]['metadata']['namespace'],
+                        namespace)
+                for kind in ('ClusterRole', 'ClusterRoleBinding'):
+                    self.assertNotIn('namespace',
+                                     objects[(kind, 'argo')]['metadata'])
+                for kind in ('RoleBinding', 'ClusterRoleBinding'):
+                    self.assertEqual(objects[(kind, 'argo')]['subjects'], [{
+                        'kind': 'ServiceAccount',
+                        'name': 'argo',
+                        'namespace': namespace,
+                    }])
 
     def test_wrapper_cleaned_up_when_apply_fails(self):
         self.deployer.deployment_manager.apply_resource.side_effect = (
