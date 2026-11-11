@@ -348,15 +348,34 @@ jobs:
         shell: bash
         id: configure
         if: ${{ steps.deploy.outcome == 'success' }}
+        env:
+          INPUT_TEST_LABEL: ${{ inputs.test_label }}
         run: |
           NUMBER_OF_NODES=${{ env.NUMBER_OF_PARALLEL_NODES }}
           TEST_LABEL=${{ matrix.test_label }}
           NAMESPACE=${{ env.NAMESPACE }}
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             NUMBER_OF_NODES=${{ inputs.number_of_parallel_tests }}
-            TEST_LABEL=${{ inputs.test_label }}
+            TEST_LABEL="$INPUT_TEST_LABEL"
             NAMESPACE=${{ inputs.namespace }}
           fi
+
+          if [ "$TEST_LABEL" == "E2EParallelNested" ]; then
+            NUMBER_OF_NODES=3
+          fi
+
+          if [ "$TEST_LABEL" == "smoke" ]; then
+            TEST_LABEL='smoke && !disconnected'
+          fi
+
+          if [ "$TEST_LABEL" == "Tier1" ]; then
+            TEST_LABEL='Tier1 && !integration'
+          fi
+
+          if [ "$TEST_LABEL" == "Tier2" ]; then
+            TEST_LABEL='Tier2 && !gpu && !dra-check'
+          fi
+
           {
             echo "NUMBER_OF_NODES=$NUMBER_OF_NODES"
             echo "TEST_LABEL=$TEST_LABEL"
