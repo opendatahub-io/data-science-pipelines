@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 from infra_deployer import InfraDeployer
 import yaml
@@ -132,7 +133,18 @@ class TestDeployArgoLite(unittest.TestCase):
 
     def test_uses_namespace_wrapper_instead_of_dash_n(self):
         with patch_os_path_exists(True):
-            self.deployer.deploy_argo_lite()
+            with patch.object(
+                    self.deployer,
+                    'apply_kustomize_with_namespace',
+                    wraps=self.deployer.apply_kustomize_with_namespace
+            ) as apply_kustomize:
+                self.deployer.deploy_argo_lite()
+
+        apply_kustomize.assert_called_once_with(
+            manifest_path=os.path.join(self.deployer.operator_repo_path,
+                                       '.github', 'resources', 'argo-lite'),
+            namespace=self.deployer.operator_namespace,
+            description='Argo Lite')
 
         apply_call = self.deployer.deployment_manager.apply_resource.call_args
         self.assertTrue(apply_call.kwargs['kustomize'])
@@ -153,7 +165,18 @@ class TestApplyWebhooks(unittest.TestCase):
 
     def test_uses_namespace_wrapper_instead_of_dash_n(self):
         with patch_os_path_exists(True):
-            self.deployer.apply_webhooks()
+            with patch.object(
+                    self.deployer,
+                    'apply_kustomize_with_namespace',
+                    wraps=self.deployer.apply_kustomize_with_namespace
+            ) as apply_kustomize:
+                self.deployer.apply_webhooks()
+
+        apply_kustomize.assert_called_once_with(
+            manifest_path=os.path.join(self.deployer.operator_repo_path,
+                                       '.github', 'resources', 'webhook'),
+            namespace=self.deployer.operator_namespace,
+            description='Webhook certificates for TLS communication')
 
         apply_call = self.deployer.deployment_manager.apply_resource.call_args
         self.assertTrue(apply_call.kwargs['kustomize'])
@@ -167,8 +190,6 @@ class TestApplyWebhooks(unittest.TestCase):
 
 def patch_os_path_exists(value):
     """Patch infra_deployer.os.path.exists for the DSPO checkout layout."""
-    from unittest.mock import patch
-
     real_exists = os.path.exists
 
     def exists(path):
