@@ -127,7 +127,8 @@ if [ "${MULTI_USER}" == "true" ]; then
 
   echo "Installing Profile Controller Resources..."
   kubectl apply -k https://github.com/kubeflow/manifests/applications/dashboard/upstream/profile-controller/overlays/kubeflow?ref=master
-  kubectl -n kubeflow wait --for=condition=Ready pods -l app.kubernetes.io/name=profile-controller --timeout 180s
+  # The Deployment exists after apply, but its pods may not have been created yet.
+  kubectl -n kubeflow rollout status deployment/profiles-deployment --timeout=180s
 fi
 
 # Manifests will be deployed according to the flag provided
