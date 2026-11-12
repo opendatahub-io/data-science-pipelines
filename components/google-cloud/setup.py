@@ -58,7 +58,7 @@ setuptools.setup(
         "tests": [
             "mock>=4.0.0",
             "flake8>=3.0.0",
-            "pytest>=6.0.0",
+            "pytest>=9.0.3",
         ],
         # first list of deps solves a readthedocs dependency resolution error
         # related to protobuf
