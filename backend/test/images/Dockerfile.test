@@ -49,6 +49,15 @@ COPY ./api ./api
 COPY ./kubernetes_platform ./kubernetes_platform
 COPY ./test_data ./test_data
 
+# Allow non-root UIDs (e.g. CI runners using --user 1001:1001) to compile the
+# Ginkgo test suites, which write the compiled *.test binaries in place, and
+# to reuse the preloaded Go module cache.
+RUN chmod -R a+rwX /dspa/backend/test /go
+
+# Keep the Go build cache at a HOME-independent, world-writable location for
+# non-root UIDs (HOME is not writable when an arbitrary --user is passed).
+ENV GOCACHE=/tmp/go-build-cache
+
 WORKDIR /dspa/backend/test/images
 
 # Command to run the tests
