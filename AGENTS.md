@@ -7,7 +7,7 @@
 
 ### Document metadata
 
-- Last updated: 2026-11-03
+- Last updated: 2026-11-11
 - Scope: KFP master branch (v2 engine), backend (Go), SDK (Python), frontend (React 19)
 
 ### Maintenance (agents and contributors)
@@ -561,10 +561,11 @@ When changing an effect-heavy frontend component, add or run the smallest releva
 
 - Kind-based clusters are provisioned via the `kfp-cluster` composite action, parameterized by `k8s_version`, `pipeline_store`, `proxy`, `cache_enabled`, and optional `argo_version`.
 - The `create-cluster` and `deploy` actions are used by newer suites; `kfp-k8s` installs SDK components from source inside jobs that execute Python-based tests.
+- Direct multi-user deployment waits for the `profiles-deployment` rollout before applying KFP manifests, with a 180-second timeout.
 - `upgrade-test.yml` deploys the initial stable release in legacy mode and asserts that `default-aipipelines` is absent. It then enables the opt-in `enable_modular_architecture` deploy input only for the target deployment. That target handoff applies DSPO's modular AIPipelines fixture, enables `DSPO_ENABLEAIPIPELINESMODULECONTROLLER`, and waits for `default-aipipelines` to report `Ready` and `ProvisioningSucceeded`. The deploy action exports the fixture's platform version, and `UpgradeVerification` compares it to the module status.
 - The `deploy` action deploys optional Squid support, downloads and loads CI-built images, and preloads runtime base images used by test pods and init containers. Squid has a TCP readiness probe on port `3128` and a 120-second deployment availability wait; deployment failures print proxy pod diagnostics with a 10-second timeout per kubectl request.
 - Kind operator deployments always install cert-manager before provisioning the API server and metadata Envoy proxy certificates, including database-backed lanes with `podToPodTLS=false`: DSPO declares their Secret volumes regardless of that flag. Skipping cert-manager produces `no matches for kind "ClusterIssuer"`; missing `ds-pipelines-proxy-tls-*` or `ds-pipelines-envoy-proxy-tls-*` Secrets cause `FailedMount` and deployment timeouts. Database and internal gRPC certificates and database TLS configuration remain conditional on pod-to-pod TLS.
-- Deployment-helper unit tests: `.venv/bin/python -m unittest discover -s .github/actions/deploy -p 'test_*.py'`.
+- Deployment-helper unit tests: `.venv/bin/python -m unittest discover -s .github/actions/deploy -p 'test_*.py'`. Require `kubectl` on `PATH` for local Kustomize rendering tests; no cluster is needed.
 - Operator deployment failures print DSPA conditions, issuer/certificate/request status, Secret names and types, namespace events, and the last 100 cert-manager/controller webhook log lines. Diagnostic commands have bounded timeouts and do not replace the original deployment error or print Secret data.
 - Test-failure log collection includes namespace-wide events (including events for workflow pods deleted by test cleanup) and Service/EndpointSlice addresses to help diagnose pending tasks and DNS failures.
 - API tests default to four parallel Ginkgo processes to reduce contention with the Kind control plane and pipeline pods on hosted runners. The standalone workflow-dispatch input can override this count. The E2E proxy lane sets `base_image: python:3.11` to reuse the image preloaded by deploy and avoid an ECR pull during the test.
@@ -715,6 +716,7 @@ docformatter --check --recursive sdk/python/ --exclude "compiler_test.py"
 
 ### Common error patterns and quick fixes
 
+- Direct multi-user setup fails with `no matching resources found` immediately after creating `profiles-deployment`: wait for the Deployment rollout, since a pod-label wait can run before the controller creates its pods.
 - Protobuf generation fails with "protoc: command not found": use the Make targets that run this in a container.
 - Protobuf generation fails under SELinux enforcing: temporarily disable with `sudo setenforce 0`; re-enable after.
 - API client generation fails with Docker errors (for example permission denied to Docker socket): ensure Docker is running and your user can access the Docker daemon.

@@ -6,6 +6,7 @@ are not specific to a single domain like storage or database.
 
 import json
 import os
+import shutil
 import subprocess
 
 from deployment_manager import K8sDeploymentManager
@@ -79,6 +80,40 @@ class InfraDeployer:
 
         print('✅ Cert-manager deployed successfully')
 
+    def apply_kustomize_with_namespace(self, manifest_path: str, namespace: str,
+                                       description: str) -> None:
+        """Apply a kustomize directory through a wrapper overlay.
+
+        DSPO kustomizations hardcode their own namespace, and `kubectl
+        -n` cannot override it (nor fill the required RBAC subject
+        namespaces on ClusterRoleBindings). A wrapper kustomization that
+        sets the target namespace lets the kustomize namespace
+        transformer rewrite both the metadata namespaces and the RBAC
+        subjects to the deployment namespace, so the same kustomization
+        deploys into any namespace.
+        """
+        resource_name = os.path.basename(os.path.normpath(manifest_path))
+        wrapper_dir = os.path.join(
+            os.path.dirname(manifest_path), f'{resource_name}-ns-{namespace}')
+        wrapper = {
+            'apiVersion': 'kustomize.config.k8s.io/v1beta1',
+            'kind': 'Kustomization',
+            'namespace': namespace,
+            'resources': [os.path.join('..', resource_name)],
+        }
+
+        os.makedirs(wrapper_dir, exist_ok=True)
+        try:
+            with open(os.path.join(wrapper_dir, 'kustomization.yaml'),
+                      'w') as handle:
+                yaml.safe_dump(wrapper, handle)
+            self.deployment_manager.apply_resource(
+                manifest_path=wrapper_dir,
+                kustomize=True,
+                description=description)
+        finally:
+            shutil.rmtree(wrapper_dir, ignore_errors=True)
+
     def apply_webhooks(self):
         """Apply webhook certificates for TLS communication."""
         if self.args.pipeline_store != 'kubernetes':
@@ -94,10 +129,9 @@ class InfraDeployer:
                                           'resources', 'webhook')
 
         if os.path.exists(webhook_certs_path):
-            self.deployment_manager.apply_resource(
+            self.apply_kustomize_with_namespace(
                 manifest_path=webhook_certs_path,
                 namespace=self.operator_namespace,
-                kustomize=True,
                 description='Webhook certificates for TLS communication')
             print('✅ Webhook certificates applied for TLS communication')
         else:
@@ -120,10 +154,9 @@ class InfraDeployer:
             raise ValueError(
                 f'Argo Lite resources directory not found: {argo_lite_path}')
 
-        self.deployment_manager.apply_resource(
+        self.apply_kustomize_with_namespace(
             manifest_path=argo_lite_path,
             namespace=self.operator_namespace,
-            kustomize=True,
             description='Argo Lite')
 
         print('✅ Argo Lite deployed successfully')
