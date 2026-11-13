@@ -15,7 +15,7 @@
 FROM golang:1.26.3-bookworm@sha256:47ce5636e9936b2c5cbf708925578ef386b4f8872aec74a67bd13a627d242b19 AS builder
 
 # Update package repo and install required libraries
-RUN apt-get update && apt-get install -y cmake clang musl-dev openssl
+RUN apt-get update && apt-get install -y cmake clang musl-dev openssl util-linux
 
 ENV KUBECONFIG=/dspa/backend/test/.kube/config
 
@@ -25,7 +25,7 @@ WORKDIR /dspa
 # Download the latest OpenShift CLI binary
 RUN wget -q https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-4.20/openshift-client-linux.tar.gz -P oc-client && \
     tar -xf oc-client/openshift-client-linux.tar.gz -C oc-client && \
-    cp oc-client/oc /usr/local/bin && \
+    cp oc-client/oc oc-client/kubectl /usr/local/bin && \
     rm -rf oc-client/
 
 # Download latest Kustomize library
@@ -48,6 +48,7 @@ COPY ./backend ./backend
 COPY ./api ./api
 COPY ./kubernetes_platform ./kubernetes_platform
 COPY ./test_data ./test_data
+COPY ./.github/resources/scripts/collect-logs.sh ./.github/resources/scripts/collect-logs.sh
 
 # Allow non-root UIDs (e.g. CI runners using --user 1001:1001) to compile the
 # Ginkgo test suites, which write the compiled *.test binaries in place, and
