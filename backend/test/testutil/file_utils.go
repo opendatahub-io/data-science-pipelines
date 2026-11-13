@@ -138,7 +138,7 @@ func ToBytes(objectToConvert any) []byte {
 
 // ParseFileToSpecs - Read a file and unmarshall it into a template.V2Spec
 func ParseFileToSpecs(pipelineFilePath string, cacheDisabled bool, defaultWorkspace *v1.PersistentVolumeClaimSpec) *template.V2Spec {
-	specFromFile, err := os.OpenFile(pipelineFilePath, os.O_RDWR, 0o644)
+	specFromFile, err := os.Open(pipelineFilePath)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred(), "Failed to read pipeline file")
 	defer specFromFile.Close()
 	pipelineSpecBytes, pipelineUnmarshallError := server.ReadPipelineFile(pipelineFilePath, specFromFile, common.MaxFileLength)
