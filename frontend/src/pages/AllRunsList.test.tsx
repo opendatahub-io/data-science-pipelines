@@ -113,6 +113,31 @@ describe('AllRunsList', () => {
     expect(toolbarProps!.actions[ButtonKeys.CLONE_RUN].disabled).toBeTruthy();
   });
 
+  it('enables retry button when at least one run is selected', async () => {
+    renderAllRunsList();
+    expect(toolbarProps!.actions[ButtonKeys.RETRY].disabled).toBeTruthy();
+    await act(async () => {
+      await lastRunListProps.onSelectionChange(['run1']);
+    });
+    expect(toolbarProps!.actions[ButtonKeys.RETRY].disabled).toBeFalsy();
+    await act(async () => {
+      await lastRunListProps.onSelectionChange(['run1', 'run2']);
+    });
+    expect(toolbarProps!.actions[ButtonKeys.RETRY].disabled).toBeFalsy();
+  });
+
+  it('disables retry button when selection is cleared', async () => {
+    renderAllRunsList();
+    await act(async () => {
+      await lastRunListProps.onSelectionChange(['run1']);
+    });
+    expect(toolbarProps!.actions[ButtonKeys.RETRY].disabled).toBeFalsy();
+    await act(async () => {
+      await lastRunListProps.onSelectionChange([]);
+    });
+    expect(toolbarProps!.actions[ButtonKeys.RETRY].disabled).toBeTruthy();
+  });
+
   it('enables archive button when at least one run is selected', async () => {
     renderAllRunsList();
     expect(toolbarProps!.actions[ButtonKeys.ARCHIVE].disabled).toBeTruthy();
