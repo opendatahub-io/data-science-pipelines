@@ -7,7 +7,7 @@
 
 ### Document metadata
 
-- Last updated: 2026-11-11
+- Last updated: 2026-11-13
 - Scope: KFP master branch (v2 engine), backend (Go), SDK (Python), frontend (React 19)
 
 ### Maintenance (agents and contributors)
@@ -566,6 +566,7 @@ When changing an effect-heavy frontend component, add or run the smallest releva
 - The `deploy` action deploys optional Squid support, downloads and loads CI-built images, and preloads runtime base images used by test pods and init containers. Squid has a TCP readiness probe on port `3128` and a 120-second deployment availability wait; deployment failures print proxy pod diagnostics with a 10-second timeout per kubectl request.
 - Kind operator deployments always install cert-manager before provisioning the API server and metadata Envoy proxy certificates, including database-backed lanes with `podToPodTLS=false`: DSPO declares their Secret volumes regardless of that flag. Skipping cert-manager produces `no matches for kind "ClusterIssuer"`; missing `ds-pipelines-proxy-tls-*` or `ds-pipelines-envoy-proxy-tls-*` Secrets cause `FailedMount` and deployment timeouts. Database and internal gRPC certificates and database TLS configuration remain conditional on pod-to-pod TLS.
 - Deployment-helper unit tests: `.venv/bin/python -m unittest discover -s .github/actions/deploy -p 'test_*.py'`. Require `kubectl` on `PATH` for local Kustomize rendering tests; no cluster is needed.
+- The test-image runner requires `util-linux` for a separate suite process group. Parent-only TERM/INT during the suite or normal cleanup publishes the interruption report before bounded process-group shutdown and asynchronous namespace deletion; allow at least 15 seconds of container termination grace. See `backend/test/images/README.md` for shutdown bounds.
 - Operator deployment failures print DSPA conditions, issuer/certificate/request status, Secret names and types, namespace events, and the last 100 cert-manager/controller webhook log lines. Diagnostic commands have bounded timeouts and do not replace the original deployment error or print Secret data.
 - Test-failure log collection includes namespace-wide events (including events for workflow pods deleted by test cleanup) and Service/EndpointSlice addresses to help diagnose pending tasks and DNS failures.
 - API tests default to four parallel Ginkgo processes to reduce contention with the Kind control plane and pipeline pods on hosted runners. The standalone workflow-dispatch input can override this count. The E2E proxy lane sets `base_image: python:3.11` to reuse the image preloaded by deploy and avoid an ECR pull during the test.
