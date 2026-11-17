@@ -1580,6 +1580,9 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 	state := model.RuntimeState(string(execStatus.Condition())).ToV2()
 	if execSpec.IsTerminating() {
 		state = model.RuntimeState(string(exec.ExecutionPhase(model.RunTerminatingConditionsV1))).ToV2()
+	} else if execSpec.IsTerminated() {
+		// User stop sets activeDeadlineSeconds to 0. Argo then records Failed/Error.
+		state = model.RuntimeStateCanceled
 	}
 	if execStatus.IsInFinalState() {
 		workflowStillMatchesReport, err := r.workflowStillMatchesReportedVersion(ctx, execSpec)

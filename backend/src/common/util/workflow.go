@@ -314,6 +314,12 @@ func (w *Workflow) IsTerminating() bool {
 		!w.IsInFinalState()
 }
 
+func (w *Workflow) IsTerminated() bool {
+	return w.Spec.ActiveDeadlineSeconds != nil &&
+		*w.Spec.ActiveDeadlineSeconds == 0 &&
+		w.IsInFinalState()
+}
+
 // OverrideParameters overrides some of the parameters of a Workflow.
 func (w *Workflow) OverrideParameters(desiredParams map[string]string) {
 	desiredSlice := make([]workflowapi.Parameter, 0)
