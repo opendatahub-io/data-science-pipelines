@@ -155,6 +155,9 @@ type ExecutionSpec interface {
 	// If the ExecutionSpec was terminated and not finished yet
 	IsTerminating() bool
 
+	// IsTerminated reports a user stop (activeDeadlineSeconds == 0) that has reached a final phase.
+	IsTerminated() bool
+
 	// Get schedule time from label in second
 	ScheduledAtInSecOr0() int64
 
