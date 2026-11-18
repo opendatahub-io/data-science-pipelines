@@ -171,7 +171,7 @@
       "react-redux": "9.2.0"
     },
     "express": {
-      "path-to-regexp": "0.1.12"
+      "path-to-regexp": "2.0.0"
     },
     "react-router": {
       "path-to-regexp": "1.9.0"
