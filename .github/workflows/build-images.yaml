@@ -86,7 +86,7 @@ jobs:
           - image: ds-pipelines-launcher
             dockerfile: backend/Dockerfile.launcher
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/build
         name: Build Image
         with:

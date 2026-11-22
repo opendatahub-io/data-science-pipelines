@@ -93,7 +93,7 @@ jobs:
     if: github.event_name == 'pull_request' || contains(github.event.comment.body, '/integration-tests-ok')
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v5

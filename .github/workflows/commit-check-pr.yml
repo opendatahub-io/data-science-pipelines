@@ -62,7 +62,7 @@ jobs:
       PR_NUMBER: ${{ needs.fetch-data.outputs.pr_number }}
       PR_HASH: ${{ needs.fetch-data.outputs.head_sha }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Get Commits
         id: get-commits
         run: |

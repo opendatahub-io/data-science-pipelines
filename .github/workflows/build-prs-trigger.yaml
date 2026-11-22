@@ -18,7 +18,7 @@ jobs:
   upload-data:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Save PR payload
         shell: bash
         run: |
