@@ -29,7 +29,7 @@ runs:
         ref: ${{ env.SOURCE_BRANCH }}
         path: build
     - name: Login to Quay.io
-      uses: redhat-actions/podman-login@v1
+      uses: redhat-actions/podman-login@v2
       with:
         username: ${{ env.QUAY_ID }}
         password: ${{ env.QUAY_TOKEN }}
