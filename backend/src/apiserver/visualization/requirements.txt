@@ -209,7 +209,7 @@ pygments==2.19.2
     #   nbconvert
 pyparsing==3.2.3
     # via httplib2
-python-dateutil==2.9.0.post0
+python-dateutil==4.0.0
     # via
     #   bokeh
     #   jupyter-client
