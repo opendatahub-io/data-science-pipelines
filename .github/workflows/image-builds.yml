@@ -94,7 +94,7 @@ jobs:
           driver-opts: network=host
 
       - name: Build and save Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         if: ${{ steps.setup-buildx.outcome == 'success' }}
         id: save-image
         env:
@@ -111,7 +111,7 @@ jobs:
           network: host
 
       - name: Rebuild Images in case of failure
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         if: ${{ steps.save-image.outcome != 'success' && steps.setup-buildx.outcome == 'success' }}
         id: rebuild
         env:
