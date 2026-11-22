@@ -1,6 +1,6 @@
 module github.com/kubeflow/pipelines
 
-go 1.26
+go 1.26.0
 
 godebug fips140=on
 
@@ -49,7 +49,7 @@ require (
 	go.uber.org/zap v1.27.0
 	gocloud.dev v0.40.0
 	golang.org/x/net v0.56.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.38.0
 	// Pre-generated Go code (.pb.go files) for a subset of the .proto files found in
 	// googleapis/googleapis both /api and /rpc should be released relatively close to
 	// the googleapis proto files used for kfp-pipeline-spec see GOOGLEAPIS_COMMIT in api/Makefile
