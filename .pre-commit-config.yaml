@@ -36,7 +36,7 @@ repos:
         entry: pycln --all
         exclude: ^kubernetes_platform/python/kfp/kubernetes/kubernetes_executor_config_pb2\.py$
   - repo: https://github.com/pycqa/isort
-    rev: 5.11.5
+    rev: 9.0.2
     hooks:
       - id: isort
         name: isort
