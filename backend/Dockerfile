@@ -18,8 +18,8 @@ ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 ARG BUILDER_ARCH=multiarch
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:45bd06d392349dfdb09073514cfebcc5082db33301347b51dcae8e5516a89126 AS go-toolset-multiarch
-FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:3880436381044c6d89c2311f2a7dc8d64224668bf84b43810982b5a9ddd851d0 AS go-toolset-arm64
+FROM registry.access.redhat.com/ubi9/go-toolset:1.27.3-1795320499@sha256:ecfbfea4a8c479a9ae9655ef6bdb692fcdd2d1bdfcea86ad7b168de147a852a2 AS go-toolset-multiarch
+FROM registry.access.redhat.com/ubi9/go-toolset:1.27.3-1795320499@sha256:728c0565e77b3db960b6da64c11c1d9cd711f5b5fe509a7cdb4e09f9320c795a AS go-toolset-arm64
 FROM go-toolset-${BUILDER_ARCH} AS builder
 
 ARG SOURCE_CODE
