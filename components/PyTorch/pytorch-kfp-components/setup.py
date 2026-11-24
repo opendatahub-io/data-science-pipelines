@@ -35,7 +35,7 @@ def make_required_test_packages():
       "mock>=4.0.0",
       "flake8>=3.0.0",
       "pylint",
-      "pytest>=6.0.0",
+      "pytest>=9.0.3",
       "wget",
       "pandas",
       "minio"
