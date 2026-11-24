@@ -3764,7 +3764,26 @@ func TestReportWorkflowResource_WorkflowCompleted(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, wf.ExecutionObjectMeta().Labels[util.LabelKeyWorkflowPersistedFinalState], "true")
 }
-
+func TestReportWorkflowResource_UserTerminatedRunIsCanceled(t *testing.T) {
+	store, manager, run := initWithOneTimeRun(t)
+	defer store.Close()
+	zero := int64(0)
+	workflow := util.NewWorkflow(&v1alpha1.Workflow{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      run.K8SName,
+			Namespace: "kubeflow",
+			UID:       testWorkflow.UID,
+			Labels:    map[string]string{util.LabelKeyWorkflowRunId: run.UUID},
+		},
+		Spec:   v1alpha1.WorkflowSpec{ActiveDeadlineSeconds: &zero},
+		Status: v1alpha1.WorkflowStatus{Phase: v1alpha1.WorkflowFailed},
+	})
+	_, err := manager.ReportWorkflowResource(context.Background(), workflow)
+	assert.Nil(t, err)
+	updated, err := manager.GetRun(run.UUID)
+	assert.Nil(t, err)
+	assert.Equal(t, model.RuntimeStateCanceled, updated.State)
+}
 func TestReportWorkflowResource_SkipsTerminalPluginSyncWhenReportedWorkflowIsStale(t *testing.T) {
 	store, manager, run := initWithOneTimeRun(t)
 	namespace := "ns1"
