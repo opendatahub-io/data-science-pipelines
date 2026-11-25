@@ -1,0 +1,128 @@
+apiVersion: contracts.rhoai.io/v1alpha1
+kind: ContractSet
+metadata:
+  name: data-science-pipelines
+spec:
+  # RHOAI serves the v2 (v2beta1) API only; v1beta1 documents are excluded below.
+  contracts:
+    - id: v2beta1-artifacts
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/artifacts.swagger.json
+      matchPath: "^/apis/v2beta1/artifacts(/|\\{|$)"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/artifacts.swagger.json
+    - id: v2beta1-auth
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/auth.swagger.json
+      matchPath: "^/apis/v2beta1/auth(/|\\{|$)"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/auth.swagger.json
+    - id: v2beta1-experiment
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/experiment.swagger.json
+      matchPath: "^/apis/v2beta1/experiments(/|\\{|$)"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/experiment.swagger.json
+    - id: v2beta1-filter
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/filter.swagger.json
+      matchPath: "^/apis/v2beta1/filters(/|\\{|$)"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/filter.swagger.json
+    - id: v2beta1-healthz
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/healthz.swagger.json
+      matchPath: "^/apis/v2beta1/healthz(/|\\{|$)"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/healthz.swagger.json
+    - id: v2beta1-pipeline
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/pipeline.swagger.json
+      matchPath: "^/apis/v2beta1/pipelines(/|\\{|$)"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/pipeline.swagger.json
+    - id: v2beta1-pipeline-upload
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/pipeline.upload.swagger.json
+      matchPath: "^/apis/v2beta1/pipelines/(upload|upload_version)$"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/pipeline.upload.swagger.json
+    - id: v2beta1-recurring-run
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/recurring_run.swagger.json
+      matchPath: "^/apis/v2beta1/recurringruns(/|\\{|$)"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/recurring_run.swagger.json
+    - id: v2beta1-report
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/report.swagger.json
+      matchPath: "^/apis/v2beta1/(scheduledworkflows|workflows)(/|\\{|$)"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/report.swagger.json
+    - id: v2beta1-run
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/run.swagger.json
+      matchPath: "^/apis/v2beta1/runs(/|\\{|$)"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/run.swagger.json
+    - id: v2beta1-visualization
+      type: openapi
+      declaredArtifact: backend/api/v2beta1/swagger/visualization.swagger.json
+      matchPath: "^/apis/v2beta1/visualizations(/|\\{|$)"
+      policy:
+        oasdiffVersion: "1.33.0"
+        yqVersion: "4.45.1"
+      generator:
+        adapter: openapi.static
+        source: backend/api/v2beta1/swagger/visualization.swagger.json
+  exclusions:
+    # v1 API: RHOAI serves v2 only; v1beta1 is unsupported.
+    - path: backend/api/v1beta1/swagger/*.json
+      reason: v1 API unsupported in RHOAI; only the v2 (v2beta1) API is served
+    # No paths: shared type definitions only, not an API contract.
+    - path: backend/api/v2beta1/swagger/runtime_config.swagger.json
+      reason: shared definitions document with no paths; not an API contract
+    # Derived merged copy for the Python SDK build (backend/api/hack/generator.sh);
+    # the SDK is not part of RHOAI.
+    - path: backend/api/v2beta1/swagger/kfp_api_single_file.swagger.json
+      reason: lossy jq merge of the per-service documents, consumed only by the Python SDK build; SDK is not part of RHOAI

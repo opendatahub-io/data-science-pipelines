@@ -1,0 +1,113 @@
+name: API contract checks
+
+# API contract checks for the OpenAPI documents this repository owns.
+# Central repository: red-hat-data-services/api-contract-tests (pinned to @latest;
+# see its docs/releasing.md for upgrade and pinning options).
+
+on:
+  pull_request:
+    branches: [master, main, rhoai-*, stable]
+
+jobs:
+  resolve-baseline:
+    # Resolves the baseline the contract checks compare against.
+    # - opendatahub-io repositories: no GA releases are cut there, so the
+    #   baseline is the master HEAD at run time: "current master is the
+    #   contract". The resolved SHA is printed in the log for traceability.
+    # - other owners: RHOAI release base, resolved at run time as the merge
+    #   base of the newest rhoai-* release branch and main (same rule as
+    #   api-contract-tests cmd/release-baseline).
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.baseline.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Resolve baseline SHA
+        id: baseline
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ "$REPO_OWNER" = "opendatahub-io" ]; then
+            sha="$(git rev-parse origin/master)"
+          else
+            # RHOAI release base: merge base of the newest rhoai-* release
+            # branch and main.
+            release_branch="$(git for-each-ref --format='%(refname:short)' refs/remotes/origin \
+              | sed 's|^origin/||' | grep -E '^rhoai-[0-9]+(\.[0-9]+)?$' | sort -V | tail -1)"
+            if [ -z "$release_branch" ]; then
+              echo "No rhoai-* release branch found" >&2
+              exit 1
+            fi
+            echo "Release branch: $release_branch"
+            sha="$(git merge-base "origin/$release_branch" origin/main)"
+          fi
+          echo "Baseline: $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  openapi-contract:
+    # OpenAPI compatibility check, one job per contract in .rhoai/contracts.yaml.
+    # Scope: the v2beta1 REST API only. v1beta1 documents, the merged
+    # kfp_api_single_file.swagger.json (Python SDK build input), and the
+    # no-paths definition documents are excluded there, with reasons.
+    needs: resolve-baseline
+    strategy:
+      fail-fast: false
+      matrix:
+        contract-id:
+          - v2beta1-artifacts
+          - v2beta1-auth
+          - v2beta1-experiment
+          - v2beta1-filter
+          - v2beta1-healthz
+          - v2beta1-pipeline
+          - v2beta1-pipeline-upload
+          - v2beta1-recurring-run
+          - v2beta1-report
+          - v2beta1-run
+          - v2beta1-visualization
+    permissions:
+      contents: read
+    uses: red-hat-data-services/api-contract-tests/.github/workflows/provider-openapi-check.yml@latest
+    with:
+      contract-set: .rhoai/contracts.yaml
+      contract-id: ${{ matrix.contract-id }}
+      baseline-refs: ${{ needs.resolve-baseline.outputs.sha }}
+      oasdiff-version: "1.33.0"
+      yq-version: "4.45.1"
+      mode: enforce
+
+  coverage:
+    # Fails when an OpenAPI document in the repository matches no contract and
+    # no documented exclusion, so a new spec cannot silently stay outside the
+    # check.
+    #
+    # CRD coverage is deliberately skipped (crd-globs left empty, which the
+    # reusable workflow documents as "skip CRD coverage"): the CRDs authored
+    # here are served in RHOAI via the data-science-pipelines-operator, which
+    # vendors the copies and runs its own contract checks on them. The CRD
+    # manifests in this repository and why they are not checked:
+    # - manifests/kustomize/base/crds/pipelines.kubeflow.org_{pipelines,pipelineversions}.yaml:
+    #   authored here, but served in RHOAI via the operator's vendored copies,
+    #   which carry their own contract checks
+    # - backend/src/crd/install/manifests/*.yaml,
+    #   manifests/kustomize/base/pipeline/cluster-scoped/{scheduled-workflow,viewer}-crd.yaml:
+    #   authored here, but not served in RHOAI via this repository (ScheduledWorkflow
+    #   via the operator; Viewer not deployed)
+    # - manifests/kustomize/third-party/application/cluster-scoped/application-crd.yaml,
+    #   manifests/kustomize/third-party/metacontroller/base/crd.yaml:
+    #   CRDs of other projects, bundled for deployment
+    # - manifests/gcp_marketplace/chart/kubeflow-pipelines/templates/{argo,pipeline}.yaml:
+    #   generated install bundle
+    needs: resolve-baseline
+    permissions:
+      contents: read
+    uses: red-hat-data-services/api-contract-tests/.github/workflows/provider-coverage-check.yml@latest
+    with:
+      contract-set: .rhoai/contracts.yaml
+      baseline-refs: ${{ needs.resolve-baseline.outputs.sha }}
+      mode: enforce
+      yq-version: "4.45.1"
