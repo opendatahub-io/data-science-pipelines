@@ -14,10 +14,20 @@ on:
       - stable
       - 'rhoai-*'
     paths:
+      - '.github/workflows/presubmit-backend.yml'
+      - '.github/actions/setup-go/**'
+      - '.github/resources/scripts/download-go-modules.sh'
+      - '.github/resources/scripts/helper-functions.sh'
+      - '.github/resources/scripts/docker-pull-with-retry.sh'
+      - 'go.mod'
+      - 'go.sum'
+      # RH-added modules not present upstream; not covered by kubeflow's list.
+      - 'api/go.mod'
+      - 'api/go.sum'
+      - 'kubernetes_platform/go.mod'
+      - 'kubernetes_platform/go.sum'
       - 'backend/**'
       - 'test/presubmit-backend-test.sh'
-      - '!**/*.md'
-      - '!**/OWNERS'
 
 
 concurrency:
