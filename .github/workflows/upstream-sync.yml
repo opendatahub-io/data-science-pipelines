@@ -12,7 +12,10 @@ env:
   GH_USER_NAME: dsp-developers
   GH_USER_EMAIL: 140449482+dsp-developers@users.noreply.github.com
   # Paths to keep as downstream versions during sync (supports git pathspecs).
-  IGNORE_FILES: ".tekton/*, .github/renovate.json5, backend/Dockerfile*, **/OWNERS"
+  # .github/dependabot.yml: kubeflow/pipelines has one; the ignore entry makes
+  # the sync remove it, since Renovate (in-repo .github/renovate.json5) owns
+  # dependency updates here and the two tools would open duplicate PRs.
+  IGNORE_FILES: ".tekton/*, .github/renovate.json5, .github/dependabot.yml, backend/Dockerfile*, **/OWNERS"
   # Paths to always overwrite with the upstream version during sync.
   UPSTREAM_OVERWRITE_PATHS: "frontend/"
 
