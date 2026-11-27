@@ -18,6 +18,7 @@ on:
       - '.github/actions/setup-go/**'
       - '.github/resources/scripts/download-go-modules.sh'
       - '.github/resources/scripts/helper-functions.sh'
+      - '.github/resources/scripts/docker-pull-with-retry.sh'
       - 'go.mod'
       - 'go.sum'
       # RH-added modules not present upstream; not covered by kubeflow's list.
